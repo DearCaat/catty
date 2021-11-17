@@ -1,0 +1,6 @@
+/output/
+/__pycache__/
+/.ipynb_checkpoints/
+/wandb/
+/train&eval.sh
+/test.ipynb
