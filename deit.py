@@ -24,11 +24,11 @@ class DistilledVisionTransformer(VisionTransformer):
         num_patches = self.patch_embed.num_patches
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, self.embed_dim))
         #self.head_dist = nn.Linear(self.embed_dim, self.num_classes) if self.num_classes > 0 else nn.Identity()
-        self.head_inst = nn.Linear(self.embed_dim, self.num_classes) if self.num_classes > 0 else nn.Identity()
+        self.head_instance = nn.Linear(self.embed_dim, self.num_classes) if self.num_classes > 0 else nn.Identity()
         trunc_normal_(self.dist_token, std=.02)
         trunc_normal_(self.pos_embed, std=.02)
         #self.head_dist.apply(self._init_weights)
-        self.head_inst.apply(self._init_weights)
+        self.head_instance.apply(self._init_weights)
 
     def forward_features(self, x):
         # taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
@@ -54,7 +54,7 @@ class DistilledVisionTransformer(VisionTransformer):
     def forward(self, x):
         x, x_inst = self.forward_features(x)
         x = self.head(x)
-        x_inst = self.head_inst(x_inst)
+        x_inst = self.head_instance(x_inst)
         #if self.training:
         return x, x_inst
             #return x

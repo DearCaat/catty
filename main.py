@@ -1,4 +1,6 @@
 import os
+
+from torch.nn.modules import module
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import time
 import argparse
@@ -114,14 +116,14 @@ def main(config):
     logger.info(f"Creating model:{config.MODEL.NAME}/{config.MODEL.BACKBONE}")
     model = build_model(config)
     model_teacher = None
-    if not config.THUMB_MODE:
-        model_teacher = build_model(config)
-        model_teacher.cuda()
-        cpt = torch.load('/home/tangwenhao/rdd/output/deit_test/model/deit_base_patch16_224_best_model.pth', map_location='cpu')
-        std = cpt['state_dict']
-        std['head_inst.weight'] = std['head.weight']
-        std['head_inst.bias'] = std['head.bias']
-        model_teacher.load_state_dict(cpt['state_dict'], strict=False)
+    #if not config.THUMB_MODE:
+        # model_teacher = build_model(config)
+        # model_teacher.cuda()
+        # cpt = torch.load('/home/tangwenhao/rdd/output/swin_test/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
+        # std = cpt['state_dict']
+        # std['head_instance.weight'] = std['head.weight']
+        # std['head_instance.bias'] = std['head.bias']
+        # model_teacher.load_state_dict(std, strict=True)
     # setup augmentation batch splits for contrastive loss or split bn
     '''num_aug_splits = 0
     if config.AUG.SPLITS > 0:
@@ -164,6 +166,9 @@ def main(config):
     max_accuracy = 0.0
     best_auc = 0.0
     max_f1 = 0.0
+    max_f1_ema = .0
+    max_accuracy_ema = .0
+    best_auc_ema = .0
 
     if config.MODEL.RESUME:
         max_accuracy,best_auc = load_checkpoint(config, model, optimizer, lr_scheduler, logger)
@@ -211,8 +216,13 @@ def main(config):
     teacher_ema = None
     model_ema = None
     if not config.THUMB_MODE:
-        teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=['head_instance'])
-        #model_ema = ModelEmaV3(model, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None)
+        cpt = torch.load('/home/tangwenhao/rdd/output/swin_test/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
+        std = cpt['state_dict']
+        std['head_instance.weight'] = std['head.weight']
+        std['head_instance.bias'] = std['head.bias']
+        model.load_state_dict(std)
+        #teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[])
+        model_ema = ModelEmaV3(model, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None)
 
     # setup exponential moving average of model weights, SWA could be used here too
     '''model_ema = None
@@ -268,10 +278,24 @@ def main(config):
         #np.append(loss_rec,loss_r)
 
         acc1, acc5,loss,auc,eval_metrics = validate(config, data_loader_val, model_without_ddp,amp_autocast=amp_autocast,criterion=criterion)
-        acc1_ema, acc5_ema,loss_ema,auc_ema,eval_metrics_ema = validate(config, data_loader_val, teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion)
+        if teacher_ema is not None:
+            acc1_ema, acc5_ema,loss_ema,auc_ema,eval_metrics_ema = validate(config, data_loader_val, teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion)
+        if model_ema is not None:
+            acc1_ema, acc5_ema,loss_ema,auc_ema,eval_metrics_ema = validate(config, data_loader_val, model_ema.module,amp_autocast=amp_autocast,criterion=criterion)
         logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
         for i in range(len(thr_list)):
             logger.info(f"Thr:  {thr_list[i]:.2f}")
+        
+        # save the ema checkpoint
+        if model_ema is not None or teacher_ema is not None:
+            f1_ema = eval_metrics_ema['macro_f1']
+            is_best_ema = f1_ema > max_f1_ema
+            max_accuracy_ema = max(max_accuracy_ema, acc1_ema) if epoch > 0 else 0
+            best_auc_ema = max(best_auc_ema,auc_ema) if epoch > 0 else 0
+            max_f1_ema = max(max_f1_ema,f1_ema)
+            if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
+                save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,None,is_ema=True)
+
         f1 = eval_metrics['macro_f1']
         is_best = (auc > best_auc if config.BINARYTRAIN_MODE else f1 > max_f1) and epoch>0
         max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
@@ -294,11 +318,11 @@ def main(config):
     logger.info('Training time {}'.format(total_time_str))
 
     if config.TRAIN_MODE=='t_e':
-        load_best_model(config, model_without_ddp, logger)
         dataset_test,data_loader_test = build_loader(is_train=False,config=config)
+
+        load_best_model(config, model_without_ddp, logger)
         acc1, acc5, loss, auc,pred,label,eval_metrics = validate(config, data_loader_test, model_without_ddp,save_pre=True,amp_autocast=amp_autocast,criterion=criterion)
         logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
-
         _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
         np.savez(_save_path,pred=pred,label=label)
         if 'cqu_bpdd' in config.DATA.DATASET:
@@ -316,6 +340,29 @@ def main(config):
         stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
         patr=getDataByStick([precision,recall],stick)
         logger.info(patr)
+
+        #ema
+        if model_ema is not None or teacher_ema is not None:
+            load_best_model(config, model_ema.module if model_ema is not None else teacher_ema.module, logger,is_ema=True)
+            acc1_ema, acc5_ema,loss_ema,auc_ema,pred,label,eval_metrics_ema = validate(config, data_loader_val, model_ema.module if model_ema is not None else teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion,save_pre=True)
+            logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1_ema:.2f}% {auc_ema:.2f}%")
+            _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_ema_'+config.DATA.DATASET.split('/')[-1])+'.npz'
+            np.savez(_save_path,pred=pred,label=label)
+            if 'cqu_bpdd' in config.DATA.DATASET:
+                for m in range(len(label)):
+                    if int(label[m])==6:
+                        label[m] = 0
+                    else:
+                        label[m] = 1
+            pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
+            if config.MODEL.NUM_CLASSES > 2:
+                pred = 1-pred[:,6]
+            else:
+                pred = pred[:,1]
+            precision,recall,thr=precision_recall_curve(label, pred)
+            stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+            patr=getDataByStick([precision,recall],stick)
+            logger.info(patr)
 
 
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,teacher_ema=None, thr_list=[]):
@@ -380,8 +427,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
             else:
                 output,o_inst = model(samples)
                 with torch.no_grad():
-                   # _,pl_inst = model_ema.module(samples)
-                   _,pl_inst = teacher_ema.module(samples)
+                    _,pl_inst = model_ema.module(samples)
+                   #_,pl_inst = teacher_ema.module(samples)
                 b,p,cls = pl_inst.shape
                 output_pl = torch.nn.functional.softmax(pl_inst,dim=2)
                 t_cpu = targets.cpu()
@@ -402,6 +449,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 #获得正常包索引和病害包索引
                 bs_index_nor = targets==6
                 bs_index_dis = bs_index_nor==False
+                ps_mask_nor = (ins_t - 6 == 0)
+                ps_mask_dis = ps_mask_nor==False
 
                 #正常包里面的所有实例设为正常
                 #label_pl[bs_index_nor,:] = 6
@@ -419,14 +468,14 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     #判断为相应病害的实例置为包标签
                     #mask_ins =  (label_tmp - ins_t  == 0)
 
-                    #将病害包里判断为不是正常的实例都置为包标签
-                    mask_ins =  (label_tmp - ins_t  == 0) & (ins_t - 6 != 0) & ((max_score - 0.99 > 0) | (output_bag_label - min_nor_thr > 0))
+                    #将病害包里判断为不是正常的实例都置为包标签 | (output_bag_label - min_nor_thr > 0)
+                    mask_ins =  (label_tmp - 6  != 0) & ps_mask_dis & ((output_bag_label - 0.99 > 0) | (output_bag_label - min_nor_thr > 0))
                     label_pl[mask_ins] = ins_t[mask_ins]
-                    #选取部分置信度比较高的实例参与loss计算 | (output_bag_label - min_nor_thr > 0)
-                    mask_ins = (mask_ins  | ((ins_t - 6 == 0) & (max_score - thr_min_conf > 0)))
+                    #选取部分置信度比较高的实例参与loss计算   & (output_pl[:,:,6] - 0.9 > 0)))
+                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==6))) | ((output_pl[:,:,6] - 0.9 > 0) & ps_mask_nor)
                 else:
                     #全部都用
-                    mask_ins = (label_tmp - label_tmp == 0)
+                    #mask_ins = (label_tmp - label_tmp == 0)
                     #只要正常图片
                     mask_ins = (ins_t - 6 == 0) & (output_bag_label - 0.9 > 0)
 
@@ -446,14 +495,15 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
                     if len(dis_tmp) > 0 and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         thr_tmp = torch.sum(dis_tmp) / (p * len(dis_tmp))
-                        thr_list[i] = 0.998 * thr_list[i] + (1-0.998)* thr_tmp
+                        thr_list[i] = 0.999 * thr_list[i] + (1-0.999)* thr_tmp
+                        thr_list[i] = 0.1 if thr_list[i] < 0.1 else thr_list[i]
                         #thr_list[i] = thr_tmp
                         dis_rec[i].update(thr_tmp,b)
 
                 #选择部分patch来计算loss
-                if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
-                    label_pl = label_pl[mask_ins]
-                    o_inst = o_inst[mask_ins]
+                #if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                label_pl = label_pl[mask_ins]
+                o_inst = o_inst[mask_ins]
                 #     label_pl = label_pl[bs_index_nor]
                 #     label_pl = label_pl.view(-1)
                 #     o_inst = o_inst[bs_index_nor]
@@ -470,7 +520,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 else:
                     loss_pl = 0
                 classify_loss = criterion(output, targets)
-                loss = classify_loss+loss_pl
+                loss = loss_pl
 
                 del samples
         
@@ -526,11 +576,11 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
             if model_ema is not None:
                 if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup' or config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
-                #teacher_ema.decay_diff = (epoch * num_steps + idx) / (config.TRAIN.EPOCHS * num_steps)
+                    #teacher_ema.decay_diff = (epoch * num_steps + idx) / (config.TRAIN.EPOCHS * num_steps)
                     model_ema.decay = 0
                 if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
                     model_ema.decay = config.RDD_TRANS.EMA_DECAY if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH else model_ema.decay
-                    model_ema.update(model)
+                model_ema.update(model)
 
             if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
                 lr_scheduler.step(epoch * num_steps + idx)
@@ -542,7 +592,12 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 teacher_ema.decay_diff = 0
             if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
                 teacher_ema.decay_diff = config.RDD_TRANS.EMA_DECAY if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH else teacher_ema.decay_diff
-            if epoch > 0:
+            if epoch > 1:
+                # 将前面特征层与后面实例分类层分开更新，分类层更新率更高
+                #teacher_ema.decay_diff = 0.9997
+                # 前面10个epoch不更新特征层
+                #teacher_ema.decay = 1 if epoch < 10 else config.RDD_TRANS.EMA_DECAY
+
                 teacher_ema.update(model)
         #acc1, _ = accuracy(predictions, targets, topk=(1,1))
         
@@ -622,14 +677,22 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             with amp_autocast():
                 output = model(images)
             if isinstance(output, (tuple, list)):
-                output = output[0]
+                output = output[1]
+
+            b,p,cls = output.shape
+            output_soft = torch.nn.functional.softmax(output,dim=2)
+
+            #使用max-pool来测试，取所有图块中得分最大的图块的置信度
+            max_score,_ = torch.max(output_soft,dim=-1)
+            max_score,max_index = torch.max(max_score,dim=-1)
+            output_soft = output_soft[[i for i in range(b)],max_index,:]
+            output = output[[i for i in range(b)],max_index,:]
+
             if config.BINARYTRAIN_MODE:
                 loss = criterion(output, target_bin)
             else:
                 loss = criterion(output, target)
                 
-            
-            output_soft = torch.nn.functional.softmax(output,dim=1)
             save_pred = np.append(save_pred,output_soft.cpu().numpy())
             save_label = np.append(save_label,target.cpu().numpy())
             
@@ -739,7 +802,7 @@ if __name__ == '__main__':
     assert rank >= 0
     
         
-    random_seed(config.SEED, rank)
+    #random_seed(config.SEED, rank)
     cudnn.benchmark = True
 
     # linear scale the learning rate according to total batch size, may not be optimal

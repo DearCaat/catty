@@ -9,11 +9,17 @@ try:
     from apex import amp
 except ImportError:
     amp = None
-def load_best_model(config,model,logger):
-    ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ckpt.pth')
+def load_best_model(config,model,logger,is_ema=False):
+    if is_ema:
+        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_ckpt.pth')
+    else:
+        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ckpt.pth')
     if os.path.exists(ckpt_path):
         os.remove(ckpt_path)
-    best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_best_model.pth')
+    if is_ema:
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_best_model.pth')
+    else:
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_best_model.pth')
     logger.info(f"==============> Loading the best model....................")
     checkpoint = torch.load(best_path, map_location='cpu')
     msg = model.load_state_dict(checkpoint['state_dict'], strict=False)
@@ -50,7 +56,7 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger):
     torch.cuda.empty_cache()
     return max_accuracy,best_auc
 
-def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,ema):
+def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,ema,is_ema=False):
     save_state = {'state_dict': model.state_dict(),
                   'optimizer': optimizer.state_dict(),
                   'lr_scheduler': lr_scheduler.state_dict(),
@@ -61,11 +67,14 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
                   'ema':ema.module.state_dict() if ema is not None else None}
     if config.APEX_AMP:
         amp.initialize(model, opt_level='O1')
-
         save_state['amp'] = amp.state_dict()
 
-    save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ckpt.pth')
-    best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_best_model.pth')
+    if is_ema:
+        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_ckpt.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_best_model.pth')
+    else:
+        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ckpt.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_best_model.pth')
     logger.info(f"{save_path} saving......")
     torch.save(save_state, save_path)
     if is_best:

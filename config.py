@@ -66,7 +66,7 @@ _C.DATA.CROP_SIZE=300
 # -----------------------------------------------------------------------------
 _C.MODEL = CN()
 # Model type        #swin_small_patch4_window7_224  efficientnetv2_rw_s  deit_base_patch16_224
-_C.MODEL.NAME = 'deit_base_patch16_224'
+_C.MODEL.NAME = 'swin_small_patch4_window7_224'
 # Model name
 _C.MODEL.BACKBONE = ''
 # Checkpoint to resume, could be overwritten by command line argument
@@ -92,7 +92,7 @@ _C.RDD_TRANS = CN()
 _C.RDD_TRANS.EMA_DECAY = 0.9997
 _C.RDD_TRANS.EMA_DECAY_SCHEDULER = None #warmup    warmup_flat
 _C.RDD_TRANS.EMA_DECAY_SCHEDULER_FLAT_RATIO = 0.01
-_C.RDD_TRANS.INIT_STAGE_EPOCH = 1
+_C.RDD_TRANS.INIT_STAGE_EPOCH = 0
 _C.RDD_TRANS.EMA_FORCE_CPU = False
 _C.RDD_TRANS.NOR_THR = 0.2
 
