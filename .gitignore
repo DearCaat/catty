@@ -4,3 +4,4 @@
 /wandb/
 /train&eval.sh
 /test.ipynb
+*.ipynb
