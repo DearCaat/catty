@@ -217,7 +217,7 @@ def main(config):
     teacher_ema = None
     model_ema = None
     if not config.THUMB_MODE:
-        cpt = torch.load('/home/tangwenhao/rdd/output/swin_test/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
+        cpt = torch.load('/home/tangwenhao/rdd/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
         std = cpt['state_dict']
         std['head_instance.weight'] = std['head.weight']
         std['head_instance.bias'] = std['head.bias']
@@ -474,7 +474,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     mask_ins =   ps_mask_dis & (((output_pl[:,:,6] - 0.001 < 0) & (label_tmp - 6  != 0))  | (output_bag_label - min_nor_thr > 0))
                     label_pl[mask_ins] = ins_t[mask_ins]
                     #选取部分置信度比较高的实例参与loss计算   
-                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==6) & (output_pl[:,:,6] - 0.95 > 0))) | ((output_pl[:,:,6] - 0.99 > 0) & ps_mask_nor)
+                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==6) & (output_pl[:,:,6] - 0.9 > 0))) | ((output_pl[:,:,6] - 0.99 > 0) & ps_mask_nor)
                 else:
                     #全部都用
                     #mask_ins = (label_tmp - label_tmp == 0)
@@ -633,7 +633,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     if not config.THUMB_MODE:
         for i in range(len(thr_list)):
             dis_ratio_tmp= np.sort(np.array(dis_ratio_list[i]))
-            thr_list[i] = 0.75 * thr_list[i] + 0.25 * dis_ratio_tmp[math.floor(len(dis_ratio_tmp) * 0.01)]
+            thr_list[i] = 0.9 * thr_list[i] + 0.1 * dis_ratio_tmp[math.floor(len(dis_ratio_tmp) * 0.01)]
 
     epoch_time = time.time() - start
     for i in range(len(dis_rec)):
