@@ -362,7 +362,7 @@ def timm_dataloader(config,is_train):
             std=config.AUG.NORM[1],
             num_workers=config.DATA.NUM_WORKERS,
             distributed=config.DISTRIBUTED,
-            crop_pct=None if not config.TEST.CROP else DEFAULT_CROP_PCT,
+            crop_pct=config.TEST.CROP,
             pin_memory=config.DATA.PIN_MEMORY,
         )
         return dataset_train, dataset_val, loader_train, loader_val
@@ -381,7 +381,7 @@ def timm_dataloader(config,is_train):
             std=config.AUG.NORM[1],
             num_workers=config.DATA.NUM_WORKERS,
             distributed=config.DISTRIBUTED,
-            crop_pct=None if not config.TEST.CROP else DEFAULT_CROP_PCT,
+            crop_pct=config.TEST.CROP,
             pin_memory=config.DATA.PIN_MEMORY,
         )
         return dataset_test,loader_test

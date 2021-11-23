@@ -94,7 +94,8 @@ _C.RDD_TRANS.EMA_DECAY_SCHEDULER = None #warmup    warmup_flat
 _C.RDD_TRANS.EMA_DECAY_SCHEDULER_FLAT_RATIO = 0.01
 _C.RDD_TRANS.INIT_STAGE_EPOCH = 0
 _C.RDD_TRANS.EMA_FORCE_CPU = False
-_C.RDD_TRANS.NOR_THR = 0.2
+_C.RDD_TRANS.NOR_THR = 0.05
+_C.RDD_TRANS.TEST_THR = 0.995
 
 # -----------------------------------------------------------------------------
 # Training settings
