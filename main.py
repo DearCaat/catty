@@ -9,7 +9,6 @@ import numpy as np
 from copy import deepcopy
 import math
 
-import tensorflow as tf
 import torch
 import torch.backends.cudnn as cudnn
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
@@ -171,6 +170,8 @@ def main(config):
     best_auc_ema = .0
 
     if config.MODEL.RESUME:
+        criterion = torch.nn.CrossEntropyLoss()
+        criterion.cuda()
         max_accuracy,best_auc = load_checkpoint(config, model, optimizer, lr_scheduler, logger)
         if config.TRAIN_MODE=='eval':
             if config.LOAD_TEST_DIR:
@@ -193,7 +194,7 @@ def main(config):
                 patr=getDataByStick([precision,recall],stick)
                 logger.info(patr)
             else:
-                acc1, acc5, loss, auc,pred,label = validate(config, data_loader_test, model,save_pre=True,amp_autocast=amp_autocast)
+                acc1, acc5, loss, auc,pred,label,eval_metrics = validate(config, data_loader_test, model,save_pre=True,amp_autocast=amp_autocast,criterion=criterion)
                 logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
                 _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[1])+'.npz'
                 np.savez(_save_path,pred=pred,label=label)
@@ -344,7 +345,7 @@ def main(config):
         #ema
         if model_ema is not None or teacher_ema is not None:
             load_best_model(config, model_ema.module if model_ema is not None else teacher_ema.module, logger,is_ema=True)
-            acc1_ema, acc5_ema,loss_ema,auc_ema,pred,label,eval_metrics_ema = validate(config, data_loader_val, model_ema.module if model_ema is not None else teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion,save_pre=True)
+            acc1_ema, acc5_ema,loss_ema,auc_ema,pred,label,eval_metrics_ema = validate(config, data_loader_test, model_ema.module if model_ema is not None else teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion,save_pre=True)
             logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1_ema:.2f}% {auc_ema:.2f}%")
             _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_ema_'+config.DATA.DATASET.split('/')[-1])+'.npz'
             np.savez(_save_path,pred=pred,label=label)
@@ -384,6 +385,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     patch_num_meter = AverageMeter()
     #acc1_meter = AverageMeter()
     loss_rec = np.array([])
+    dis_ratio_list = [[] for i in range(len(thr_list))]
     dis_rec = np.array([AverageMeter() for i in range(len(thr_list))])
     selec_rec = np.array([AverageMeter() for i in range(len(thr_list))])
 
@@ -468,11 +470,11 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     #判断为相应病害的实例置为包标签
                     #mask_ins =  (label_tmp - ins_t  == 0)
 
-                    #将病害包里判断为不是正常的实例都置为包标签 | (output_bag_label - min_nor_thr > 0)
-                    mask_ins =  (label_tmp - 6  != 0) & ps_mask_dis & ((output_bag_label - 0.99 > 0) | (output_bag_label - min_nor_thr > 0))
+                    #将病害包里判断为不是正常的实例都置为包标签 
+                    mask_ins =   ps_mask_dis & (((output_pl[:,:,6] - 0.001 < 0) & (label_tmp - 6  != 0))  | (output_bag_label - min_nor_thr > 0))
                     label_pl[mask_ins] = ins_t[mask_ins]
-                    #选取部分置信度比较高的实例参与loss计算   & (output_pl[:,:,6] - 0.9 > 0)))
-                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==6))) | ((output_pl[:,:,6] - 0.9 > 0) & ps_mask_nor)
+                    #选取部分置信度比较高的实例参与loss计算   
+                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==6) & (output_pl[:,:,6] - 0.95 > 0))) | ((output_pl[:,:,6] - 0.99 > 0) & ps_mask_nor)
                 else:
                     #全部都用
                     #mask_ins = (label_tmp - label_tmp == 0)
@@ -495,8 +497,10 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
                     if len(dis_tmp) > 0 and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         thr_tmp = torch.sum(dis_tmp) / (p * len(dis_tmp))
-                        thr_list[i] = 0.999 * thr_list[i] + (1-0.999)* thr_tmp
-                        thr_list[i] = 0.1 if thr_list[i] < 0.1 else thr_list[i]
+                        dis_ratio_list[i].append(thr_tmp.cpu())
+
+                        #thr_list[i] = 0.9999 * thr_list[i] + (1-0.9999)* thr_tmp
+                        #thr_list[i] = 0.1 if thr_list[i] < 0.1 else thr_list[i]
                         #thr_list[i] = thr_tmp
                         dis_rec[i].update(thr_tmp,b)
 
@@ -626,6 +630,11 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 
                 #f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
                 f'mem {memory_used:.0f}MB')
+    if not config.THUMB_MODE:
+        for i in range(len(thr_list)):
+            dis_ratio_tmp= np.sort(np.array(dis_ratio_list[i]))
+            thr_list[i] = 0.75 * thr_list[i] + 0.25 * dis_ratio_tmp[math.floor(len(dis_ratio_tmp) * 0.01)]
+
     epoch_time = time.time() - start
     for i in range(len(dis_rec)):
         logger.info(f"Dis:  {dis_rec[i].avg:.2f}")
@@ -677,16 +686,31 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             with amp_autocast():
                 output = model(images)
             if isinstance(output, (tuple, list)):
-                output = output[1]
+                index = 0 if config.THUMB_MODE else 1
+                output = output[index]
 
-            b,p,cls = output.shape
-            output_soft = torch.nn.functional.softmax(output,dim=2)
+            output_soft = torch.nn.functional.softmax(output,dim=-1)
+            if not config.THUMB_MODE:
+                #使用max-pool来测试，取所有图块中得分最大的图块的置信度
+                b,p,cls = output.shape
+                max_score,max_index_cls = torch.max(output_soft,dim=-1)
 
-            #使用max-pool来测试，取所有图块中得分最大的图块的置信度
-            max_score,_ = torch.max(output_soft,dim=-1)
-            max_score,max_index = torch.max(max_score,dim=-1)
-            output_soft = output_soft[[i for i in range(b)],max_index,:]
-            output = output[[i for i in range(b)],max_index,:]
+                mask = (max_score - config.RDD_TRANS.TEST_THR > 0) & (max_index_cls - 6 != 0)
+                if mask.any() == True:
+                    max_index = []
+                    for i in range(b):
+                        if mask[i].any()==True:
+                            score_tmp = max_score[i,mask[i]]
+                            _,max_inx_tmp = torch.max(score_tmp,dim=-1)
+                            max_index.append(torch.nonzero(mask[i])[max_inx_tmp,0].tolist())
+                        else:
+                            _,index = torch.max(max_score[i],dim=-1)
+                            max_index.append(index)
+                else:
+                    max_score,max_index = torch.max(max_score,dim=-1)
+
+                output_soft = output_soft[[i for i in range(b)],max_index,:]
+                output = output[[i for i in range(b)],max_index,:]
 
             if config.BINARYTRAIN_MODE:
                 loss = criterion(output, target_bin)

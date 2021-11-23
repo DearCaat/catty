@@ -521,8 +521,8 @@ class SwinTransformer(nn.Module):
         x = self.pos_drop(x)
         x = self.layers(x)
         _,_,dim = x.shape
-        f = self.norm(x)  # B L C
-        f = self.avgpool(f.transpose(1, 2))  # B C 1
+        x = self.norm(x)  # B L C
+        f = self.avgpool(x.transpose(1, 2))  # B C 1
         f = torch.flatten(f, 1)
         return f,x.view(-1,dim)
 
