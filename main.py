@@ -217,11 +217,11 @@ def main(config):
     teacher_ema = None
     model_ema = None
     if not config.THUMB_MODE:
-        cpt = torch.load('/home/tangwenhao/rdd/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
-        std = cpt['state_dict']
-        std['head_instance.weight'] = std['head.weight']
-        std['head_instance.bias'] = std['head.bias']
-        model.load_state_dict(std)
+        # cpt = torch.load('/home/tangwenhao/rdd/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
+        # std = cpt['state_dict']
+        # std['head_instance.weight'] = std['head.weight']
+        # std['head_instance.bias'] = std['head.bias']
+        # model.load_state_dict(std)
         #teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[])
         model_ema = ModelEmaV3(model, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None)
 

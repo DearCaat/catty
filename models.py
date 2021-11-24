@@ -95,8 +95,18 @@ def build_model(config):
                           patch_size=config.DATA.PATCH_SIZE,
                           path=config.DATA.PRETRAINED_DIR)
     # Use the official impl to use the gradient cheackpoint
-    #elif model_name.startswith('swin'):
-        #model = build_swin_model(config)
+    elif model_name.startswith('cluster'):
+        model = create_model(
+            config.MODEL.NAME,
+            pretrained=config.MODEL.PRETRAINED,
+            num_classes=config.MODEL.NUM_CLASSES,
+            drop_rate=config.MODEL.DROP_RATE,
+            drop_path_rate=config.MODEL.DROP_PATH_RATE,
+            cluster = config.RDD_TRANS.CLUSTER.NAME,
+            num_cluster = config.RDD_TRANS.CLUSTER.NUM_CLUSTER,
+            kmeans_init = config.RDD_TRANS.CLUSTER.INIT,
+            num_init = config.RDD_TRANS.CLUSTER.NUM_INIT
+        )
     else:
         model = create_model(
             config.MODEL.NAME,

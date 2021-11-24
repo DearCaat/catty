@@ -66,7 +66,7 @@ _C.DATA.CROP_SIZE=300
 # -----------------------------------------------------------------------------
 _C.MODEL = CN()
 # Model type        #swin_small_patch4_window7_224  efficientnetv2_rw_s  deit_base_patch16_224
-_C.MODEL.NAME = 'swin_small_patch4_window7_224'
+_C.MODEL.NAME = 'cluster_swin_small_patch4_window7_224'
 # Model name
 _C.MODEL.BACKBONE = ''
 # Checkpoint to resume, could be overwritten by command line argument
@@ -96,6 +96,13 @@ _C.RDD_TRANS.INIT_STAGE_EPOCH = 0
 _C.RDD_TRANS.EMA_FORCE_CPU = False
 _C.RDD_TRANS.NOR_THR = 0.05
 _C.RDD_TRANS.TEST_THR = 0.995
+
+_C.RDD_TRANS.CLUSTER = CN()
+_C.RDD_TRANS.CLUSTER.NAME='KMeans'
+# kmeans paras 
+_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 3
+_C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
+_C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
 
 # -----------------------------------------------------------------------------
 # Training settings
