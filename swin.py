@@ -13,6 +13,7 @@ import logging
 import math
 from copy import deepcopy
 from typing import Optional
+from cv2 import kmeans
 
 import torch
 import torch.nn as nn
@@ -23,6 +24,8 @@ from timm.models.helpers import build_model_with_cfg, overlay_external_default_c
 from timm.models.layers import PatchEmbed, Mlp, DropPath, to_2tuple, trunc_normal_
 from timm.models.registry import register_model
 from timm.models.vision_transformer import checkpoint_filter_fn, _init_vit_weights
+from gcn_cluster import *
+from sklearn.cluster import KMeans
 
 _logger = logging.getLogger(__name__)
 
@@ -524,16 +527,91 @@ class SwinTransformer(nn.Module):
         x = self.norm(x)  # B L C
         f = self.avgpool(x.transpose(1, 2))  # B C 1
         f = torch.flatten(f, 1)
-        return f,x.view(-1,dim)
+        return f,x
 
     def forward(self, x):
         x,f = self.forward_features(x)
-        b,_ = x.shape
+        b,dim = x.shape
+        f = f.view(-1,dim)
         f = self.head_instance(f)
         _,cls = f.shape
         x = self.head(x)
         return x,f.view(b,-1,cls)
 
+class RddTransformer(nn.Module):
+    # 二分类考虑用BCE + Node (512,1)  多分类使用CE + Node(512,cls)
+    def __init__(self, backbone=nn.Module,cluster=GCN(), cluster_loss_fn=nn.CrossEntropyLoss(),classes=1000,**kwargs):
+        super().__init__()
+        self.cluster_model = cluster
+        if type(cluster)==GCN:
+            self.active_connection=4
+            self.graph = KnnGraph(self.active_connection)
+        self.instance_feature_extractor=backbone
+        elif type(cluster)
+
+        self.cluster_loss_fn = cluster_loss_fn
+        self.classifier = nn.Sequential(nn.Linear(512,classes))
+
+        self.bag_classifiers = nn.Sequential(
+            nn.Linear(512,classes)
+        )
+        initialize_weights(self.classifier)
+        initialize_weights(self.bag_classifiers)
+    def cluster_classfier(self,clusters_feat):
+        result={'clusters_score':[],'score':[],'index':[]}
+        feats = []
+        for i in range(len(clusters_feat)):
+            x = self.classifier(clusters_feat[i])
+            score, index = torch.max(x, dim=0)
+            result['clusters_score'].append(x)
+            result['score'].append(score)
+            result['index'].append(index)
+        scores = torch.stack(result['score'],1)
+        max_value, index = torch.max(scores, dim=1)
+        feats = clusters_feat[index]
+        max_cluster_score = torch.mean(result['clusters_score'][index],dim=0)
+        feats = torch.mean(feats,dim=0)
+        logits = self.bag_classifiers(feats)
+        return logits, max_cluster_score
+    
+    def clip_cluster(self,instance_feat,cluster_indic):
+        assert len(instance_feat.shape) == 3 and len(clusters_indic.shape)==2
+        clusters_num = np.max(clusters_indic) + 1
+
+        clusters_feat = list()
+        for i in range(clusters_num):
+            cluster_indic = clusters_indic - i == 0
+            clusters_feat.append(instance_feat[cluster_indic])
+        return clusters_feat
+
+    def forward(self,x,bag_label=None,is_training=False):
+        # step 1, get the instance feat by backbone Network
+        _, inst_feature=self.instance_feature_extractor.forward_features(x) #B*N*D
+        B,N,D = inst_feature.shape
+        # step 2, cluster 
+        if type(self.cluster_model) == GCN:
+            # if using gcn to cluster, firstly create the graph
+            feat_bth, adj_bth, cid, h1id_bth,unique_node_bth = self.graph(inst_feature)
+            # gcn cluster
+            edges, scores = self.cluster_model(feat_bth, adj_bth,cid, h1id_bth,unique_node_bth)
+            clusters_feat = part_feat(inst_feature,edges, scores) # B*N*D
+        else:
+            cluster_indic = list()
+            # kmeans cluster
+            for b in range(B):
+                self.cluster_model.fit(inst_feature[b]) 
+                cluster_indic.append(self.cluster_model.labels_)
+            # find cluster features
+            clusters_feat = self.clip_cluster(inst_feature,np.array(cluster_indic))
+        for i in range(len(clusters_feat)):
+            print(clusters_feat[i].size())
+        # C N* D
+        logits, value = self.cluster_classfier(clusters_feat)
+        if is_training:
+            cluster_loss = self.cluster_loss_fn(value.view(1,-1),bag_label.view(1,-1))
+            return logits, cluster_loss
+        else:
+            return logits, value
 
 def _create_swin_transformer(variant, pretrained=False, default_cfg=None, **kwargs):
     if default_cfg is None:
@@ -558,6 +636,19 @@ def _create_swin_transformer(variant, pretrained=False, default_cfg=None, **kwar
     return model
 
 
+
+@register_model
+def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):
+    """ Swin-S @ 224x224, trained ImageNet-1k
+    """
+    model_kwargs = dict(
+        patch_size=4, window_size=7, embed_dim=96, depths=(2, 2, 18, 2), num_heads=(3, 6, 12, 24), **kwargs)
+    backbone = _create_swin_transformer('swin_small_patch4_window7_224', pretrained=pretrained, **model_kwargs)
+    if kwargs['cluster'].lower() == 'kmeans':
+        kmeans = KMeans(init=kwargs['kmeans_init'], n_clusters=kwargs['num_cluster'], n_init=kwargs['num_init'])
+    return RddTransformer(backbone=backbone,classes=kwargs['num_classes'],cluster=kmeans)
+
+    
 
 @register_model
 def swin_base_patch4_window12_384(pretrained=False, **kwargs):
