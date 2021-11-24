@@ -3,5 +3,4 @@
 /.ipynb_checkpoints/
 /wandb/
 /train&eval.sh
-/test.ipynb
 *.ipynb

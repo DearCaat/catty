@@ -22,7 +22,7 @@ from config import get_config
 from collections import OrderedDict
 from models import build_model
 from data import build_loader
-from utils import ModelEmaV3
+from utils import ModelEmaV3, get_sigmod_num
 from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
 from logger import create_logger
@@ -217,11 +217,11 @@ def main(config):
     teacher_ema = None
     model_ema = None
     if not config.THUMB_MODE:
-        cpt = torch.load('/home/tangwenhao/rdd/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
-        std = cpt['state_dict']
-        std['head_instance.weight'] = std['head.weight']
-        std['head_instance.bias'] = std['head.bias']
-        model.load_state_dict(std)
+        # cpt = torch.load('/home/tangwenhao/rdd/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
+        # std = cpt['state_dict']
+        # std['head_instance.weight'] = std['head.weight']
+        # std['head_instance.bias'] = std['head.bias']
+        # model.load_state_dict(std)
         #teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[])
         model_ema = ModelEmaV3(model, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None)
 
@@ -462,24 +462,25 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 #mask_ins = ((output_pl[:,:,6] - .99 > 0) | (output_pl[:,:,6] - min_nor_thr > 0)) & (label_tmp - 6  == 0) & (targets.unsqueeze(-1).repeat((1,p)) -6 != 0)
 
                 #将所有实例设为正常
-                label_pl[:,:] = 6
-                thr_min_conf = 0.9 + ((epoch * num_steps + idx) / (config.TRAIN.EPOCHS * num_steps)) * 0.1
-                thr_min_conf = 0.99 if thr_min_conf > 0.99 else thr_min_conf
+                label_pl[:,:] = 6 
+                # sigmod函数来保证前期增加速率远远高于后期，优于线性增长
+                thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+                thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
                 #把网络判断为不是正常的部分实例置为包病害标签
                 if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                     #判断为相应病害的实例置为包标签
                     #mask_ins =  (label_tmp - ins_t  == 0)
 
-                    #将病害包里判断为不是正常的实例都置为包标签 
-                    mask_ins =   ps_mask_dis & (((output_pl[:,:,6] - 0.001 < 0) & (label_tmp - 6  != 0))  | (output_bag_label - min_nor_thr > 0))
+                    #将病害包里判断为不是正常的实例都置为包标签 & (output_bag_label > thr_min_conf)
+                    mask_ins =   ps_mask_dis & (((output_pl[:,:,6] < (1-thr_min_conf)) & (output_bag_label > thr_min_dis_conf) )  | (output_bag_label - min_nor_thr >  0))
                     label_pl[mask_ins] = ins_t[mask_ins]
-                    #选取部分置信度比较高的实例参与loss计算   
-                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==6) & (output_pl[:,:,6] - 0.9 > 0))) | ((output_pl[:,:,6] - 0.99 > 0) & ps_mask_nor)
+                    #选取部分置信度比较高的实例参与loss计算   label_tmp - 6  == 0
+                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==6) & (output_pl[:,:,6] - thr_min_dis_conf > 0))) | ((output_pl[:,:,6] > thr_min_dis_conf) & ps_mask_nor)
                 else:
                     #全部都用
                     #mask_ins = (label_tmp - label_tmp == 0)
-                    #只要正常图片
-                    mask_ins = (ins_t - 6 == 0) & (output_bag_label - 0.9 > 0)
+                    #只要正常图片 (output_bag_label - 0.9 > 0)
+                    mask_ins = ps_mask_nor 
 
                     #label_pl[bs_index_dis] = ins_t[bs_index_dis]
 
@@ -630,10 +631,10 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 
                 #f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
                 f'mem {memory_used:.0f}MB')
-    if not config.THUMB_MODE:
+    if not config.THUMB_MODE and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
         for i in range(len(thr_list)):
             dis_ratio_tmp= np.sort(np.array(dis_ratio_list[i]))
-            thr_list[i] = 0.9 * thr_list[i] + 0.1 * dis_ratio_tmp[math.floor(len(dis_ratio_tmp) * 0.01)]
+            thr_list[i] = 0.75 * thr_list[i] + 0.25 * dis_ratio_tmp[math.floor(len(dis_ratio_tmp) * 0.01)]
 
     epoch_time = time.time() - start
     for i in range(len(dis_rec)):
@@ -645,12 +646,12 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
     if hasattr(optimizer, 'sync_lookahead'):
         optimizer.sync_lookahead()
-
+    torch.cuda.empty_cache()
     return loss,OrderedDict([('loss', loss_meter.avg)])
 
 def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, log_suffix='',criterion=None):
     model.eval()
-
+    
     batch_time = AverageMeter()
     loss_meter = AverageMeter()
     acc1_meter = AverageMeter()
@@ -711,7 +712,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
 
                 output_soft = output_soft[[i for i in range(b)],max_index,:]
                 output = output[[i for i in range(b)],max_index,:]
-
+                del max_score,mask
             if config.BINARYTRAIN_MODE:
                 loss = criterion(output, target_bin)
             else:
@@ -769,6 +770,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
         auc = roc_auc_score(np.array(save_label!=6,dtype=int), 1-save_pred[:,6])
         logger.info(f' * Acc@1 {acc1_meter.avg:.3f} Acc@5 {acc5_meter.avg:.3f} AUC {auc*100:.3f} F1@Macro {ma_f1*100:.3f} F1@Micro {mi_f1*100:.3f}')
     metrics = OrderedDict([('loss', loss_meter.avg), ('top1', acc1_meter.avg), ('top5', acc5_meter.avg),('auc',auc),('macro_f1',ma_f1),('micro_f1',mi_f1)])
+    torch.cuda.empty_cache()
     if save_pre:
         return acc1_meter.avg, acc5_meter.avg, loss_meter.avg, auc,save_pred,save_label,metrics
     else:    

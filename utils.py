@@ -3,6 +3,7 @@ import torch
 import torch.distributed as dist
 import shutil
 from copy import deepcopy
+import math
 
 try:
     # noinspection PyUnresolvedReferences
@@ -135,6 +136,9 @@ def getDataByStick(data,stick):
                     diff = 9999
                     del _stick[j]    
 
+def get_sigmod_num(start=0,curr_step=0,all_step=0):
+    thr_min_conf = start + (round((1 / (1 + math.exp(-10*(curr_step / all_step)) - 0.5) * 2),3)) * (1-start)
+    return 0.999 if thr_min_conf > 0.999 else thr_min_conf
 class ModelEmaV3(torch.nn.Module):
     """ Model Exponential Moving Average V2
 
