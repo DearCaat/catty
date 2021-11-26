@@ -597,8 +597,9 @@ class RddTransformer(nn.Module):
         if type(self.cluster_model) == GCN:
             # if using gcn to cluster, firstly create the graph
             feat_bth, adj_bth, h1id_bth = self.graph(inst_feature)
-            # gcn cluster
-            edges, scores = self.cluster_model(feat_bth, adj_bth,cid, h1id_bth,unique_node_bth)
+            # gcn cluster  edges, scores
+            pred = self.cluster_model(feat_bth, adj_bth, h1id_bth)
+            print(pred.size())
             clusters_feat = part_feat(inst_feature,edges, scores) # C*N*D
         # 暂时放弃kmeans
         else:
@@ -656,7 +657,7 @@ def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):
     if kwargs['cluster_name'].lower() == 'kmeans':
         return RddTransformer(backbone=backbone,classes=kwargs['num_classes'],cluster=kmeans,**kwargs)
     elif kwargs['cluster_name'].lower() == 'gcn':
-        return RddTransformer(backbone=backbone,classes=kwargs['num_classes'],cluster=GCN(in_dim=768,out_dim=384),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
+        return RddTransformer(backbone=backbone,classes=kwargs['num_classes'],cluster=GCN(in_dim=768,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
 
     
 

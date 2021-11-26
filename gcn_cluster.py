@@ -150,8 +150,9 @@ class GraphConv(nn.Module):
         
 
 class GCN(nn.Module):
-    def __init__(self,in_dim=512,out_dim=256):
+    def __init__(self,in_dim=512,out_dim=256,k1=20):
         super(GCN, self).__init__()
+        self.k1 = k1
         self.bn0 = nn.BatchNorm1d(in_dim, affine=False)
         self.conv1 = GraphConv(in_dim, in_dim, MeanAggregator)
         self.conv2 = GraphConv(in_dim, in_dim, MeanAggregator)
@@ -165,28 +166,25 @@ class GCN(nn.Module):
     
     def forward(self, x, A, one_hop_idcs, train=True):
         # data normalization l2 -> bn
-        B,N,D = x.shape
+        B,N,I,D = x.shape    # batch_size instance_size nodes_IPS dim
         #xnorm = x.norm(2,2,keepdim=True) + 1e-8
         #xnorm = xnorm.expand_as(x)
         #x = x.div(xnorm)
         
         x = x.view(-1, D)
         x = self.bn0(x)
-        x = x.view(B,N,D)
+        x = x.view(B,N,I,D)
 
         x = self.conv1(x,A)
         x = self.conv2(x,A)
         x = self.conv3(x,A)
         x = self.conv4(x,A)
-        k1 = one_hop_idcs.size(-1)
-        dout = x.size(-1)
-        edge_feat = torch.zeros(B,k1,dout).cuda()
-        for b in range(B):
-            edge_feat[b,:,:] = x[b, one_hop_idcs[b]]  
-        edge_feat = edge_feat.view(-1,dout)
+
+        edge_feat = x[one_hop_idcs].view(B,N,sekf.k1,D)
+        edge_feat = edge_feat.view(B,-1,D)
         pred = self.classifier(edge_feat)
             
-        # shape: (B*k1)x2
+        # shape: B (N*k1) 2
         return pred
 
 class KnnGraph(object):
