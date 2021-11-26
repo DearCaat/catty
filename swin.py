@@ -26,7 +26,6 @@ from timm.models.layers import PatchEmbed, Mlp, DropPath, to_2tuple, trunc_norma
 from timm.models.registry import register_model
 from timm.models.vision_transformer import checkpoint_filter_fn, _init_vit_weights
 from gcn_cluster import *
-from kmeans_pytorch import kmeans
 
 _logger = logging.getLogger(__name__)
 
