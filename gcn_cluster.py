@@ -180,7 +180,7 @@ class GCN(nn.Module):
         x = self.conv3(x,A)
         x = self.conv4(x,A)
 
-        edge_feat = x[one_hop_idcs].view(B,N,sekf.k1,D)
+        edge_feat = x[one_hop_idcs].view(B,N,self.k1,D)
         edge_feat = edge_feat.view(B,-1,D)
         pred = self.classifier(edge_feat)
             
@@ -220,7 +220,7 @@ class KnnGraph(object):
         del hops_1
         # hops_2矩阵中，dim -1 第一个元素存储的是K1跳的顶点，后几个元素为K2跳个顶点，dim -2 的第一个元素是中心点的索引
         # 展平hops矩阵后两维，这里就不考虑自身的那一维
-        uni = hops[:,:,1:,:].flatten(start_dim=-2, end_dim=-1)
+        uni = hops_2[:,:,1:,:].flatten(start_dim=-2, end_dim=-1)
 
         # 构建唯一顶点矩阵 构建邻接矩阵 因为每一个lps的顶点数目都不相同，因此需要使用for 循环
         uni_array = np.empty((B,N),dtype=object)
