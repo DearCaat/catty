@@ -220,19 +220,19 @@ class KnnGraph(object):
         del hops_1
         # hops_2矩阵中，dim -1 第一个元素存储的是K1跳的顶点，后几个元素为K2跳个顶点，dim -2 的第一个元素是中心点的索引
         # 展平hops矩阵后两维，这里就不考虑自身的那一维
-        uni = hops[:,:,1:,:].flatten(start_dim=-2, end_dim=-1)
+        uni = hops_2[:,:,1:,:].flatten(start_dim=-2, end_dim=-1)
 
         # 构建唯一顶点矩阵 构建邻接矩阵 因为每一个lps的顶点数目都不相同，因此需要使用for 循环
         uni_array = np.empty((B,N),dtype=object)
         max_num_nodes = self.k_at_hop[0] * (self.k_at_hop[1] + 1) + 1
-        A_ = torch.zeros(B,N,max_num_nodes,max_num_nodes)
-        feat = torch.zeros(B,N,max_num_nodes,D)
+        A_ = torch.zeros(B,N,max_num_nodes,max_num_nodes).cuda()
+        feat = torch.zeros(B,N,max_num_nodes,D).cuda()
         mask_one_hop_idcs = torch.zeros(32,49,max_num_nodes) == 1
         for i in range(B):
             for m in range(N):
                 uni_tmp = torch.unique(uni[i,m])
                 if m not in uni_tmp:
-                    uni_tmp = torch.cat((torch.tensor([m]),uni_tmp))
+                    uni_tmp = torch.cat((torch.tensor([m]).cuda(),uni_tmp))
                 uni_array[i,m] = uni_tmp
                 num_nodes = len(uni_tmp)
                 a_tmp = torch.zeros(size=(num_nodes,num_nodes))
@@ -243,7 +243,7 @@ class KnnGraph(object):
                     a_tmp[node,nei_index] = 1
                     a_tmp[nei_index,node] = 1
                 # one-hop indices
-                mask_one_hop_idcs[i,m,:num_nodes] = torch.isin(uni_tmp,hops[i,m,1:,0])
+                mask_one_hop_idcs[i,m,:num_nodes] = torch.isin(uni_tmp,hops_2[i,m,1:,0])
                 A_[i,m,:num_nodes,:num_nodes] = a_tmp      
                 feat[i,m,:num_nodes] = feats[i,uni_tmp]
 
