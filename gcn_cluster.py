@@ -17,6 +17,18 @@ import torch.nn.functional as F
 from torch.nn import init
 import networkx as nx
 
+def gcn_cluster(edge_col_indices,scores,feat,thr=0.75):
+    B,N,K1 = edge_col_indices.shape
+    crow_indices = torch.tensor([K1*i for i in range(N+1)]).contiguous()
+    cluster_feat = np.zeros(size=(B,),dtype=object)
+    for b in B:
+        csr = torch.sparse_csr_tensor(crow_indices,edge_col_indices[b,:,1:].flatten().contiguous(),scores[b,:,:,0].flatten().contiguous(),size=(N,N))
+        A = csr.to_dense()
+        A[A>thr] = 1
+        A_nx = nx.from_numpy_matrix(A.numpy())
+        for c in nx.connected_components(A_nx):
+            cluster_feat[b].append(feat[b][list(c)])
+    return cluster_feat
 def connected_component(edges,scores,thr=0.75):
     score_dict = {} # score lookup table
     new_graph=list()
@@ -258,4 +270,4 @@ class KnnGraph(object):
         # 正则化特征，IPS特征减去中心点特征
         feat = feat - feats.unsqueeze(-2)
 
-        return feat,A_,mask_one_hop_idcs
+        return feat,A_,mask_one_hop_idcs,hops_1

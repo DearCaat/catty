@@ -546,6 +546,7 @@ class RddTransformer(nn.Module):
         self.cluster_distance = kwargs['cluster_distance']
         if type(cluster)==GCN:
             self.graph = graph
+            self.clustre_thr = kwargs['cluster_thr']
         elif cluster == kmeans:
             self.cluster_centers = []
             self.cluster_num = kwargs['num_cluster']
@@ -595,11 +596,10 @@ class RddTransformer(nn.Module):
         # step 2, cluster 
         if type(self.cluster_model) == GCN:
             # if using gcn to cluster, firstly create the graph
-            feat_bth, adj_bth, h1id_bth = self.graph(inst_feature)
+            feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
             # gcn cluster  edges, scores
-            pred = self.cluster_model(feat_bth, adj_bth, h1id_bth)
-            print(pred.size())
-            clusters_feat = part_feat(inst_feature,edges, scores) # C*N*D
+            pred = self.cluster_model(feat, adj, h1_mask)
+            clusters_feat = gcn_cluster(h1_indi,pred, feat,self.clustre_thr) # C*N*D
         # 暂时放弃kmeans
         else:
             # kmeans cluster 
