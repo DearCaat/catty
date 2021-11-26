@@ -124,7 +124,8 @@ class MeanAggregator(nn.Module):
     def __init__(self):
         super(MeanAggregator, self).__init__()
     def forward(self, features, A ):
-        x = torch.bmm(A, features)
+        #x = torch.bmm(A, features)
+        x = torch.einsum('bnii,bnid->bnid',(A, features))
         return x 
 
 class GraphConv(nn.Module):
@@ -140,11 +141,11 @@ class GraphConv(nn.Module):
         self.agg = agg()
 
     def forward(self, features, A):
-        b, n, d = features.shape
+        b, n, i, d = features.shape
         assert(d==self.in_dim)
         agg_feats = self.agg(features,A)
-        cat_feats = torch.cat([features, agg_feats], dim=2)
-        out = torch.einsum('bnd,df->bnf', (cat_feats, self.weight))
+        cat_feats = torch.cat([features, agg_feats], dim=3)
+        out = torch.einsum('bnid,df->bnif', (cat_feats, self.weight))
         out = F.relu(out + self.bias)
         return out 
         
@@ -180,9 +181,11 @@ class GCN(nn.Module):
         x = self.conv3(x,A)
         x = self.conv4(x,A)
 
-        edge_feat = x[one_hop_idcs].view(B,N,self.k1,D)
-        edge_feat = edge_feat.view(B,-1,D)
-        pred = self.classifier(edge_feat)
+        dim_out = x.size(-1)
+
+        edge_feat = x[one_hop_idcs].view(B,N,self.k1,dim_out)
+        edge_feat = edge_feat.view(-1,dim_out)
+        pred = self.classifier(edge_feat).view(B,-1,2)
             
         # shape: B (N*k1) 2
         return pred
@@ -225,14 +228,14 @@ class KnnGraph(object):
         # 构建唯一顶点矩阵 构建邻接矩阵 因为每一个lps的顶点数目都不相同，因此需要使用for 循环
         uni_array = np.empty((B,N),dtype=object)
         max_num_nodes = self.k_at_hop[0] * (self.k_at_hop[1] + 1) + 1
-        A_ = torch.zeros(B,N,max_num_nodes,max_num_nodes)
-        feat = torch.zeros(B,N,max_num_nodes,D)
+        A_ = torch.zeros(B,N,max_num_nodes,max_num_nodes).cuda()
+        feat = torch.zeros(B,N,max_num_nodes,D).cuda()
         mask_one_hop_idcs = torch.zeros(32,49,max_num_nodes) == 1
         for i in range(B):
             for m in range(N):
                 uni_tmp = torch.unique(uni[i,m])
                 if m not in uni_tmp:
-                    uni_tmp = torch.cat((torch.tensor([m]),uni_tmp))
+                    uni_tmp = torch.cat((torch.tensor([m]).cuda(),uni_tmp))
                 uni_array[i,m] = uni_tmp
                 num_nodes = len(uni_tmp)
                 a_tmp = torch.zeros(size=(num_nodes,num_nodes))
@@ -243,7 +246,7 @@ class KnnGraph(object):
                     a_tmp[node,nei_index] = 1
                     a_tmp[nei_index,node] = 1
                 # one-hop indices
-                mask_one_hop_idcs[i,m,:num_nodes] = torch.isin(uni_tmp,hops[i,m,1:,0])
+                mask_one_hop_idcs[i,m,:num_nodes] = torch.isin(uni_tmp,hops_2[i,m,1:,0])
                 A_[i,m,:num_nodes,:num_nodes] = a_tmp      
                 feat[i,m,:num_nodes] = feats[i,uni_tmp]
 
