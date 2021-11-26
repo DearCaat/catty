@@ -102,10 +102,11 @@ def build_model(config):
             num_classes=config.MODEL.NUM_CLASSES,
             drop_rate=config.MODEL.DROP_RATE,
             drop_path_rate=config.MODEL.DROP_PATH_RATE,
-            cluster = config.RDD_TRANS.CLUSTER.NAME,
+            cluster_name = config.RDD_TRANS.CLUSTER.NAME,
             num_cluster = config.RDD_TRANS.CLUSTER.NUM_CLUSTER,
-            kmeans_init = config.RDD_TRANS.CLUSTER.INIT,
-            num_init = config.RDD_TRANS.CLUSTER.NUM_INIT
+            ips_active_connection = config.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION,
+            ips_k_at_hop = config.RDD_TRANS.CLUSTER.IPS_K_AT_HOP,
+            cluster_distance = config.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE
         )
     else:
         model = create_model(

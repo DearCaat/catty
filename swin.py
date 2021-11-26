@@ -16,6 +16,7 @@ from typing import Optional
 from cv2 import kmeans
 
 import torch
+from torch._C import device
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 
@@ -25,7 +26,7 @@ from timm.models.layers import PatchEmbed, Mlp, DropPath, to_2tuple, trunc_norma
 from timm.models.registry import register_model
 from timm.models.vision_transformer import checkpoint_filter_fn, _init_vit_weights
 from gcn_cluster import *
-from sklearn.cluster import KMeans
+from kmeans_pytorch import kmeans
 
 _logger = logging.getLogger(__name__)
 
@@ -540,15 +541,17 @@ class SwinTransformer(nn.Module):
 
 class RddTransformer(nn.Module):
     # 二分类考虑用BCE + Node (512,1)  多分类使用CE + Node(512,cls)
-    def __init__(self, backbone=nn.Module,cluster=GCN(), cluster_loss_fn=nn.CrossEntropyLoss(),classes=1000,**kwargs):
+    def __init__(self, backbone=nn.Module,cluster=GCN(), graph=KnnGraph(),cluster_loss_fn=nn.CrossEntropyLoss(),classes=1000,**kwargs):
         super().__init__()
         self.cluster_model = cluster
+        self.cluster_distance = kwargs['cluster_distance']
         if type(cluster)==GCN:
-            self.active_connection=4
-            self.graph = KnnGraph(self.active_connection)
-        self.instance_feature_extractor=backbone
-        elif type(cluster)
+            self.graph = graph
+        elif cluster == kmeans:
+            self.cluster_centers = []
+            self.cluster_num = kwargs['num_cluster']
 
+        self.instance_feature_extractor=backbone
         self.cluster_loss_fn = cluster_loss_fn
         self.classifier = nn.Sequential(nn.Linear(512,classes))
 
@@ -574,13 +577,15 @@ class RddTransformer(nn.Module):
         logits = self.bag_classifiers(feats)
         return logits, max_cluster_score
     
-    def clip_cluster(self,instance_feat,cluster_indic):
-        assert len(instance_feat.shape) == 3 and len(clusters_indic.shape)==2
-        clusters_num = np.max(clusters_indic) + 1
-
+    # for kmeans
+    def clip_cluster(self,instance_feat,clusters_indic):
+        #assert len(instance_feat.shape) == 3 and len(clusters_indic.shape)==2
+        print(clusters_indic.size())
         clusters_feat = list()
-        for i in range(clusters_num):
+        for i in range(self.cluster_num):
             cluster_indic = clusters_indic - i == 0
+            print(cluster_indic)
+            print(instance_feat[cluster_indic].size())
             clusters_feat.append(instance_feat[cluster_indic])
         return clusters_feat
 
@@ -591,18 +596,22 @@ class RddTransformer(nn.Module):
         # step 2, cluster 
         if type(self.cluster_model) == GCN:
             # if using gcn to cluster, firstly create the graph
-            feat_bth, adj_bth, cid, h1id_bth,unique_node_bth = self.graph(inst_feature)
+            feat_bth, adj_bth, h1id_bth = self.graph(inst_feature)
             # gcn cluster
             edges, scores = self.cluster_model(feat_bth, adj_bth,cid, h1id_bth,unique_node_bth)
-            clusters_feat = part_feat(inst_feature,edges, scores) # B*N*D
+            clusters_feat = part_feat(inst_feature,edges, scores) # C*N*D
+        # 暂时放弃kmeans
         else:
-            cluster_indic = list()
-            # kmeans cluster
+            # kmeans cluster 
             for b in range(B):
-                self.cluster_model.fit(inst_feature[b]) 
-                cluster_indic.append(self.cluster_model.labels_)
+                clu_labels,self.cluster_centers = self.cluster_model(X=inst_feature[b],num_clusters=self.cluster_num,device=torch.cuda.current_device(),cluster_centers = self.cluster_centers,tqdm_flag=False,distance=self.cluster_distance)
+                clu_labels = torch.unsqueeze(clu_labels,dim=0)
+                if b == 0:
+                     cluster_indic = clu_labels.clone()
+                else:
+                    cluster_indic = torch.cat((cluster_indic,clu_labels))
             # find cluster features
-            clusters_feat = self.clip_cluster(inst_feature,np.array(cluster_indic))
+            clusters_feat = self.clip_cluster(inst_feature,cluster_indic)
         for i in range(len(clusters_feat)):
             print(clusters_feat[i].size())
         # C N* D
@@ -644,9 +653,10 @@ def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):
     model_kwargs = dict(
         patch_size=4, window_size=7, embed_dim=96, depths=(2, 2, 18, 2), num_heads=(3, 6, 12, 24), **kwargs)
     backbone = _create_swin_transformer('swin_small_patch4_window7_224', pretrained=pretrained, **model_kwargs)
-    if kwargs['cluster'].lower() == 'kmeans':
-        kmeans = KMeans(init=kwargs['kmeans_init'], n_clusters=kwargs['num_cluster'], n_init=kwargs['num_init'])
-    return RddTransformer(backbone=backbone,classes=kwargs['num_classes'],cluster=kmeans)
+    if kwargs['cluster_name'].lower() == 'kmeans':
+        return RddTransformer(backbone=backbone,classes=kwargs['num_classes'],cluster=kmeans,**kwargs)
+    elif kwargs['cluster_name'].lower() == 'gcn':
+        return RddTransformer(backbone=backbone,classes=kwargs['num_classes'],cluster=GCN(in_dim=768,out_dim=384),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
 
     
 

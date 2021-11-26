@@ -97,12 +97,17 @@ _C.RDD_TRANS.EMA_FORCE_CPU = False
 _C.RDD_TRANS.NOR_THR = 0.05
 _C.RDD_TRANS.TEST_THR = 0.995
 
-_C.RDD_TRANS.CLUSTER = CN()
-_C.RDD_TRANS.CLUSTER.NAME='KMeans'
+_C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
+_C.RDD_TRANS.CLUSTER.NAME='gcn'
+_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # kmeans default euclidean, gcn cosine
 # kmeans paras 
-_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 3
-_C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
-_C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
+_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = None
+# _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
+# _C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
+# gcn paras
+_C.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION = 4
+_C.RDD_TRANS.CLUSTER.IPS_K_AT_HOP = (20,5)
+
 
 # -----------------------------------------------------------------------------
 # Training settings
