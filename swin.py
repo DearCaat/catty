@@ -14,6 +14,7 @@ import math
 from copy import deepcopy
 from typing import Optional
 from cv2 import kmeans
+from networkx.algorithms import cluster
 
 import torch
 from torch._C import device
@@ -600,6 +601,7 @@ class RddTransformer(nn.Module):
             # gcn cluster  edges, scores
             pred = self.cluster_model(feat, adj, h1_mask)
             clusters_feat = gcn_cluster(h1_indi,pred, feat,self.clustre_thr) # C*N*D
+            print(cluster_feat.size())
         # 暂时放弃kmeans
         else:
             # kmeans cluster 
