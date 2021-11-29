@@ -1,12 +1,12 @@
 import torch.nn as nn
 from timm.models.registry import register_model
-from gcn_cluster import *
-from swin import *
+from .gcn_cluster import *
+from .swin import _create_swin_transformer
 from cv2 import kmeans
 
 class RddTransformer(nn.Module):
     # 二分类考虑用BCE + Node (512,1)  多分类使用CE + Node(512,cls)
-    def __init__(self, backbone=nn.Module,cluster=GCN(), graph=KnnGraph(),num_classes=1000,dim=768,**kwargs):
+    def __init__(self, backbone=nn.Module,cluster=GCN(), graph=KnnGraph(),dim=768,**kwargs):
         super().__init__()
         self.cluster_model = cluster
         self.cluster_distance = kwargs['cluster_distance']
@@ -16,15 +16,15 @@ class RddTransformer(nn.Module):
         elif cluster == kmeans:
             self.cluster_centers = []
             self.cluster_num = kwargs['num_cluster']
-
+        num_classes = kwargs.pop('num_classes')
         self.instance_feature_extractor=backbone
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.head_instance = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
-        self.bag_classifiers = nn.Sequential(
+        self.head_instance = nn.Linear(dim, num_classes) if num_classes > 0 else nn.Identity()
+        self.head = nn.Sequential(
             nn.Linear(dim,num_classes)
         )
-        initialize_weights(self.classifier)
-        initialize_weights(self.bag_classifiers)
+        initialize_weights(self.head_instance)
+        initialize_weights(self.head)
 
     def cluster_classifier(self,clusters_feat,scores_inst,clusters_idcs):
         B = len(clusters_feat)
@@ -44,7 +44,7 @@ class RddTransformer(nn.Module):
 
             feats = self.avgpool(feats.transpose(1, 2))  # B C 1
             #feats = torch.mean(feats,dim=0)
-            logits = self.bag_classifiers(feats)
+            logits = self.head(feats)
         return logits
     
     # for kmeans
@@ -106,6 +106,6 @@ def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):
         patch_size=4, window_size=7, embed_dim=96, depths=(2, 2, 18, 2), num_heads=(3, 6, 12, 24), **kwargs)
     backbone = _create_swin_transformer('swin_small_patch4_window7_224', pretrained=pretrained, **model_kwargs)
     if kwargs['cluster_name'].lower() == 'kmeans':
-        return RddTransformer(backbone=backbone,num_classes=kwargs['num_classes'],cluster=kmeans,**kwargs)
+        return RddTransformer(backbone=backbone,cluster=kmeans,**kwargs)
     elif kwargs['cluster_name'].lower() == 'gcn':
-        return RddTransformer(backbone=backbone,num_classes=kwargs['num_classes'],cluster=GCN(in_dim=768,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
+        return RddTransformer(backbone=backbone,cluster=GCN(in_dim=768,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
