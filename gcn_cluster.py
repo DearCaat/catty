@@ -17,6 +17,18 @@ import torch.nn.functional as F
 from torch.nn import init
 import networkx as nx
 
+def gcn_cluster(edge_col_indices,scores,feat,thr=0.75):
+    B,N,K1 = edge_col_indices.shape
+    crow_indices = torch.tensor([K1*i for i in range(N+1)]).contiguous()
+    cluster_feat = np.zeros(size=(B,),dtype=object)
+    for b in B:
+        csr = torch.sparse_csr_tensor(crow_indices,edge_col_indices[b,:,1:].flatten().contiguous(),scores[b,:,:,0].flatten().contiguous(),size=(N,N))
+        A = csr.to_dense()
+        A[A>thr] = 1
+        A_nx = nx.from_numpy_matrix(A.numpy())
+        for c in nx.connected_components(A_nx):
+            cluster_feat[b].append(feat[b][list(c)])
+    return cluster_feat
 def connected_component(edges,scores,thr=0.75):
     score_dict = {} # score lookup table
     new_graph=list()
@@ -124,7 +136,8 @@ class MeanAggregator(nn.Module):
     def __init__(self):
         super(MeanAggregator, self).__init__()
     def forward(self, features, A ):
-        x = torch.bmm(A, features)
+        #x = torch.bmm(A, features)
+        x = torch.einsum('bnii,bnid->bnid',(A, features))
         return x 
 
 class GraphConv(nn.Module):
@@ -140,11 +153,11 @@ class GraphConv(nn.Module):
         self.agg = agg()
 
     def forward(self, features, A):
-        b, n, d = features.shape
+        b, n, i, d = features.shape
         assert(d==self.in_dim)
         agg_feats = self.agg(features,A)
-        cat_feats = torch.cat([features, agg_feats], dim=2)
-        out = torch.einsum('bnd,df->bnf', (cat_feats, self.weight))
+        cat_feats = torch.cat([features, agg_feats], dim=3)
+        out = torch.einsum('bnid,df->bnif', (cat_feats, self.weight))
         out = F.relu(out + self.bias)
         return out 
         
@@ -180,9 +193,11 @@ class GCN(nn.Module):
         x = self.conv3(x,A)
         x = self.conv4(x,A)
 
-        edge_feat = x[one_hop_idcs].view(B,N,sekf.k1,D)
-        edge_feat = edge_feat.view(B,-1,D)
-        pred = self.classifier(edge_feat)
+        dim_out = x.size(-1)
+
+        edge_feat = x[one_hop_idcs].view(B,N,self.k1,dim_out)
+        edge_feat = edge_feat.view(-1,dim_out)
+        pred = self.classifier(edge_feat).view(B,-1,2)
             
         # shape: B (N*k1) 2
         return pred
@@ -255,4 +270,4 @@ class KnnGraph(object):
         # 正则化特征，IPS特征减去中心点特征
         feat = feat - feats.unsqueeze(-2)
 
-        return feat,A_,mask_one_hop_idcs
+        return feat,A_,mask_one_hop_idcs,hops_1

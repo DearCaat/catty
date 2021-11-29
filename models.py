@@ -106,7 +106,8 @@ def build_model(config):
             num_cluster = config.RDD_TRANS.CLUSTER.NUM_CLUSTER,
             ips_active_connection = config.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION,
             ips_k_at_hop = config.RDD_TRANS.CLUSTER.IPS_K_AT_HOP,
-            cluster_distance = config.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE
+            cluster_distance = config.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE,
+            cluster_thr = config.RDD_TRANS.CLUSTER.THR 
         )
     else:
         model = create_model(

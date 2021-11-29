@@ -106,7 +106,8 @@ _C.RDD_TRANS.CLUSTER.NUM_CLUSTER = None
 # _C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
 # gcn paras
 _C.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION = 4
-_C.RDD_TRANS.CLUSTER.IPS_K_AT_HOP = (20,5)
+_C.RDD_TRANS.CLUSTER.IPS_K_AT_HOP = (5,2)
+_C.RDD_TRANS.CLUSTER.THR = 0.75
 
 
 # -----------------------------------------------------------------------------
