@@ -19,16 +19,19 @@ import networkx as nx
 
 def gcn_cluster(edge_col_indices,scores,feat,thr=0.75):
     B,N,K1 = edge_col_indices.shape
-    crow_indices = torch.tensor([K1*i for i in range(N+1)]).contiguous()
-    cluster_feat = np.zeros(size=(B,),dtype=object)
-    for b in B:
-        csr = torch.sparse_csr_tensor(crow_indices,edge_col_indices[b,:,1:].flatten().contiguous(),scores[b,:,:,0].flatten().contiguous(),size=(N,N))
+    crow_indices = torch.tensor([K1*i for i in range(N+1)]).contiguous().cuda()
+    cluster_feat = [[] for i in range (B)]
+    cluster_idcs = [[] for i in range (B)]
+    for b in range(B):
+        csr = torch.sparse_csr_tensor(crow_indices,edge_col_indices[b,:,:].flatten().contiguous(),scores[b,:,:,0].flatten().contiguous(),size=(N,N))
         A = csr.to_dense()
         A[A>thr] = 1
-        A_nx = nx.from_numpy_matrix(A.numpy())
+        A_nx = nx.from_numpy_matrix(A.cpu().numpy())
         for c in nx.connected_components(A_nx):
-            cluster_feat[b].append(feat[b][list(c)])
-    return cluster_feat
+            c = list(c)
+            cluster_feat[b].append(feat[b][c])
+            cluster_idcs[b].append(c)
+    return cluster_feat,cluster_idcs
 def connected_component(edges,scores,thr=0.75):
     score_dict = {} # score lookup table
     new_graph=list()
@@ -232,7 +235,7 @@ class KnnGraph(object):
         for i in range(B):
             for m in range(N):
                 hops_2[i,m,:,:] = hops_1[i,hops_1[i,m,:],:self.k_at_hop[1]+1]   
-        del hops_1
+        #del hops_1
         # hops_2矩阵中，dim -1 第一个元素存储的是K1跳的顶点，后几个元素为K2跳个顶点，dim -2 的第一个元素是中心点的索引
         # 展平hops矩阵后两维，这里就不考虑自身的那一维
         uni = hops_2[:,:,1:,:].flatten(start_dim=-2, end_dim=-1)
@@ -270,4 +273,4 @@ class KnnGraph(object):
         # 正则化特征，IPS特征减去中心点特征
         feat = feat - feats.unsqueeze(-2)
 
-        return feat,A_,mask_one_hop_idcs,hops_1
+        return feat,A_,mask_one_hop_idcs,hops_1[:,:,1:]

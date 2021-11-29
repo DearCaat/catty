@@ -13,8 +13,6 @@ import logging
 import math
 from copy import deepcopy
 from typing import Optional
-from cv2 import kmeans
-from networkx.algorithms import cluster
 
 import torch
 from torch._C import device
@@ -26,7 +24,7 @@ from timm.models.helpers import build_model_with_cfg, overlay_external_default_c
 from timm.models.layers import PatchEmbed, Mlp, DropPath, to_2tuple, trunc_normal_
 from timm.models.registry import register_model
 from timm.models.vision_transformer import checkpoint_filter_fn, _init_vit_weights
-from gcn_cluster import *
+
 
 _logger = logging.getLogger(__name__)
 
@@ -531,98 +529,9 @@ class SwinTransformer(nn.Module):
         return f,x
 
     def forward(self, x):
-        x,f = self.forward_features(x)
-        b,dim = x.shape
-        f = f.view(-1,dim)
-        f = self.head_instance(f)
-        _,cls = f.shape
+        x,_ = self.forward_features(x)
         x = self.head(x)
-        return x,f.view(b,-1,cls)
-
-class RddTransformer(nn.Module):
-    # 二分类考虑用BCE + Node (512,1)  多分类使用CE + Node(512,cls)
-    def __init__(self, backbone=nn.Module,cluster=GCN(), graph=KnnGraph(),cluster_loss_fn=nn.CrossEntropyLoss(),classes=1000,**kwargs):
-        super().__init__()
-        self.cluster_model = cluster
-        self.cluster_distance = kwargs['cluster_distance']
-        if type(cluster)==GCN:
-            self.graph = graph
-            self.clustre_thr = kwargs['cluster_thr']
-        elif cluster == kmeans:
-            self.cluster_centers = []
-            self.cluster_num = kwargs['num_cluster']
-
-        self.instance_feature_extractor=backbone
-        self.cluster_loss_fn = cluster_loss_fn
-        self.classifier = nn.Sequential(nn.Linear(512,classes))
-
-        self.bag_classifiers = nn.Sequential(
-            nn.Linear(512,classes)
-        )
-        initialize_weights(self.classifier)
-        initialize_weights(self.bag_classifiers)
-    def cluster_classfier(self,clusters_feat):
-        result={'clusters_score':[],'score':[],'index':[]}
-        feats = []
-        for i in range(len(clusters_feat)):
-            x = self.classifier(clusters_feat[i])
-            score, index = torch.max(x, dim=0)
-            result['clusters_score'].append(x)
-            result['score'].append(score)
-            result['index'].append(index)
-        scores = torch.stack(result['score'],1)
-        max_value, index = torch.max(scores, dim=1)
-        feats = clusters_feat[index]
-        max_cluster_score = torch.mean(result['clusters_score'][index],dim=0)
-        feats = torch.mean(feats,dim=0)
-        logits = self.bag_classifiers(feats)
-        return logits, max_cluster_score
-    
-    # for kmeans
-    def clip_cluster(self,instance_feat,clusters_indic):
-        #assert len(instance_feat.shape) == 3 and len(clusters_indic.shape)==2
-        print(clusters_indic.size())
-        clusters_feat = list()
-        for i in range(self.cluster_num):
-            cluster_indic = clusters_indic - i == 0
-            print(cluster_indic)
-            print(instance_feat[cluster_indic].size())
-            clusters_feat.append(instance_feat[cluster_indic])
-        return clusters_feat
-
-    def forward(self,x,bag_label=None,is_training=False):
-        # step 1, get the instance feat by backbone Network
-        _, inst_feature=self.instance_feature_extractor.forward_features(x) #B*N*D
-        B,N,D = inst_feature.shape
-        # step 2, cluster 
-        if type(self.cluster_model) == GCN:
-            # if using gcn to cluster, firstly create the graph
-            feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
-            # gcn cluster  edges, scores
-            pred = self.cluster_model(feat, adj, h1_mask)
-            clusters_feat = gcn_cluster(h1_indi,pred, feat,self.clustre_thr) # C*N*D
-            print(cluster_feat.size())
-        # 暂时放弃kmeans
-        else:
-            # kmeans cluster 
-            for b in range(B):
-                clu_labels,self.cluster_centers = self.cluster_model(X=inst_feature[b],num_clusters=self.cluster_num,device=torch.cuda.current_device(),cluster_centers = self.cluster_centers,tqdm_flag=False,distance=self.cluster_distance)
-                clu_labels = torch.unsqueeze(clu_labels,dim=0)
-                if b == 0:
-                     cluster_indic = clu_labels.clone()
-                else:
-                    cluster_indic = torch.cat((cluster_indic,clu_labels))
-            # find cluster features
-            clusters_feat = self.clip_cluster(inst_feature,cluster_indic)
-        for i in range(len(clusters_feat)):
-            print(clusters_feat[i].size())
-        # C N* D
-        logits, value = self.cluster_classfier(clusters_feat)
-        if is_training:
-            cluster_loss = self.cluster_loss_fn(value.view(1,-1),bag_label.view(1,-1))
-            return logits, cluster_loss
-        else:
-            return logits, value
+        return x
 
 def _create_swin_transformer(variant, pretrained=False, default_cfg=None, **kwargs):
     if default_cfg is None:
@@ -645,22 +554,6 @@ def _create_swin_transformer(variant, pretrained=False, default_cfg=None, **kwar
         **kwargs)
 
     return model
-
-
-
-@register_model
-def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):
-    """ Swin-S @ 224x224, trained ImageNet-1k
-    """
-    model_kwargs = dict(
-        patch_size=4, window_size=7, embed_dim=96, depths=(2, 2, 18, 2), num_heads=(3, 6, 12, 24), **kwargs)
-    backbone = _create_swin_transformer('swin_small_patch4_window7_224', pretrained=pretrained, **model_kwargs)
-    if kwargs['cluster_name'].lower() == 'kmeans':
-        return RddTransformer(backbone=backbone,classes=kwargs['num_classes'],cluster=kmeans,**kwargs)
-    elif kwargs['cluster_name'].lower() == 'gcn':
-        return RddTransformer(backbone=backbone,classes=kwargs['num_classes'],cluster=GCN(in_dim=768,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
-
-    
 
 @register_model
 def swin_base_patch4_window12_384(pretrained=False, **kwargs):
