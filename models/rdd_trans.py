@@ -31,19 +31,15 @@ class RddTransformer(nn.Module):
         for b in range(B):
             result={'clusters_score':[],'score':[],'index':[]}
             for i in range(len(clusters_feat[b])):
-                #x = self.classifier(clusters_feat[b][i])  
-                score, index = torch.max(scores_inst[b,clusters_idcs[b,i]], dim=0)
-                #result['clusters_score'].append(x)
+                print(clusters_idcs[b][i])
+                print(scores_inst.size())
+                score, index = torch.max(scores_inst[b,clusters_idcs[b][i]], dim=0)
                 result['score'].append(score)
                 result['index'].append(index)
             scores = torch.stack(result['score'],1)
             max_value, index = torch.max(scores, dim=1)
             feats = clusters_feat[b][index]
-
-            #max_cluster_score = torch.mean(result['clusters_score'][index],dim=0)
-
             feats = self.avgpool(feats.transpose(1, 2))  # B C 1
-            #feats = torch.mean(feats,dim=0)
             logits = self.head(feats)
         return logits
     
