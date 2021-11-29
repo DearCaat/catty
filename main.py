@@ -400,15 +400,12 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         if not config.DATA.TIMM:
             samples = samples.cuda(non_blocking=True)
             targets = targets.cuda(non_blocking=True)
-        
-        if config.BINARYTRAIN_MODE:
-            m = 0
-            target_bin = targets.clone()
-            for m in range(len(target_bin)):
-                if int(target_bin[m])==6:
-                    target_bin[m] = 0
-                else:
-                    target_bin[m] = 1
+
+        # 当伪标签为二分类时或二分类训练时，需要二分类标签进行loss计算
+        if config.BINARYTRAIN_MODE or (not config.THUMB_MODE and config.RDD_TRANS.INST_NUM_CLASS):
+            targets_bin = targets.clone()
+            targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
+            targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
         
         # timm dataloader prefetcher will do this
         if mixup_fn is not None and not config.DATA.TIMM:
@@ -421,22 +418,31 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 #print(predictions)
                 del samples
                 if config.BINARYTRAIN_MODE:
-                    classify_loss = criterion(predictions, target_bin)
+                    classify_loss = criterion(predictions, targets_bin)
                 else:
                     classify_loss = criterion(predictions, targets)
                 loss = classify_loss
             #custom model
             else:
-                output,o_inst = model(samples)
+                output,o_inst,_ = model(samples)
+                # 设定正常图片在类别中的索引
+                pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
                 with torch.no_grad():
-                    _,pl_inst = model_ema.module(samples)
+                    _,pl_inst,output_pl = model_ema.module(samples)
                    #_,pl_inst = teacher_ema.module(samples)
                 b,p,cls = pl_inst.shape
-                output_pl = torch.nn.functional.softmax(pl_inst,dim=2)
-                t_cpu = targets.cpu()
-                ins_t = targets.unsqueeze(-1).repeat((1,p))
+                #output_pl = torch.nn.functional.softmax(pl_inst,dim=2)
+                
+                if config.RDD_TRANS.INST_NUM_CLASS != 2:
+                    targets_pl = targets
+                else:
+                    targets_pl = targets_bin
+
+                t_cpu = targets_pl.cpu()
+                ins_t = targets_pl.unsqueeze(-1).repeat((1,p))
+
                 dis_ins = 0
-                output_bag_label = output_pl[torch.functional.F.one_hot(ins_t,num_classes=config.MODEL.NUM_CLASSES) == 1].view(b,p)        #包所属标签下的置信度
+                output_bag_label = output_pl[torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1].view(b,p)        #包所属标签下的置信度
                 if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                     out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]
                     min_nor_thr = out_tmp_sort[[i for i in range(b)],np.floor(p*thr_list[t_cpu])] # [b 1]
@@ -449,20 +455,13 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 #label_pl = torch.argmax(output_pl,dim=2)
                 label_tmp = label_pl.clone()
                 #获得正常包索引和病害包索引
-                bs_index_nor = targets==6
+                bs_index_nor = targets_pl==pl_nor_cls_index
                 bs_index_dis = bs_index_nor==False
-                ps_mask_nor = (ins_t - 6 == 0)
+                ps_mask_nor = (ins_t - pl_nor_cls_index == 0)
                 ps_mask_dis = ps_mask_nor==False
 
-                #正常包里面的所有实例设为正常
-                #label_pl[bs_index_nor,:] = 6
-                #病害包里面的所有实例先置为包病害标签
-                #label_pl[bs_index_dis] = ins_t[bs_index_dis]
-                #将部分实例设为正常
-                #mask_ins = ((output_pl[:,:,6] - .99 > 0) | (output_pl[:,:,6] - min_nor_thr > 0)) & (label_tmp - 6  == 0) & (targets.unsqueeze(-1).repeat((1,p)) -6 != 0)
-
                 #将所有实例设为正常
-                label_pl[:,:] = 6 
+                label_pl[:,:] = pl_nor_cls_index 
                 # sigmod函数来保证前期增加速率远远高于后期，优于线性增长
                 thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
                 thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
@@ -470,12 +469,11 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                     #判断为相应病害的实例置为包标签
                     #mask_ins =  (label_tmp - ins_t  == 0)
-
                     #将病害包里判断为不是正常的实例都置为包标签 & (output_bag_label > thr_min_conf)
-                    mask_ins =   ps_mask_dis & (((output_pl[:,:,6] < (1-thr_min_conf)) & (output_bag_label > thr_min_dis_conf) )  | (output_bag_label - min_nor_thr >  0))
+                    mask_ins =   ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf)) & (output_bag_label > thr_min_dis_conf) )  | (output_bag_label - min_nor_thr >  0))
                     label_pl[mask_ins] = ins_t[mask_ins]
                     #选取部分置信度比较高的实例参与loss计算   label_tmp - 6  == 0
-                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==6) & (output_pl[:,:,6] - thr_min_dis_conf > 0))) | ((output_pl[:,:,6] > thr_min_dis_conf) & ps_mask_nor)
+                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,6] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
                 else:
                     #全部都用
                     #mask_ins = (label_tmp - label_tmp == 0)
@@ -485,11 +483,11 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     #label_pl[bs_index_dis] = ins_t[bs_index_dis]
 
                 #统计病害实例
-                dis_count = torch.count_nonzero(label_pl - 6,dim=1) 
+                dis_count = torch.count_nonzero(label_pl - pl_nor_cls_index,dim=1) 
                 dis_ins += torch.sum(dis_count)
 
                 for i in range(len(thr_list)):
-                    i_index = targets==i
+                    i_index = targets_pl==i
                     dis_tmp = dis_count[i_index]
                     selec_tmp = mask_ins[i_index]
 
@@ -668,20 +666,17 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             # timm dataloader prefetcher will do this
             if not config.DATA.TIMM:
                 images = images.cuda(non_blocking=True)
-                target = target.cuda(non_blocking=True)
+                targets = target.cuda(non_blocking=True)
 
             topk = (1,5)
             #if config.EVAL_MODE:
-            target_bin = target.clone()
+            targets_bin = targets.clone()
             if config.BINARYTRAIN_MODE:
                 topk = (1,1)
             m = 0
             if 'cqu_bpdd' in config.DATA.DATASET:
-                for m in range(len(target_bin)):
-                    if int(target_bin[m])==6:
-                        target_bin[m] = 0
-                    else:
-                        target_bin[m] = 1
+                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
+                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
 
             # compute output
             with amp_autocast():
@@ -714,12 +709,12 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                 output = output[[i for i in range(b)],max_index,:]
                 del max_score,mask
             if config.BINARYTRAIN_MODE:
-                loss = criterion(output, target_bin)
+                loss = criterion(output, targets_bin)
             else:
-                loss = criterion(output, target)
+                loss = criterion(output, targets)
                 
             save_pred = np.append(save_pred,output_soft.cpu().numpy())
-            save_label = np.append(save_label,target.cpu().numpy())
+            save_label = np.append(save_label,targets.cpu().numpy())
             
             
             # if config.BINARYTRAIN_MODE:
@@ -735,7 +730,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             # phase_pred = np.append(phase_pred, preds.cpu().numpy())
 
             # measure accuracy and record loss
-            acc1, acc5 = accuracy(output, target, topk=topk)
+            acc1, acc5 = accuracy(output, targets, topk=topk)
             if config.DISTRIBUTED:
                 acc1 = reduce_tensor(acc1)
                 acc5 = reduce_tensor(acc5)
@@ -744,9 +739,9 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
 
             torch.cuda.synchronize()
 
-            loss_meter.update(loss.item(), target.size(0))
-            acc1_meter.update(acc1.item(), target.size(0))
-            acc5_meter.update(acc5.item(), target.size(0))
+            loss_meter.update(loss.item(), targets.size(0))
+            acc1_meter.update(acc1.item(), targets.size(0))
+            acc5_meter.update(acc5.item(), targets.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)

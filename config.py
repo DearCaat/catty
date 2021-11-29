@@ -28,6 +28,8 @@ _C.DATA.DATA_PATH = ''
 _C.DATA.PRETRAINED_DIR = ''
 # Dataset name     tfds/cqu_bpdd  cfd crack500 cracktre200
 _C.DATA.DATASET = 'cqu_bpdd'
+# 数据集中的正常图片所在的类别索引 cqu_bpdd ：6
+_C.DATA.NOR_CLS_INDEX = 6
 _C.DATA.GRAY = True
 # Input image size (h,w)  cqu_bpdd (900,1200) cfd(300,450)
 _C.DATA.IMG_SIZE = (224,224)
@@ -54,7 +56,6 @@ _C.DATA.TEST_SPLIT = 'test'
 _C.DATA.EPOCH_REPEATS = 0
 # Default timm thumb image loader
 _C.DATA.TIMM = True
-
 
 _C.DATA.PATCH_SIZE=300
 # for cfd 150 cracktree200 150 cqu_bpdd 300
@@ -96,6 +97,7 @@ _C.RDD_TRANS.INIT_STAGE_EPOCH = 2
 _C.RDD_TRANS.EMA_FORCE_CPU = False
 _C.RDD_TRANS.NOR_THR = 0.05
 _C.RDD_TRANS.TEST_THR = 0.995
+_C.RDD_TRANS.INST_NUM_CLASS = 2
 
 _C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
 _C.RDD_TRANS.CLUSTER.NAME='gcn'
