@@ -210,7 +210,7 @@ class KnnGraph(object):
         self.active_connection = active_connection
         self.k_at_hop = k_at_hop
         self.distance = distance
-        
+        sda = ss
     def get_KNN(self,feats,distance='cosine'):
         if distance == 'cosine':
             similarity_matrix=ConsineDistance(feats)  # B*N*N
