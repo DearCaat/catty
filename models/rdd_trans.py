@@ -50,12 +50,9 @@ class RddTransformer(nn.Module):
     # for kmeans
     def kmeans_cluster(self,instance_feat,clusters_indic):
         #assert len(instance_feat.shape) == 3 and len(clusters_indic.shape)==2
-        print(clusters_indic.size())
         clusters_feat = list()
         for i in range(self.cluster_num):
             cluster_indic = clusters_indic - i == 0
-            print(cluster_indic)
-            print(instance_feat[cluster_indic].size())
             clusters_feat.append(instance_feat[cluster_indic])
         return clusters_feat
 
@@ -70,6 +67,7 @@ class RddTransformer(nn.Module):
             feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
             # gcn cluster  edges, scores
             pred = self.cluster_model(feat, adj, h1_mask)
+            del feat, adj, h1_mask
             clusters_feat,clusters_idcs = gcn_cluster(h1_indi,pred.view(B,N,-1,2), inst_feature,self.clustre_thr) # C*N*D
         # 暂时放弃kmeans
         else:
@@ -96,6 +94,7 @@ class RddTransformer(nn.Module):
         score_inst = self.soft_max(logits_inst)
         # bag classify
         logits_bag = self.cluster_classifier(clusters_feat,score_inst,clusters_idcs)
+        del clusters_feat
         if is_training:
             return logits_bag, logits_inst, score_inst
         else:

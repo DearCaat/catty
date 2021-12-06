@@ -275,9 +275,9 @@ def main(config):
     for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
         if not config.DATA.TFRECORD_MODE and config.DISTRIBUTED:
             data_loader_train.sampler.set_epoch(epoch)
+
         loss_r,train_metrics = train_one_epoch(config, model_without_ddp, criterion, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,amp_autocast=amp_autocast, loss_scaler=loss_scaler,teacher_ema=teacher_ema,model_ema=model_ema,thr_list=thr_list)
         #np.append(loss_rec,loss_r)
-
         acc1, acc5,loss,auc,eval_metrics = validate(config, data_loader_val, model_without_ddp,amp_autocast=amp_autocast,criterion=criterion)
         if teacher_ema is not None:
             acc1_ema, acc5_ema,loss_ema,auc_ema,eval_metrics_ema = validate(config, data_loader_val, teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion)
@@ -368,9 +368,12 @@ def main(config):
 
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,teacher_ema=None, thr_list=[]):
     model.train()
+    torch.cuda.empty_cache()
     loss_teacher = None
     if teacher_ema is not None:
-        teacher_ema.module.train()
+        teacher_ema.module.eval()
+    if model_ema is not None:
+        model_ema.module.eval()
     if not config.THUMB_MODE:
         loss_teacher = torch.nn.CrossEntropyLoss()
         loss_teacher.cuda()
@@ -425,6 +428,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
             #custom model
             else:
                 output,o_inst,_ = model(samples)
+                torch.cuda.empty_cache()
                 # 设定正常图片在类别中的索引
                 pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
                 with torch.no_grad():
@@ -523,7 +527,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 else:
                     loss_pl = 0
                 classify_loss = criterion(output, targets)
-                loss = loss_pl
+                loss = loss_pl + classify_loss
 
                 del samples
         
