@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
 import networkx as nx
-import multiprocessing as mp
+import torch.multiprocessing as mp
 
 def gcn_cluster(edge_col_indices,scores,feat,thr=0.75):
     B,N,K1 = edge_col_indices.shape
@@ -32,6 +32,7 @@ def gcn_cluster(edge_col_indices,scores,feat,thr=0.75):
             c = list(c)
             cluster_feat[b].append(feat[b][c])
             cluster_idcs[b].append(c)
+    del crow_indices
     return cluster_feat,cluster_idcs
 
     new_feat=[]
@@ -53,20 +54,20 @@ def ConsineDistance(vectors):
     B,N,D = vectors.shape
     cosine_similarity = torch.nn.CosineSimilarity(dim=-1)
     vecs_i = vectors.unsqueeze(1).repeat(1, N, 1, 1)                # (B, N , N, feature_dim)
-    #vecs_j = vectors.unsqueeze(2).repeat(1, 1, N, 1)                # (B, N , N, feature_dim)
-    similarity = cosine_similarity(vecs_i, vecs_i)
+    vecs_j = vectors.unsqueeze(2).repeat(1, 1, N, 1)                # (B, N , N, feature_dim)
+    similarity = cosine_similarity(vecs_i, vecs_j)
     # sort_index = torch.argsort(similarity, dim=-1, descending=True)[:, 1:k+1]
     # A = torch.zeros(N,N)
     # A[np.repeat(np.arange(N), k), sort_index.flatten()] = 1
     return similarity   # (B, N,N)
 
-def EuclideanDistances(a,b):
-    sq_a = a**2
-    sum_sq_a = torch.sum(sq_a,dim=1).unsqueeze(1)  # m->[m, 1]
-    sq_b = b**2
-    sum_sq_b = torch.sum(sq_b,dim=1).unsqueeze(0)  # n->[1, n]
-    bt = b.t()
-    return torch.sqrt(sum_sq_a+sum_sq_b-2*a.mm(bt))
+def EuclideanDistances(vectors):
+    B,N,D = vectors.shape
+    pdist = torch.nn.PairwiseDistance()
+    a = vectors.unsqueeze(1).repeat(1, N, 1, 1)                # (B, N , N, feature_dim)
+    b = vectors.unsqueeze(2).repeat(1, 1, N, 1)                # (B, N , N, feature_dim)
+    similarity = pdist(a, b)
+    return similarity
 
 def normalize_adj(A, type="AD"):
     if type == "DAD":
@@ -171,7 +172,6 @@ class GCN(nn.Module):
         x = self.conv4(x,A)
 
         dim_out = x.size(-1)
-
         edge_feat = x[one_hop_idcs].view(B,N,self.k1,dim_out)
         edge_feat = edge_feat.view(-1,dim_out)
         pred = self.classifier(edge_feat).view(B,-1,2)
@@ -187,9 +187,10 @@ class KnnGraph(object):
     def get_KNN(self,feats,distance='cosine'):
         if distance == 'cosine':
             similarity_matrix=ConsineDistance(feats)  # B*N*N
-        elif distance == 'Euclidean':
-            similarity_matrix=EuclideanDistances(feats,feats)
-        knn_graph = torch.argsort(similarity_matrix, axis=2,descending=True)  # N*N
+            knn_graph = torch.argsort(similarity_matrix, axis=2,descending=True)  # B*N*N
+        elif distance == 'euclidean':
+            similarity_matrix=EuclideanDistances(feats)
+            knn_graph = torch.argsort(similarity_matrix, axis=2,descending=False)  # B*N*N
         return knn_graph
     
     #for multi-process
@@ -197,7 +198,6 @@ class KnnGraph(object):
         for i in B:
             for m in range(N):
                 hops_2[i,m,:,:] = hops_1[i,hops_1[i,m,:],:self.k_at_hop[1]+1]
-        return B
     def change_A(self,B,N,uni,knn_graph,mask_one_hop_idcs,hops_2,A_,feat,feats):
         for i in B:
             for m in range(N):
@@ -230,8 +230,8 @@ class KnnGraph(object):
         for i in range(B):
             for m in range(N):
                 hops_2[i,m,:,:] = hops_1[i,hops_1[i,m,:],:self.k_at_hop[1]+1]   
-        # pool = mp.Pool(8)
-        # [pool.apply_async(self.change_hops, args=(range(i*4,(i+1)*4),N,hops_2,hops_1)) for i in range(8)]
+        # pool = mp.Pool(4)
+        # [pool.apply_async(self.change_hops, args=(range(i*4,(i+1)*4),N,hops_2,hops_1)) for i in range(4)]
         # pool.close()  # 关闭进程池，不再接受新的进程
         # pool.join()  # 主进程阻塞等待子进程的退出
         # del pool
@@ -247,32 +247,41 @@ class KnnGraph(object):
         feat[:,:,:,:] = 0
         A_ = feat.clone()[:,:,:,:max_num_nodes]
         mask_one_hop_idcs = torch.zeros(B,N,max_num_nodes) == 1
-        # pool = mp.Pool(8)
-        # [pool.apply_async(self.change_A, args=(range(i*4,(i+1)*4),N,uni,knn_graph,mask_one_hop_idcs,hops_2,A_,feat,feats)) for i in range(8)]
+        num_worker = 2
+        processes = []
+        for rank in range(num_worker):
+            p = mp.Process(target=self.change_A,args=(range(rank*int(B/num_worker),(rank+1)*int(B/num_worker)),N,uni.share_memory_(),knn_graph.share_memory_(),mask_one_hop_idcs,hops_2.share_memory_(),A_.share_memory_(),feat.share_memory_(),feats.share_memory_()))
+            p.start()
+            processes.append(p)
+        for p in processes:
+            p.join()
+
+        # pool = mp.Pool(num_worker)
+        # [pool.apply_async(self.change_A, args=(range(i*int(B/num_worker),(i+1)*int(B/num_worker)),N,uni.share_memory_(),knn_graph.share_memory_(),mask_one_hop_idcs,hops_2.share_memory_(),A_.share_memory_(),feat.share_memory_(),feats.share_memory_())) for i in range(num_worker)]
         # pool.close()  # 关闭进程池，不再接受新的进程
         # pool.join()  # 主进程阻塞等待子进程的退出
-        for i in range(B):
-            for m in range(N):
-                uni_tmp = torch.unique(uni[i,m])
-                if m not in uni_tmp:
-                    uni_tmp = torch.cat((torch.tensor([m]).cuda(non_blocking=True),uni_tmp))
-                num_nodes = len(uni_tmp)
-                a_tmp = torch.zeros(num_nodes,num_nodes) # 小维度的矩阵cpu上进行索引和改值更快一点
-                neighbors = knn_graph[i,uni_tmp,1:self.active_connection+1]
-                # 每个结点能够连接的顶点数不同，需要使用for循环
-                for node in range(num_nodes):
-                    nei_index = torch.isin(uni_tmp,neighbors[node,torch.isin(neighbors[node],uni_tmp)])
-                    a_tmp[node,nei_index] = 1
-                    a_tmp[nei_index,node] = 1
-                # one-hop indices
-                mask_one_hop_idcs[i,m,:num_nodes] = torch.isin(uni_tmp,hops_2[i,m,1:,0])
-                A_[i,m,:num_nodes,:num_nodes] = a_tmp      
-                feat[i,m,:num_nodes] = feats[i,uni_tmp]
-        del knn_graph
+        # for i in range(B):
+        #     for m in range(N):
+        #         uni_tmp = torch.unique(uni[i,m])
+        #         if m not in uni_tmp:
+        #             uni_tmp = torch.cat((torch.tensor([m]).cuda(non_blocking=True),uni_tmp))
+        #         num_nodes = len(uni_tmp)
+        #         a_tmp = torch.zeros(num_nodes,num_nodes) # 小维度的矩阵cpu上进行索引和改值更快一点
+        #         neighbors = knn_graph[i,uni_tmp,1:self.active_connection+1]
+        #         # 每个结点能够连接的顶点数不同，需要使用for循环
+        #         for node in range(num_nodes):
+        #             nei_index = torch.isin(uni_tmp,neighbors[node,torch.isin(neighbors[node],uni_tmp)])
+        #             a_tmp[node,nei_index] = 1
+        #             a_tmp[nei_index,node] = 1
+        #         # one-hop indices
+        #         mask_one_hop_idcs[i,m,:num_nodes] = torch.isin(uni_tmp,hops_2[i,m,1:,0])
+        #         A_[i,m,:num_nodes,:num_nodes] = a_tmp      
+        #         feat[i,m,:num_nodes] = feats[i,uni_tmp]
         # 正则化邻接矩阵？
         D = A_.sum(-1,keepdim=True)
         A_ = A_.div(D)
         A_[torch.isnan(A_)] = 0
+        del D
 
         # 正则化特征，IPS特征减去中心点特征
         feat = feat - feats.unsqueeze(-2)

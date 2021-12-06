@@ -433,6 +433,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
                 with torch.no_grad():
                     _,pl_inst,output_pl = model_ema.module(samples)
+                    torch.cuda.empty_cache()
                    #_,pl_inst = teacher_ema.module(samples)
                 b,p,cls = pl_inst.shape
                 #output_pl = torch.nn.functional.softmax(pl_inst,dim=2)
@@ -529,7 +530,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 classify_loss = criterion(output, targets)
                 loss = loss_pl + classify_loss
 
-                del samples
+                del samples, mask_ins
         
         if not config.DISTRIBUTED:
             loss_meter.update(loss.item(), targets.size(0))
@@ -653,7 +654,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
 def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, log_suffix='',criterion=None):
     model.eval()
-    
+    torch.cuda.empty_cache()
+
     batch_time = AverageMeter()
     loss_meter = AverageMeter()
     acc1_meter = AverageMeter()
@@ -776,6 +778,8 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
         return acc1_meter.avg, acc5_meter.avg, loss_meter.avg, auc,metrics
 
 if __name__ == '__main__':
+    torch.multiprocessing.set_start_method('spawn')
+
     _, config = parse_option()
     os.makedirs(config.OUTPUT, exist_ok=True)
     os.makedirs(os.path.join(config.OUTPUT,'result'), exist_ok=True)

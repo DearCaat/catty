@@ -65,6 +65,7 @@ class RddTransformer(nn.Module):
         if type(self.cluster_model) == GCN:
             # if using gcn to cluster, firstly create the graph
             feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
+            print(h1_mask[0,0])
             # gcn cluster  edges, scores
             pred = self.cluster_model(feat, adj, h1_mask)
             del feat, adj, h1_mask
@@ -94,7 +95,7 @@ class RddTransformer(nn.Module):
         score_inst = self.soft_max(logits_inst)
         # bag classify
         logits_bag = self.cluster_classifier(clusters_feat,score_inst,clusters_idcs)
-        del clusters_feat
+        del clusters_feat, clusters_idcs
         if is_training:
             return logits_bag, logits_inst, score_inst
         else:

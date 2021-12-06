@@ -101,7 +101,7 @@ _C.RDD_TRANS.INST_NUM_CLASS = 2
 
 _C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
 _C.RDD_TRANS.CLUSTER.NAME='gcn'
-_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # kmeans default euclidean, gcn cosine
+_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'euclidean'  # kmeans default euclidean, gcn cosine
 # kmeans paras 
 _C.RDD_TRANS.CLUSTER.NUM_CLUSTER = None
 # _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
