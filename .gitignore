@@ -1,6 +1,9 @@
+*.pyc
 /output/
 /__pycache__/
 /.ipynb_checkpoints/
 /wandb/
 /train&eval.sh
 *.ipynb
+/models/__pycache__/
+/ranger/__pycache__/
