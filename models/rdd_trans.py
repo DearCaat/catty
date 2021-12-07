@@ -65,11 +65,13 @@ class RddTransformer(nn.Module):
         if type(self.cluster_model) == GCN:
             # if using gcn to cluster, firstly create the graph
             feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
-            print(h1_mask[0,0])
+            torch.cuda.empty_cache()
             # gcn cluster  edges, scores
             pred = self.cluster_model(feat, adj, h1_mask)
             del feat, adj, h1_mask
+            torch.cuda.empty_cache()
             clusters_feat,clusters_idcs = gcn_cluster(h1_indi,pred.view(B,N,-1,2), inst_feature,self.clustre_thr) # C*N*D
+            
         # 暂时放弃kmeans
         else:
             # kmeans cluster 

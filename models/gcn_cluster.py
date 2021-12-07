@@ -194,10 +194,27 @@ class KnnGraph(object):
         return knn_graph
     
     #for multi-process
-    def change_hops(self,B,N,hops_2,hops_1):
+    def change_hops(self,B,N,hops_1,hops_2,knn_graph,mask_one_hop_idcs,A_,feat,feats):
         for i in B:
             for m in range(N):
                 hops_2[i,m,:,:] = hops_1[i,hops_1[i,m,:],:self.k_at_hop[1]+1]
+                #展平hops矩阵后两维，这里就不考虑自身的那一维
+                uni_tmp = hops_2[i,m,1:,:].flatten(start_dim=-2, end_dim=-1)
+                uni_tmp = torch.unique(uni_tmp)
+                if m not in uni_tmp:
+                    uni_tmp = torch.cat((torch.tensor([m]).cuda(non_blocking=True),uni_tmp))
+                num_nodes = len(uni_tmp)
+                a_tmp = torch.zeros(num_nodes,num_nodes) # 小维度的矩阵cpu上进行索引和改值更快一点
+                neighbors = knn_graph[i,uni_tmp,1:self.active_connection+1]
+                # 每个结点能够连接的顶点数不同，需要使用for循环
+                for node in range(num_nodes):
+                    nei_index = torch.isin(uni_tmp,neighbors[node,torch.isin(neighbors[node],uni_tmp)])
+                    a_tmp[node,nei_index] = 1
+                    a_tmp[nei_index,node] = 1
+                # one-hop indices
+                mask_one_hop_idcs[i,m,:num_nodes] = torch.isin(uni_tmp,hops_2[i,m,1:,0])
+                A_[i,m,:num_nodes,:num_nodes] = a_tmp      
+                feat[i,m,:num_nodes] = feats[i,uni_tmp]
     def change_A(self,B,N,uni,knn_graph,mask_one_hop_idcs,hops_2,A_,feat,feats):
         for i in B:
             for m in range(N):
@@ -226,19 +243,6 @@ class KnnGraph(object):
         # 添加第一跳
         hops_1 = knn_graph[:,:,:]      # B N [1 K1] 这里的1是center point 的索引
         hops_2 = hops_1.unsqueeze(-1).repeat(1,1,1,self.k_at_hop[1]+1).clone()  #B N [1 K1] [1 K2]
-        # 添加第二跳
-        for i in range(B):
-            for m in range(N):
-                hops_2[i,m,:,:] = hops_1[i,hops_1[i,m,:],:self.k_at_hop[1]+1]   
-        # pool = mp.Pool(4)
-        # [pool.apply_async(self.change_hops, args=(range(i*4,(i+1)*4),N,hops_2,hops_1)) for i in range(4)]
-        # pool.close()  # 关闭进程池，不再接受新的进程
-        # pool.join()  # 主进程阻塞等待子进程的退出
-        # del pool
-        #del hops_1
-        # hops_2矩阵中，dim -1 第一个元素存储的是K1跳的顶点，后几个元素为K2跳个顶点，dim -2 的第一个元素是中心点的索引
-        # 展平hops矩阵后两维，这里就不考虑自身的那一维
-        uni = hops_2[:,:,1:,:].flatten(start_dim=-2, end_dim=-1)
 
         # 构建唯一顶点矩阵 构建邻接矩阵 因为每一个lps的顶点数目都不相同，因此需要使用for 循环
         #uni_array = np.empty((B,N),dtype=object)
@@ -247,19 +251,41 @@ class KnnGraph(object):
         feat[:,:,:,:] = 0
         A_ = feat.clone()[:,:,:,:max_num_nodes]
         mask_one_hop_idcs = torch.zeros(B,N,max_num_nodes) == 1
+
+        # 添加第二跳
+        # for i in range(B):
+        #     for m in range(N):
+        #         hops_2[i,m,:,:] = hops_1[i,hops_1[i,m,:],:self.k_at_hop[1]+1] 
+        hops_1 = hops_1.share_memory_()
+        hops_2 = hops_2.share_memory_()
+        knn_graph = knn_graph.share_memory_()
+        A_ = A_.share_memory_()
+        feat = feat.share_memory_()
+        feats = feats.share_memory_()
+
         num_worker = 2
         processes = []
         for rank in range(num_worker):
-            p = mp.Process(target=self.change_A,args=(range(rank*int(B/num_worker),(rank+1)*int(B/num_worker)),N,uni.share_memory_(),knn_graph.share_memory_(),mask_one_hop_idcs,hops_2.share_memory_(),A_.share_memory_(),feat.share_memory_(),feats.share_memory_()))
+            p = mp.Process(target=self.change_hops,args=(range(rank*int(B/num_worker),(rank+1)*int(B/num_worker)),N,hops_1,hops_2,knn_graph,mask_one_hop_idcs,A_,feat,feats))
             p.start()
             processes.append(p)
         for p in processes:
             p.join()
+        #del hops_1
+        # hops_2矩阵中，dim -1 第一个元素存储的是K1跳的顶点，后几个元素为K2跳个顶点，dim -2 的第一个元素是中心点的索引
+        # 展平hops矩阵后两维，这里就不考虑自身的那一维
+        #uni = hops_2[:,:,1:,:].flatten(start_dim=-2, end_dim=-1)
 
-        # pool = mp.Pool(num_worker)
-        # [pool.apply_async(self.change_A, args=(range(i*int(B/num_worker),(i+1)*int(B/num_worker)),N,uni.share_memory_(),knn_graph.share_memory_(),mask_one_hop_idcs,hops_2.share_memory_(),A_.share_memory_(),feat.share_memory_(),feats.share_memory_())) for i in range(num_worker)]
-        # pool.close()  # 关闭进程池，不再接受新的进程
-        # pool.join()  # 主进程阻塞等待子进程的退出
+        
+        # num_worker = 2
+        # processes = []
+        # for rank in range(num_worker):
+        #     p = mp.Process(target=self.change_A,args=(range(rank*int(B/num_worker),(rank+1)*int(B/num_worker)),N,uni.share_memory_(),knn_graph.share_memory_(),mask_one_hop_idcs,hops_2.share_memory_(),A_.share_memory_(),feat.share_memory_(),feats.share_memory_()))
+        #     p.start()
+        #     processes.append(p)
+        # for p in processes:
+        #     p.join()
+
         # for i in range(B):
         #     for m in range(N):
         #         uni_tmp = torch.unique(uni[i,m])
