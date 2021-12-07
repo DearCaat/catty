@@ -456,12 +456,12 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     min_nor_thr = torch.ones(size=(b,p))
                 min_nor_thr = min_nor_thr.cuda()
 
-                max_score,label_pl = torch.max(output_pl,dim=2)
+                _,label_pl = torch.max(output_pl,dim=2)
                 #label_pl = torch.argmax(output_pl,dim=2)
-                label_tmp = label_pl.clone()
+                #label_tmp = label_pl.clone()
                 #获得正常包索引和病害包索引
-                bs_index_nor = targets_pl==pl_nor_cls_index
-                bs_index_dis = bs_index_nor==False
+                #bs_index_nor = targets_pl==pl_nor_cls_index
+                #bs_index_dis = bs_index_nor==False
                 ps_mask_nor = (ins_t - pl_nor_cls_index == 0)
                 ps_mask_dis = ps_mask_nor==False
 
@@ -778,7 +778,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
         return acc1_meter.avg, acc5_meter.avg, loss_meter.avg, auc,metrics
 
 if __name__ == '__main__':
-    torch.multiprocessing.set_start_method('spawn')
+    #torch.multiprocessing.set_start_method('spawn')
 
     _, config = parse_option()
     os.makedirs(config.OUTPUT, exist_ok=True)
