@@ -478,7 +478,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     mask_ins =   ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf)) & (output_bag_label > thr_min_dis_conf) )  | (output_bag_label - min_nor_thr >  0))
                     label_pl[mask_ins] = ins_t[mask_ins]
                     #选取部分置信度比较高的实例参与loss计算   label_tmp - 6  == 0
-                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,6] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
+                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
                 else:
                     #全部都用
                     #mask_ins = (label_tmp - label_tmp == 0)
