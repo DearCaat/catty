@@ -270,7 +270,7 @@ def main(config):
     start_time = time.time()
     loss_rec = np.array([])
 
-    thr_list = np.array([config.RDD_TRANS.NOR_THR for i in range(config.MODEL.NUM_CLASSES)])
+    thr_list = np.array([config.RDD_TRANS.NOR_THR for i in range(config.RDD_TRANS.INST_NUM_CLASS)])
 
     for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
         if not config.DATA.TFRECORD_MODE and config.DISTRIBUTED:
@@ -667,12 +667,12 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
     end = time.time()
     last_idx = len(data_loader) - 1
     with torch.no_grad():
-        for idx, (images, target) in enumerate(data_loader):
+        for idx, (images, targets) in enumerate(data_loader):
             last_batch = idx == last_idx
             # timm dataloader prefetcher will do this
             if not config.DATA.TIMM:
                 images = images.cuda(non_blocking=True)
-                targets = target.cuda(non_blocking=True)
+                targets = targets.cuda(non_blocking=True)
 
             topk = (1,5)
             #if config.EVAL_MODE:
@@ -692,28 +692,28 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                 output = output[index]
 
             output_soft = torch.nn.functional.softmax(output,dim=-1)
-            if not config.THUMB_MODE:
-                #使用max-pool来测试，取所有图块中得分最大的图块的置信度
-                b,p,cls = output.shape
-                max_score,max_index_cls = torch.max(output_soft,dim=-1)
+            # if not config.THUMB_MODE:
+            #     #使用max-pool来测试，取所有图块中得分最大的图块的置信度
+            #     b,p,cls = output.shape
+            #     max_score,max_index_cls = torch.max(output_soft,dim=-1)
 
-                mask = (max_score - config.RDD_TRANS.TEST_THR > 0) & (max_index_cls - 6 != 0)
-                if mask.any() == True:
-                    max_index = []
-                    for i in range(b):
-                        if mask[i].any()==True:
-                            score_tmp = max_score[i,mask[i]]
-                            _,max_inx_tmp = torch.max(score_tmp,dim=-1)
-                            max_index.append(torch.nonzero(mask[i])[max_inx_tmp,0].tolist())
-                        else:
-                            _,index = torch.max(max_score[i],dim=-1)
-                            max_index.append(index)
-                else:
-                    max_score,max_index = torch.max(max_score,dim=-1)
+            #     mask = (max_score - config.RDD_TRANS.TEST_THR > 0) & (max_index_cls - 6 != 0)
+            #     if mask.any() == True:
+            #         max_index = []
+            #         for i in range(b):
+            #             if mask[i].any()==True:
+            #                 score_tmp = max_score[i,mask[i]]
+            #                 _,max_inx_tmp = torch.max(score_tmp,dim=-1)
+            #                 max_index.append(torch.nonzero(mask[i])[max_inx_tmp,0].tolist())
+            #             else:
+            #                 _,index = torch.max(max_score[i],dim=-1)
+            #                 max_index.append(index)
+            #     else:
+            #         max_score,max_index = torch.max(max_score,dim=-1)
 
-                output_soft = output_soft[[i for i in range(b)],max_index,:]
-                output = output[[i for i in range(b)],max_index,:]
-                del max_score,mask
+            #     output_soft = output_soft[[i for i in range(b)],max_index,:]
+            #     output = output[[i for i in range(b)],max_index,:]
+            #     del max_score,mask
             if config.BINARYTRAIN_MODE:
                 loss = criterion(output, targets_bin)
             else:
