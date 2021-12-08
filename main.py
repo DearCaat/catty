@@ -688,7 +688,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             with amp_autocast():
                 output = model(images)
             if isinstance(output, (tuple, list)):
-                index = 0 if config.THUMB_MODE else 1
+                index = 0 if config.THUMB_MODE or config.RDD_TRANS.NOT_INST_TEST else 1
                 output = output[index]
 
             output_soft = torch.nn.functional.softmax(output,dim=-1)
