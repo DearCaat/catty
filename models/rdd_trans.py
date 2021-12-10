@@ -29,8 +29,11 @@ class RddTransformer(nn.Module):
 
     def cluster_classifier(self,clusters_feat,scores_inst,clusters_idcs):
         B = len(clusters_feat)
+        cluster_num = []
         for b in range(B):
-            for i in range(len(clusters_feat[b])):
+            C = len(clusters_feat[b])
+            cluster_num.append(C)
+            for i in range(C):
                 score, index_inst = torch.max(scores_inst[b,clusters_idcs[b][i],1], dim=0)
                 if i == 0:
                     scores = score.unsqueeze(0)
@@ -45,7 +48,7 @@ class RddTransformer(nn.Module):
                 feats = torch.cat((feats,self.avgpool(clusters_feat[b][max_clu_index].transpose(0, 1)).unsqueeze(0)))
         feats = feats.view(B,-1)
         logits = self.head(feats)
-        return logits
+        return logits,cluster_num
     
     # for kmeans
     def kmeans_cluster(self,instance_feat,clusters_indic):
@@ -65,6 +68,8 @@ class RddTransformer(nn.Module):
         if type(self.cluster_model) == GCN:
             # if using gcn to cluster, firstly create the graph
             feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
+            print(feat.size())
+            print(adj.size())
             torch.cuda.empty_cache()
             # gcn cluster  edges, scores
             pred = self.cluster_model(feat, adj, h1_mask)
@@ -96,12 +101,12 @@ class RddTransformer(nn.Module):
         logits_inst = logits_inst.view(B,N,-1)
         score_inst = self.soft_max(logits_inst)
         # bag classify
-        logits_bag = self.cluster_classifier(clusters_feat,score_inst,clusters_idcs)
+        logits_bag,cluster_num = self.cluster_classifier(clusters_feat,score_inst,clusters_idcs)
         del clusters_feat, clusters_idcs
         if is_training:
-            return logits_bag, logits_inst, score_inst
+            return logits_bag, logits_inst, score_inst,cluster_num
         else:
-            return logits_bag, logits_inst, score_inst
+            return logits_bag, logits_inst, score_inst,cluster_num
 
 @register_model
 def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):

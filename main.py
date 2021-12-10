@@ -1,4 +1,5 @@
 import os
+from networkx.algorithms import cluster
 
 from torch.nn.modules import module
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -386,6 +387,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     loss_teacher_meter = AverageMeter()
     dis_ins_meter = AverageMeter()
     patch_num_meter = AverageMeter()
+    cluster_num_meter = AverageMeter()
+    cluster_ema_num_meter = AverageMeter()
     #acc1_meter = AverageMeter()
     loss_rec = np.array([])
     dis_ratio_list = [[] for i in range(len(thr_list))]
@@ -427,12 +430,12 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 loss = classify_loss
             #custom model
             else:
-                output,o_inst,_ = model(samples)
+                output,o_inst,_,cluster_num = model(samples)
                 torch.cuda.empty_cache()
                 # 设定正常图片在类别中的索引
                 pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
                 with torch.no_grad():
-                    _,pl_inst,output_pl = model_ema.module(samples)
+                    _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples)
                     torch.cuda.empty_cache()
                    #_,pl_inst = teacher_ema.module(samples)
                 b,p,cls = pl_inst.shape
@@ -523,6 +526,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 label_pl = label_pl.view(-1)
                 o_inst = o_inst.view(-1,cls)
                 patch_num_meter.update(len(label_pl) / (p*b),b)
+                cluster_num_meter.update(cluster_num,b)
                 if o_inst.size(0)>0:
                     loss_pl = loss_teacher(o_inst,label_pl)
                 else:
@@ -583,6 +587,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 optimizer.step()
 
             if model_ema is not None:
+                cluster_ema_num_meter.update(cluster_num_ema,b)
                 if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup' or config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
                     #teacher_ema.decay_diff = (epoch * num_steps + idx) / (config.TRAIN.EPOCHS * num_steps)
                     model_ema.decay = 0
@@ -631,7 +636,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 f'loss_tea {loss_teacher_meter.val:.4f} ({loss_teacher_meter.avg:.4f})\t'
                 f'dis_ins {dis_ins_meter.val:.4f} ({dis_ins_meter.avg:.4f}) \t'
                 f'patch_num {patch_num_meter.val:.4f} ({patch_num_meter.avg:.4f}) \t'
-                
+                f'cluster_num {cluster_num_meter.val:.4f} ({cluster_num_meter.avg:.4f}) \t'
+                f'cluster_ema_num {cluster_ema_num_meter.val:.4f} ({cluster_ema_num_meter.avg:.4f}) \t'
                 #f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
                 f'mem {memory_used:.0f}MB')
     if not config.THUMB_MODE and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
@@ -660,6 +666,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
     loss_meter = AverageMeter()
     acc1_meter = AverageMeter()
     acc5_meter = AverageMeter()
+    cluster_num_meter = AverageMeter()
     
     save_pred = np.array([])
     save_label = np.array([])
@@ -690,8 +697,10 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             if isinstance(output, (tuple, list)):
                 index = 0 if config.THUMB_MODE or config.RDD_TRANS.NOT_INST_TEST else 1
                 output = output[index]
+                cluster_num = output[-1]
 
             output_soft = torch.nn.functional.softmax(output,dim=-1)
+
             # if not config.THUMB_MODE:
             #     #使用max-pool来测试，取所有图块中得分最大的图块的置信度
             #     b,p,cls = output.shape
@@ -714,6 +723,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             #     output_soft = output_soft[[i for i in range(b)],max_index,:]
             #     output = output[[i for i in range(b)],max_index,:]
             #     del max_score,mask
+
             if config.BINARYTRAIN_MODE:
                 loss = criterion(output, targets_bin)
             else:
@@ -748,6 +758,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             loss_meter.update(loss.item(), targets.size(0))
             acc1_meter.update(acc1.item(), targets.size(0))
             acc5_meter.update(acc5.item(), targets.size(0))
+            cluster_num_meter.update(cluster_num,targets.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -761,6 +772,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     f'Loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
                     f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
                     f'Acc@5 {acc5_meter.val:.3f} ({acc5_meter.avg:.3f})\t'
+                    f'Acc@5 {cluster_num_meter.val:.3f} ({cluster_num_meter.avg:.3f})\t'
                     f'Mem {memory_used:.0f}MB')
 
         save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)

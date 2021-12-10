@@ -238,24 +238,47 @@ class KnnGraph(object):
         
         # ## 1. get the KNN graph
         knn_graph = self.get_KNN(feats,self.distance)
-        knn_graph = knn_graph[:,:, :self.k_at_hop[0] + 1]
+        #knn_graph = knn_graph[:,:, :self.k_at_hop[0] + 1]
 
         # 添加第一跳
-        hops_1 = knn_graph[:,:,:]      # B N [1 K1] 这里的1是center point 的索引
-        hops_2 = hops_1.unsqueeze(-1).repeat(1,1,1,self.k_at_hop[1]+1).clone()  #B N [1 K1] [1 K2]
+        hops_1 = knn_graph[:,:,:self.k_at_hop[0] + 1]      # B N [1 K1] 这里的1是center point 的索引
+        #hops_2 = hops_1.unsqueeze(-1).repeat(1,1,1,self.k_at_hop[1]+1).clone()  #B N [1 K1] [1 K2]
+        #hops = hops_1                  # 只有第一跳
+        
 
         # 构建唯一顶点矩阵 构建邻接矩阵 因为每一个lps的顶点数目都不相同，因此需要使用for 循环
         #uni_array = np.empty((B,N),dtype=object)
-        max_num_nodes = self.k_at_hop[0] * (self.k_at_hop[1] + 1) + 1
-        feat = feats.unsqueeze(-2).repeat(1,1,max_num_nodes,1)
-        feat[:,:,:,:] = 0
-        A_ = feat.clone()[:,:,:,:max_num_nodes]
-        mask_one_hop_idcs = torch.zeros(B,N,max_num_nodes) == 1
+        # max_num_nodes = self.k_at_hop[0] * (self.k_at_hop[1] + 1) + 1
+        # feat = feats.unsqueeze(-2).repeat(1,1,max_num_nodes,1)
+        # feat[:,:,:,:] = 0
+        # A_ = feat.clone()[:,:,:,:max_num_nodes]
+        # mask_one_hop_idcs = torch.zeros(B,N,max_num_nodes) == 1
 
+        # 构建邻接矩阵和特征矩阵，单跳的纯矩阵实现
+        mask = knn_graph.clone()         #B N N
+        mask[:,:,:] = 0
+        mask = mask.scatter_(2,knn_graph[:,:,1:self.active_connection+1],1) == True
+        a = knn_graph[:,:,1:self.active_connection+1].unsqueeze(1).repeat(1,N,1,1)
+        a = a[mask].view(B,N,self.active_connection,self.active_connection)
+        b = knn_graph[:,:,1:self.active_connection+1].unsqueeze(-1).repeat(1,1,1,self.active_connection)
+        c = (b * N) + a
+
+        feat_ = feats.clone().unsqueeze_(1).repeat(1,N,1,1)     # B N N D
+        A_ = feat_.clone()[:,:,:,:N].reshape(B,N,-1)          # B N N*N
+        A_[:,:,:] = 0
+        A = A_.scatter_(-1,c.flatten(-2,-1),1).view(B,N,N,N)
+        # sparse matrix for feat
+        idx = torch.cat((torch.arange(0,B).unsqueeze_(-1).repeat(1,N*self.active_connection).flatten().unsqueeze_(0),torch.arange(0,N).unsqueeze_(-1).unsqueeze_(0).repeat(B,1,self.active_connection).flatten().unsqueeze_(0), knn_graph[:,:,1:self.active_connection+1].flatten().unsqueeze_(0).cpu())).cuda(non_blocking=True)
+        feat= torch.sparse_coo_tensor(idx,feat_[mask],(B,N,N,D)).cuda(non_blocking=True) # B N N D
+
+        mask_one_hop_idcs = mask
+        #mask_one_hop_idcs = mask_one_hop_idcs.scatter_(2,knn_graph[:,:,1:self.active_connection+1],1) == True
+
+        # 效率问题不考虑第二跳
         # 添加第二跳
-        for i in range(B):
-            for m in range(N):
-                hops_2[i,m,:,:] = hops_1[i,hops_1[i,m,:],:self.k_at_hop[1]+1] 
+        # for i in range(B):
+        #     for m in range(N):
+        #         hops_2[i,m,:,:] = hops_1[i,hops_1[i,m,:],:self.k_at_hop[1]+1] 
 
         # hops_1 = hops_1.share_memory_()
         # hops_2 = hops_2.share_memory_()
@@ -275,32 +298,36 @@ class KnnGraph(object):
         #del hops_1
         # hops_2矩阵中，dim -1 第一个元素存储的是K1跳的顶点，后几个元素为K2跳个顶点，dim -2 的第一个元素是中心点的索引
         # 展平hops矩阵后两维，这里就不考虑自身的那一维
-        uni = hops_2[:,:,1:,:].flatten(start_dim=-2, end_dim=-1)
+        #uni = hops_2[:,:,1:,:].flatten(start_dim=-2, end_dim=-1)
+        #uni = hops[:,:,1:]
 
-        for i in range(B):
-            for m in range(N):
-                uni_tmp = torch.unique(uni[i,m])
-                if m not in uni_tmp:
-                    uni_tmp = torch.cat((torch.tensor([m]).cuda(non_blocking=True),uni_tmp))
-                num_nodes = len(uni_tmp)
-                a_tmp = torch.zeros(num_nodes,num_nodes) # 小维度的矩阵cpu上进行索引和改值更快一点
-                neighbors = knn_graph[i,uni_tmp,1:self.active_connection+1]
-                # 每个结点能够连接的顶点数不同，需要使用for循环
-                for node in range(num_nodes):
-                    nei_index = torch.isin(uni_tmp,neighbors[node,torch.isin(neighbors[node],uni_tmp)])
-                    a_tmp[node,nei_index] = 1
-                    a_tmp[nei_index,node] = 1
-                # one-hop indices
-                mask_one_hop_idcs[i,m,:num_nodes] = torch.isin(uni_tmp,hops_2[i,m,1:,0])
-                A_[i,m,:num_nodes,:num_nodes] = a_tmp      
-                feat[i,m,:num_nodes] = feats[i,uni_tmp]
+
+
+        # for i in range(B):
+        #     for m in range(N):
+        #         uni_tmp = torch.unique(uni[i,m])
+        #         if m not in uni_tmp:
+        #             uni_tmp = torch.cat((torch.tensor([m]).cuda(non_blocking=True),uni_tmp))
+        #         num_nodes = len(uni_tmp)
+        #         a_tmp = torch.zeros(num_nodes,num_nodes) # 小维度的矩阵cpu上进行索引和改值更快一点
+        #         neighbors = knn_graph[i,uni_tmp,1:self.active_connection+1]
+        #         # 每个结点能够连接的顶点数不同，需要使用for循环
+        #         for node in range(num_nodes):
+        #             nei_index = torch.isin(uni_tmp,neighbors[node,torch.isin(neighbors[node],uni_tmp)])
+        #             a_tmp[node,nei_index] = 1
+        #             a_tmp[nei_index,node] = 1
+        #         # one-hop indices
+        #         mask_one_hop_idcs[i,m,:num_nodes] = torch.isin(uni_tmp,hops_2[i,m,1:,0])
+        #         A_[i,m,:num_nodes,:num_nodes] = a_tmp      
+        #         feat[i,m,:num_nodes] = feats[i,uni_tmp]
         # 正则化邻接矩阵？
         D = A_.sum(-1,keepdim=True)
-        A_ = A_.div(D)
+        A_.div_(D)
         A_[torch.isnan(A_)] = 0
         del D
 
         # 正则化特征，IPS特征减去中心点特征
-        feat = feat - feats.unsqueeze(-2)
+        feat = (-feats.unsqueeze(1).repeat(1,N,1,1)).add(feat)
+        #feat.sub_(feats.unsqueeze(-2))
 
         return feat,A_,mask_one_hop_idcs,hops_1[:,:,1:]
