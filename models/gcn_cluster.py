@@ -8,6 +8,7 @@
 from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
+from os import X_OK
 
 import numpy as np
 
@@ -173,12 +174,12 @@ class GCN(nn.Module):
         x = self.conv4(x,A)
 
         dim_out = x.size(-1)
-        edge_feat = x[one_hop_idcs].view(B,N,self.k1,dim_out)
-        edge_feat = edge_feat.view(-1,dim_out)
-        pred = self.classifier(edge_feat).view(B,N,self.k1,2)
+        x = x[one_hop_idcs].view(B,N,self.k1,dim_out)
+        x = x.view(-1,dim_out)
+        x = self.classifier(x).view(B,N,self.k1,2)
             
         # shape: B N k1 2
-        return pred
+        return x
 
 class KnnGraph(object):
     def __init__(self,active_connection=4,k_at_hop=[20,5],distance='cosine'):
