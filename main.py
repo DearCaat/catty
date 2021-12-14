@@ -422,7 +422,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         with amp_autocast():
             if config.THUMB_MODE:
                 p = 1
-                predictions,_ = model(samples)
+                predictions = model(samples)
                 #print(predictions)
                 del samples
                 if config.BINARYTRAIN_MODE:
@@ -528,7 +528,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 label_pl = label_pl.view(-1)
                 o_inst = o_inst.view(-1,cls)
                 patch_num_meter.update(len(label_pl) / (p*b),b)
-                cluster_num_meter.update(sum(cluster_num),b)
+                cluster_num_meter.update(sum(cluster_num) / b,b)
                 if o_inst.size(0)>0:
                     loss_pl = loss_teacher(o_inst,label_pl)
                 else:
@@ -589,7 +589,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 optimizer.step()
 
             if model_ema is not None:
-                cluster_ema_num_meter.update(sum(cluster_num_ema),b)
+                cluster_ema_num_meter.update(sum(cluster_num_ema) / b,b)
                 if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup' or config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
                     #teacher_ema.decay_diff = (epoch * num_steps + idx) / (config.TRAIN.EPOCHS * num_steps)
                     model_ema.decay = 0
