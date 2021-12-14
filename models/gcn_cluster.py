@@ -134,9 +134,9 @@ class GraphConv(nn.Module):
     def forward(self, features, A):
         b, n, i, d = features.shape
         assert(d==self.in_dim)
-        agg_feats = self.agg(features,A)
-        cat_feats = torch.cat([features, agg_feats], dim=3)
-        out = torch.einsum('bnid,df->bnif', (cat_feats, self.weight))
+        out = self.agg(features,A)
+        out = torch.cat([features, out], dim=3)
+        out = torch.einsum('bnid,df->bnif', (out, self.weight))
         out = F.relu(out + self.bias)
         return out 
         
