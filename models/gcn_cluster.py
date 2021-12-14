@@ -20,6 +20,7 @@ import torch.multiprocessing as mp
 
 def gcn_cluster(edge_col_indices,scores,feat,thr=0.75):
     B,N,K1 = edge_col_indices.shape
+    #if scores
     crow_indices = torch.tensor([K1*i for i in range(N+1)]).contiguous().cuda()
     cluster_feat = [[] for i in range (B)]
     cluster_idcs = [[] for i in range (B)]
@@ -174,9 +175,9 @@ class GCN(nn.Module):
         dim_out = x.size(-1)
         edge_feat = x[one_hop_idcs].view(B,N,self.k1,dim_out)
         edge_feat = edge_feat.view(-1,dim_out)
-        pred = self.classifier(edge_feat).view(B,-1,2)
+        pred = self.classifier(edge_feat).view(B,N,self.k1,2)
             
-        # shape: B (N*k1) 2
+        # shape: B N k1 2
         return pred
 
 class KnnGraph(object):
@@ -266,7 +267,7 @@ class KnnGraph(object):
         feat_ = feats.clone().unsqueeze_(1).repeat(1,N,1,1)     # B N N D
         A_ = feat_.clone()[:,:,:,:N].reshape(B,N,-1)          # B N N*N
         A_[:,:,:] = 0
-        A = A_.scatter_(-1,c.flatten(-2,-1),1).view(B,N,N,N)
+        A_ = A_.scatter_(-1,c.flatten(-2,-1),1).view(B,N,N,N)
         # sparse matrix for feat
         idx = torch.cat((torch.arange(0,B).unsqueeze_(-1).repeat(1,N*self.active_connection).flatten().unsqueeze_(0),torch.arange(0,N).unsqueeze_(-1).unsqueeze_(0).repeat(B,1,self.active_connection).flatten().unsqueeze_(0), knn_graph[:,:,1:self.active_connection+1].flatten().unsqueeze_(0).cpu())).cuda(non_blocking=True)
         feat= torch.sparse_coo_tensor(idx,feat_[mask],(B,N,N,D)).cuda(non_blocking=True) # B N N D

@@ -36,19 +36,19 @@ class RddTransformer(nn.Module):
             for i in range(C):
                 score, index_inst = torch.max(scores_inst[b,clusters_idcs[b][i],1], dim=0)
                 if i == 0:
-                    scores = score.unsqueeze(0)
+                    scores = score.unsqueeze_(0)
                 else:
-                    scores = torch.cat((scores,score.unsqueeze(0)))
+                    scores = torch.cat((scores,score.unsqueeze_(0)))
             # 选取病害置信度最高实例所在的簇，并将这个簇中所有实例的平均特征作为包特征，对于病害包来说，这是完全正确的，需要选取病害部分来做为包的代表，对于正常包来说，这样做能够使得网络模型的鲁棒性更强，这主要是因为这要求正常包里最像病害的部分也强约束成正常
             max_clu_index = torch.argmax(scores)
             if b == 0:
                 feats = clusters_feat[b][max_clu_index]
-                feats = self.avgpool(feats.transpose(0, 1)).unsqueeze(0)  # B C 1
+                feats = self.avgpool(feats.transpose(0, 1)).unsqueeze_(0)  # B C 1
             else:
-                feats = torch.cat((feats,self.avgpool(clusters_feat[b][max_clu_index].transpose(0, 1)).unsqueeze(0)))
+                feats = torch.cat((feats,self.avgpool(clusters_feat[b][max_clu_index].transpose(0, 1)).unsqueeze_(0)))
         feats = feats.view(B,-1)
-        logits = self.head(feats)
-        return logits,cluster_num
+        feats = self.head(feats)
+        return feats,cluster_num
     
     # for kmeans
     def kmeans_cluster(self,instance_feat,clusters_indic):
@@ -68,14 +68,14 @@ class RddTransformer(nn.Module):
         if type(self.cluster_model) == GCN:
             # if using gcn to cluster, firstly create the graph
             feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
-            print(feat.size())
-            print(adj.size())
             torch.cuda.empty_cache()
             # gcn cluster  edges, scores
             pred = self.cluster_model(feat, adj, h1_mask)
+            #print(pred.size())
+            pred = self.soft_max(pred)
             del feat, adj, h1_mask
             torch.cuda.empty_cache()
-            clusters_feat,clusters_idcs = gcn_cluster(h1_indi,pred.view(B,N,-1,2), inst_feature,self.clustre_thr) # C*N*D
+            clusters_feat,clusters_idcs = gcn_cluster(h1_indi,pred, inst_feature,self.clustre_thr) # C*N*D
             
         # 暂时放弃kmeans
         else:

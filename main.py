@@ -273,6 +273,8 @@ def main(config):
 
     thr_list = np.array([config.RDD_TRANS.NOR_THR for i in range(config.RDD_TRANS.INST_NUM_CLASS)])
 
+    if config.LOG_WANDB and has_wandb:
+        wandb.watch(model, log_freq=100)
     for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
         if not config.DATA.TFRECORD_MODE and config.DISTRIBUTED:
             data_loader_train.sampler.set_epoch(epoch)
@@ -457,7 +459,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     min_nor_thr = min_nor_thr.unsqueeze(-1).repeat((1,p))        # [b p]
                 else:
                     min_nor_thr = torch.ones(size=(b,p))
-                min_nor_thr = min_nor_thr.cuda()
+                min_nor_thr = min_nor_thr.cuda(non_blocking=True)
 
                 _,label_pl = torch.max(output_pl,dim=2)
                 #label_pl = torch.argmax(output_pl,dim=2)
@@ -526,7 +528,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 label_pl = label_pl.view(-1)
                 o_inst = o_inst.view(-1,cls)
                 patch_num_meter.update(len(label_pl) / (p*b),b)
-                cluster_num_meter.update(cluster_num,b)
+                cluster_num_meter.update(sum(cluster_num),b)
                 if o_inst.size(0)>0:
                     loss_pl = loss_teacher(o_inst,label_pl)
                 else:
@@ -587,7 +589,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 optimizer.step()
 
             if model_ema is not None:
-                cluster_ema_num_meter.update(cluster_num_ema,b)
+                cluster_ema_num_meter.update(sum(cluster_num_ema),b)
                 if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup' or config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
                     #teacher_ema.decay_diff = (epoch * num_steps + idx) / (config.TRAIN.EPOCHS * num_steps)
                     model_ema.decay = 0
@@ -752,13 +754,12 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                 acc5 = reduce_tensor(acc5)
                 loss = reduce_tensor(loss)
 
-
             torch.cuda.synchronize()
 
             loss_meter.update(loss.item(), targets.size(0))
             acc1_meter.update(acc1.item(), targets.size(0))
             acc5_meter.update(acc5.item(), targets.size(0))
-            cluster_num_meter.update(cluster_num,targets.size(0))
+            cluster_num_meter.update(sum(cluster_num),targets.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -772,7 +773,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     f'Loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
                     f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
                     f'Acc@5 {acc5_meter.val:.3f} ({acc5_meter.avg:.3f})\t'
-                    f'Acc@5 {cluster_num_meter.val:.3f} ({cluster_num_meter.avg:.3f})\t'
+                    f'Cluster_num {cluster_num_meter.val:.3f} ({cluster_num_meter.avg:.3f})\t'
                     f'Mem {memory_used:.0f}MB')
 
         save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
