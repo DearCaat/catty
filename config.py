@@ -39,7 +39,7 @@ _C.DATA.INTERPOLATION = 'bicubic'
 # could be overwritten by command line argument
 _C.DATA.TFRECORD_MODE = False
 # Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.
-_C.DATA.PIN_MEMORY = True
+_C.DATA.PIN_MEMORY = False
 # Cache Data in Memory, could be overwritten by command line argument
 _C.DATA.CACHE_MODE = 'part'
 # Number of data loading threads
@@ -56,6 +56,7 @@ _C.DATA.TEST_SPLIT = 'test'
 _C.DATA.EPOCH_REPEATS = 0
 # Default timm thumb image loader
 _C.DATA.TIMM = True
+_C.DATA.TIMM_PREFETCHER = False
 
 _C.DATA.PATCH_SIZE=300
 # for cfd 150 cracktree200 150 cqu_bpdd 300

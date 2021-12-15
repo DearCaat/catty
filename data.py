@@ -114,7 +114,7 @@ class IterableImageDataset(data.IterableDataset):
     def filenames(self, basename=False, absolute=False):
         return self.parser.filenames(basename, absolute)
 
-class ImageDataset(data.Dataset):
+class PatchImageDataset(data.Dataset):
     def __init__(
             self,
             root,
@@ -194,35 +194,36 @@ class ImageDataset(data.Dataset):
 def build_transform(is_train,config):
     if is_train:
         #first transform
-        '''transform_1,transform_2,transform_3 = create_transform(
+        transform = create_transform(
                     input_size=config.DATA.IMG_SIZE,
                     is_training=True,
+                    no_aug = config.AUG.NO_AUG,
                     color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
                     auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
                     re_prob=config.AUG.REPROB,
                     re_mode=config.AUG.REMODE,
                     re_count=config.AUG.RECOUNT,
                     interpolation=config.DATA.INTERPOLATION,
-                    separate=True,
-        )'''
-        t1 = []
-        t2 = []
-        t1 = A.Compose([
-            # A.RandomBrightnessContrast(p=0.5),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            # chagne rotate limit from 25 to 15 on 20/7/2020
-            A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
-            A.OneOf([
-                A.IAAEmboss(p=1),
-                A.IAASharpen(p=1),
-                A.Blur(p=1)
-            ], p=0.5)
-        ])
-        t2.append(transforms.ToTensor())
-        t2.append(transforms.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]))
-        #return [transform_1,transform_2]
-        return [t1,transforms.Compose(t2)]
+        )
+        return transform
+        # t1 = []
+        # t2 = []
+        # t1 = A.Compose([
+        #     # A.RandomBrightnessContrast(p=0.5),
+        #     A.HorizontalFlip(p=0.5),
+        #     A.VerticalFlip(p=0.5),
+        #     # chagne rotate limit from 25 to 15 on 20/7/2020
+        #     A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+        #     A.OneOf([
+        #         A.IAAEmboss(p=1),
+        #         A.IAASharpen(p=1),
+        #         A.Blur(p=1)
+        #     ], p=0.5)
+        # ])
+        # t2.append(transforms.ToTensor())
+        # t2.append(transforms.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]))
+        # #return [transform_1,transform_2]
+        # return [t1,transforms.Compose(t2)]
         #last transform
         '''transform = create_transform(
                     input_size=config.DATA.PATCH_SIZE,
@@ -273,7 +274,6 @@ def build_transform(is_train,config):
         #return [transform_1,transform_2]
         return [t1,transforms.Compose(t2)]
 
-#for tfrecord
 def build_loader(is_train,config):
     mixup_fn = None
     mixup_active = config.AUG.MIXUP > 0 or config.AUG.CUTMIX > 0. or config.AUG.CUTMIX_MINMAX is not None
@@ -301,9 +301,12 @@ def build_loader(is_train,config):
             dataset_test, loader_test = timm_dataloader(config=config,is_train=False)
             return dataset_test, loader_test
     else:
-        dataset_train, dataset_val, loader_train, loader_val =pytorch_dataloader(is_train=is_train,config=config)
-        return dataset_train, dataset_val, loader_train, loader_val,mixup_fn
-
+        if is_train:
+            dataset_train, dataset_val, loader_train, loader_val =pytorch_dataloader(is_train=True,config=config)
+            return dataset_train, dataset_val, loader_train, loader_val,mixup_fn
+        else:
+            dataset_val,loader_test = pytorch_dataloader(is_train=False,config=config)
+            return dataset_val,loader_test
 #采用timm库，作了小小改动，支持多gpu，支持多线程，支持shuffle，不支持cache
 def tfds_dataset(is_train,config):
     if is_train:
@@ -331,7 +334,7 @@ def timm_dataloader(config,is_train):
             input_size=config.DATA.IMG_SIZE,
             batch_size=config.DATA.BATCH_SIZE,
             is_training=True,
-            use_prefetcher=True,
+            use_prefetcher=config.DATA.TIMM_PREFETCHER,
             no_aug=config.AUG.NO_AUG,
             re_prob=config.AUG.REPROB,
             re_mode=config.AUG.REMODE,
@@ -356,7 +359,7 @@ def timm_dataloader(config,is_train):
             input_size=config.DATA.IMG_SIZE,
             batch_size=config.DATA.VAL_BATCH_SIZE,
             is_training=False,
-            use_prefetcher=True,
+            use_prefetcher=config.DATA.TIMM_PREFETCHER,
             interpolation=config.DATA.INTERPOLATION,
             mean=config.AUG.NORM[0],
             std=config.AUG.NORM[1],
@@ -375,7 +378,7 @@ def timm_dataloader(config,is_train):
             input_size=config.DATA.IMG_SIZE,
             batch_size=config.DATA.VAL_BATCH_SIZE,
             is_training=False,
-            use_prefetcher=True,
+            use_prefetcher=config.DATA.TIMM_PREFETCHER,
             interpolation=config.DATA.INTERPOLATION,
             mean=config.AUG.NORM[0],
             std=config.AUG.NORM[1],
@@ -408,7 +411,7 @@ def pytorch_dataloader(is_train,config):
         else:
             #占位，考虑文件夹数据集
             transform_test = build_transform(is_train=False,config=config)
-            dataset_test = ImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,transform=transform_test,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,eval=True,class_to_idx={'diseased':1,'normal':0},thumb=config.THUMB_MODE)
+            dataset_test = PatchImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,transform=transform_test,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,eval=True,class_to_idx={'diseased':1,'normal':0},thumb=config.THUMB_MODE)
         loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY)
         return dataset_test,loader_test
 

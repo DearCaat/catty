@@ -276,6 +276,7 @@ def main(config):
 
     if config.LOG_WANDB and has_wandb:
         wandb.watch(model, log_freq=100)
+    # try:
     for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
         if not config.DATA.TFRECORD_MODE and config.DISTRIBUTED:
             data_loader_train.sampler.set_epoch(epoch)
@@ -301,23 +302,24 @@ def main(config):
             if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
                 save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,None,is_ema=True)
 
-        f1 = eval_metrics['macro_f1']
-        is_best = (auc > best_auc if config.BINARYTRAIN_MODE else f1 > max_f1) and epoch>0
-        max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
-        best_auc = max(best_auc,auc) if epoch > 0 else 0
-        max_f1 = max(max_f1,f1)
+    f1 = eval_metrics['macro_f1']
+    is_best = (auc > best_auc if config.BINARYTRAIN_MODE else f1 > max_f1) and epoch>0
+    max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
+    best_auc = max(best_auc,auc) if epoch > 0 else 0
+    max_f1 = max(max_f1,f1)
 
-        update_summary(
-                    epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
-                    write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
+    update_summary(
+                epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
+                write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
 
-        if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-            save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,model_ema)
+    if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
+        save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,model_ema)
 
-        logger.info(f'Max accuracy: {max_accuracy:.2f}%\t'
-                    f'Max f1: {max_f1:.2f}%\t'
-                    f'Best AUC: {best_auc:.2f}%')
-
+    logger.info(f'Max accuracy: {max_accuracy:.2f}%\t'
+                f'Max f1: {max_f1:.2f}%\t'
+                f'Best AUC: {best_auc:.2f}%')
+    # except:
+    #     print(torch.cuda.memory_stats())
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     logger.info('Training time {}'.format(total_time_str))
@@ -407,9 +409,9 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         last_batch = idx == last_idx
         
         # timm dataloader prefetcher will do this
-        if not config.DATA.TIMM:
-            samples = samples.cuda(non_blocking=True)
-            targets = targets.cuda(non_blocking=True)
+        if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
+            samples = samples.cuda(non_blocking=config.DATA.PIN_MEMORY)
+            targets = targets.cuda(non_blocking=config.DATA.PIN_MEMORY)
 
         # 当伪标签为二分类时或二分类训练时，需要二分类标签进行loss计算
         if config.BINARYTRAIN_MODE or (not config.THUMB_MODE and config.RDD_TRANS.INST_NUM_CLASS):
@@ -682,7 +684,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
         for idx, (images, targets) in enumerate(data_loader):
             last_batch = idx == last_idx
             # timm dataloader prefetcher will do this
-            if not config.DATA.TIMM:
+            if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
                 images = images.cuda(non_blocking=True)
                 targets = targets.cuda(non_blocking=True)
 
