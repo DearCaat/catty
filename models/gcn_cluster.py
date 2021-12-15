@@ -20,21 +20,23 @@ import networkx as nx
 import torch.multiprocessing as mp
 
 def gcn_cluster(edge_col_indices,scores,feat,thr=0.75):
-    B,N,K1 = edge_col_indices.shape
+    #B,N,K1 = edge_col_indices.shape
     #if scores
-    crow_indices = torch.tensor([K1*i for i in range(N+1)]).contiguous().cuda()
+    #crow_indices = torch.tensor([K1*i for i in range(N+1)]).contiguous().cuda()
+    B,N,_ = scores.shape
     cluster_feat = [[] for i in range (B)]
     cluster_idcs = [[] for i in range (B)]
     for b in range(B):
-        csr = torch.sparse_csr_tensor(crow_indices,edge_col_indices[b,:,:].flatten().contiguous(),scores[b,:,:,0].flatten().contiguous(),size=(N,N))
-        A = csr.to_dense()
-        A[A>thr] = 1
-        A_nx = nx.from_numpy_matrix(A.cpu().numpy())
+        # csr = torch.sparse_csr_tensor(crow_indices,edge_col_indices[b,:,:].flatten().contiguous(),scores[b,:,:,0].flatten().contiguous(),size=(N,N))
+        # A = csr.to_dense()
+        # A[A>thr] = 1
+
+        A_nx = nx.from_numpy_matrix(scores[b].detach().cpu().numpy())
         for c in nx.connected_components(A_nx):
             c = list(c)
             cluster_feat[b].append(feat[b][c])
             cluster_idcs[b].append(c)
-    del crow_indices
+    #del crow_indices
     return cluster_feat,cluster_idcs
 
     new_feat=[]
@@ -194,6 +196,14 @@ class KnnGraph(object):
             similarity_matrix=EuclideanDistances(feats)
             knn_graph = torch.argsort(similarity_matrix, axis=2,descending=False)  # B*N*N
         return knn_graph
+    def get_KNN_adj(self,knn=None,feat=None):
+        if knn==None and feat is not None:
+            knn = self.get_KNN(feat)
+        adj = knn.clone()         #B N N
+        adj[:,:,:] = 0
+        adj = adj.scatter_(2,knn[:,:,1:self.k_at_hop[0]+1],1)
+        return adj
+
     
     #for multi-process
     def change_hops(self,B,N,hops_1,hops_2,knn_graph,mask_one_hop_idcs,A_,feat,feats):

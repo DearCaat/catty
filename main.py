@@ -401,7 +401,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     start = time.time()
     end = time.time()
     last_idx = len(data_loader) - 1
-    
+    persudo_inst = False
+
     for idx, (samples, targets) in enumerate(data_loader):
         last_batch = idx == last_idx
         
@@ -441,101 +442,101 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples)
                     torch.cuda.empty_cache()
                    #_,pl_inst = teacher_ema.module(samples)
-                b,p,cls = pl_inst.shape
                 #output_pl = torch.nn.functional.softmax(pl_inst,dim=2)
                 
                 if config.RDD_TRANS.INST_NUM_CLASS != 2:
                     targets_pl = targets
                 else:
                     targets_pl = targets_bin
+                if persudo_inst: 
+                    b,p,cls = pl_inst.shape
+                    t_cpu = targets_pl.cpu()
+                    ins_t = targets_pl.unsqueeze(-1).repeat((1,p))
 
-                t_cpu = targets_pl.cpu()
-                ins_t = targets_pl.unsqueeze(-1).repeat((1,p))
+                    dis_ins = 0
+                    output_bag_label = output_pl[torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1].view(b,p)        #包所属标签下的置信度
+                    if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                        out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]
+                        min_nor_thr = out_tmp_sort[[i for i in range(b)],np.floor(p*thr_list[t_cpu])] # [b 1]
+                        min_nor_thr = min_nor_thr.unsqueeze(-1).repeat((1,p))        # [b p]
+                    else:
+                        min_nor_thr = torch.ones(size=(b,p))
+                    min_nor_thr = min_nor_thr.cuda(non_blocking=True)
 
-                dis_ins = 0
-                output_bag_label = output_pl[torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1].view(b,p)        #包所属标签下的置信度
-                if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
-                    out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]
-                    min_nor_thr = out_tmp_sort[[i for i in range(b)],np.floor(p*thr_list[t_cpu])] # [b 1]
-                    min_nor_thr = min_nor_thr.unsqueeze(-1).repeat((1,p))        # [b p]
-                else:
-                    min_nor_thr = torch.ones(size=(b,p))
-                min_nor_thr = min_nor_thr.cuda(non_blocking=True)
+                    _,label_pl = torch.max(output_pl,dim=2)
+                    #label_pl = torch.argmax(output_pl,dim=2)
+                    #label_tmp = label_pl.clone()
+                    #获得正常包索引和病害包索引
+                    #bs_index_nor = targets_pl==pl_nor_cls_index
+                    #bs_index_dis = bs_index_nor==False
+                    ps_mask_nor = (ins_t - pl_nor_cls_index == 0)
+                    ps_mask_dis = ps_mask_nor==False
 
-                _,label_pl = torch.max(output_pl,dim=2)
-                #label_pl = torch.argmax(output_pl,dim=2)
-                #label_tmp = label_pl.clone()
-                #获得正常包索引和病害包索引
-                #bs_index_nor = targets_pl==pl_nor_cls_index
-                #bs_index_dis = bs_index_nor==False
-                ps_mask_nor = (ins_t - pl_nor_cls_index == 0)
-                ps_mask_dis = ps_mask_nor==False
+                    #将所有实例设为正常
+                    label_pl[:,:] = pl_nor_cls_index 
+                    # sigmod函数来保证前期增加速率远远高于后期，优于线性增长
+                    thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+                    thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+                    #把网络判断为不是正常的部分实例置为包病害标签
+                    if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                        #判断为相应病害的实例置为包标签
+                        #mask_ins =  (label_tmp - ins_t  == 0)
+                        #将病害包里判断为不是正常的实例都置为包标签 & (output_bag_label > thr_min_conf)
+                        mask_ins =   ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf)) & (output_bag_label > thr_min_dis_conf) )  | (output_bag_label - min_nor_thr >  0))
+                        label_pl[mask_ins] = ins_t[mask_ins]
+                        #选取部分置信度比较高的实例参与loss计算   label_tmp - 6  == 0
+                        mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
+                    else:
+                        #全部都用
+                        #mask_ins = (label_tmp - label_tmp == 0)
+                        #只要正常图片 (output_bag_label - 0.9 > 0)
+                        mask_ins = ps_mask_nor 
 
-                #将所有实例设为正常
-                label_pl[:,:] = pl_nor_cls_index 
-                # sigmod函数来保证前期增加速率远远高于后期，优于线性增长
-                thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
-                thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
-                #把网络判断为不是正常的部分实例置为包病害标签
-                if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
-                    #判断为相应病害的实例置为包标签
-                    #mask_ins =  (label_tmp - ins_t  == 0)
-                    #将病害包里判断为不是正常的实例都置为包标签 & (output_bag_label > thr_min_conf)
-                    mask_ins =   ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf)) & (output_bag_label > thr_min_dis_conf) )  | (output_bag_label - min_nor_thr >  0))
-                    label_pl[mask_ins] = ins_t[mask_ins]
-                    #选取部分置信度比较高的实例参与loss计算   label_tmp - 6  == 0
-                    mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
-                else:
-                    #全部都用
-                    #mask_ins = (label_tmp - label_tmp == 0)
-                    #只要正常图片 (output_bag_label - 0.9 > 0)
-                    mask_ins = ps_mask_nor 
+                        #label_pl[bs_index_dis] = ins_t[bs_index_dis]
 
-                    #label_pl[bs_index_dis] = ins_t[bs_index_dis]
+                    #统计病害实例
+                    dis_count = torch.count_nonzero(label_pl - pl_nor_cls_index,dim=1) 
+                    dis_ins += torch.sum(dis_count)
 
-                #统计病害实例
-                dis_count = torch.count_nonzero(label_pl - pl_nor_cls_index,dim=1) 
-                dis_ins += torch.sum(dis_count)
+                    for i in range(len(thr_list)):
+                        i_index = targets_pl==i
+                        dis_tmp = dis_count[i_index]
+                        selec_tmp = mask_ins[i_index]
 
-                for i in range(len(thr_list)):
-                    i_index = targets_pl==i
-                    dis_tmp = dis_count[i_index]
-                    selec_tmp = mask_ins[i_index]
+                        if len(selec_tmp)>0:
+                            selec_rec[i].update( len(selec_tmp[selec_tmp==True]) / (len(selec_tmp)*p),b)
 
-                    if len(selec_tmp)>0:
-                        selec_rec[i].update( len(selec_tmp[selec_tmp==True]) / (len(selec_tmp)*p),b)
+                        if len(dis_tmp) > 0 and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                            thr_tmp = torch.sum(dis_tmp) / (p * len(dis_tmp))
+                            dis_ratio_list[i].append(thr_tmp.cpu())
 
-                    if len(dis_tmp) > 0 and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
-                        thr_tmp = torch.sum(dis_tmp) / (p * len(dis_tmp))
-                        dis_ratio_list[i].append(thr_tmp.cpu())
+                            #thr_list[i] = 0.9999 * thr_list[i] + (1-0.9999)* thr_tmp
+                            #thr_list[i] = 0.1 if thr_list[i] < 0.1 else thr_list[i]
+                            #thr_list[i] = thr_tmp
+                            dis_rec[i].update(thr_tmp,b)
 
-                        #thr_list[i] = 0.9999 * thr_list[i] + (1-0.9999)* thr_tmp
-                        #thr_list[i] = 0.1 if thr_list[i] < 0.1 else thr_list[i]
-                        #thr_list[i] = thr_tmp
-                        dis_rec[i].update(thr_tmp,b)
+                    #选择部分patch来计算loss
+                    #if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                    label_pl = label_pl[mask_ins]
+                    o_inst = o_inst[mask_ins]
+                    #     label_pl = label_pl[bs_index_nor]
+                    #     label_pl = label_pl.view(-1)
+                    #     o_inst = o_inst[bs_index_nor]
+                    #     o_inst = o_inst.view(-1,cls)
+                #else:
 
-                #选择部分patch来计算loss
-                #if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
-                label_pl = label_pl[mask_ins]
-                o_inst = o_inst[mask_ins]
-                #     label_pl = label_pl[bs_index_nor]
-                #     label_pl = label_pl.view(-1)
-                #     o_inst = o_inst[bs_index_nor]
-                #     o_inst = o_inst.view(-1,cls)
-               #else:
-
-               #计算loss
-                
-                label_pl = label_pl.view(-1)
-                o_inst = o_inst.view(-1,cls)
-                patch_num_meter.update(len(label_pl) / (p*b),b)
-                cluster_num_meter.update(sum(cluster_num),b)
-                if o_inst.size(0)>0:
-                    loss_pl = loss_teacher(o_inst,label_pl)
-                else:
-                    loss_pl = 0
+                #计算loss
+                    
+                    label_pl = label_pl.view(-1)
+                    o_inst = o_inst.view(-1,cls)
+                    patch_num_meter.update(len(label_pl) / (p*b),b)
+                    cluster_num_meter.update(sum(cluster_num) / b,b)
+                    if o_inst.size(0)>0:
+                        loss_pl = loss_teacher(o_inst,label_pl)
+                    else:
+                        loss_pl = 0
                 classify_loss = criterion(output, targets)
-                loss = loss_pl + classify_loss
+                loss = classify_loss
 
                 del samples, mask_ins
         

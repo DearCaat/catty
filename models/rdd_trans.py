@@ -29,26 +29,45 @@ class RddTransformer(nn.Module):
 
     def cluster_classifier(self,clusters_feat,scores_inst,clusters_idcs):
         B = len(clusters_feat)
+        D = clusters_feat[0][0].size(-1)
         cluster_num = []
         for b in range(B):
             C = len(clusters_feat[b])
             cluster_num.append(C)
             for i in range(C):
-                score, index_inst = torch.max(scores_inst[b,clusters_idcs[b][i],1], dim=0)
-                if i == 0:
-                    scores = score.unsqueeze_(0)
+                # score, index_inst = torch.max(scores_inst[b,clusters_idcs[b][i],1], dim=0)
+                # if i == 0:
+                #     scores = score.unsqueeze_(0)
+                # else:
+                #     scores = torch.cat((scores,score.unsqueeze_(0)))
+                if b==0 and i == 0:
+                    feats_tmp = self.avgpool(clusters_feat[b][i].transpose(0,1)).unsqueeze(0)
                 else:
-                    scores = torch.cat((scores,score.unsqueeze_(0)))
+                    feats_tmp = torch.cat((feats_tmp,self.avgpool(clusters_feat[b][i].transpose(0,1)).unsqueeze(0)))
+            
             # 选取病害置信度最高实例所在的簇，并将这个簇中所有实例的平均特征作为包特征，对于病害包来说，这是完全正确的，需要选取病害部分来做为包的代表，对于正常包来说，这样做能够使得网络模型的鲁棒性更强，这主要是因为这要求正常包里最像病害的部分也强约束成正常
-            max_clu_index = torch.argmax(scores)
+            #max_clu_index = torch.argmax(scores)
+            # if b == 0:
+            #     feats = clusters_feat[b][max_clu_index]
+            #     feats = self.avgpool(feats.transpose(0, 1)).unsqueeze_(0)  # B C 1
+            # else:
+            #     feats = torch.cat((feats,self.avgpool(clusters_feat[b][max_clu_index].transpose(0, 1)).unsqueeze_(0)))
+        
+        #feats = feats.view(B,-1)
+        feats_tmp = feats_tmp.view(-1,D)
+        feats_tmp = self.head(feats_tmp)
+        scores = self.soft_max(feats_tmp)
+        scores = 1 - scores[:,6]
+        j=0
+        for b in range(B):
+            max_clu_index = torch.argmax(scores[j:j+cluster_num[b]])
             if b == 0:
-                feats = clusters_feat[b][max_clu_index]
-                feats = self.avgpool(feats.transpose(0, 1)).unsqueeze_(0)  # B C 1
+                feats = feats_tmp[j:j+cluster_num[b]][max_clu_index]
             else:
-                feats = torch.cat((feats,self.avgpool(clusters_feat[b][max_clu_index].transpose(0, 1)).unsqueeze_(0)))
-        feats = feats.view(B,-1)
-        feats = self.head(feats)
-        return feats,cluster_num
+                feats = torch.cat((feats,feats_tmp[j:j+cluster_num[b]][max_clu_index]))
+            j = j+cluster_num[b]
+
+        return feats.view(B,-1),cluster_num
     
     # for kmeans
     def kmeans_cluster(self,instance_feat,clusters_indic):
@@ -67,15 +86,18 @@ class RddTransformer(nn.Module):
         # step 2, cluster 
         if type(self.cluster_model) == GCN:
             # if using gcn to cluster, firstly create the graph
-            feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
-            
-            # gcn cluster  edges, scores
-            pred = self.cluster_model(feat, adj, h1_mask)
-            del feat, adj, h1_mask
+            #feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
+            adj = self.graph.get_KNN_adj(feat=inst_feature)
+
+            #print(adj.size())
             torch.cuda.empty_cache()
+            # gcn cluster  edges, scores
+            #pred = self.cluster_model(feat, adj, h1_mask)
             #print(pred.size())
-            pred = self.soft_max(pred)
-            clusters_feat,clusters_idcs = gcn_cluster(h1_indi,pred, inst_feature,self.clustre_thr) # C*N*D
+            #pred = self.soft_max(pred)
+            #del feat, adj, h1_mask
+            torch.cuda.empty_cache()
+            clusters_feat,clusters_idcs = gcn_cluster(None,adj, inst_feature,self.clustre_thr) # C*N*D
             
         # 暂时放弃kmeans
         else:
@@ -97,16 +119,19 @@ class RddTransformer(nn.Module):
         # step 3 classify
         # instance classify
         #print(clusters_idcs[0])
-        logits_inst = self.head_instance(inst_feature.view(-1,D))
-        logits_inst = logits_inst.view(B,N,-1)
-        score_inst = self.soft_max(logits_inst)
+        # logits_inst = self.head_instance(inst_feature.view(-1,D))
+        # logits_inst = logits_inst.view(B,N,-1)
+        # score_inst = self.soft_max(logits_inst)
         # bag classify
-        logits_bag,cluster_num = self.cluster_classifier(clusters_feat,score_inst,clusters_idcs)
+        logits_bag,cluster_num = self.cluster_classifier(clusters_feat,None,clusters_idcs)
+        #print(logits_bag.size())
         del clusters_feat, clusters_idcs
         if is_training:
-            return logits_bag, logits_inst, score_inst,cluster_num
+            #return logits_bag, logits_inst, score_inst,cluster_num
+            return logits_bag, None, None,cluster_num
         else:
-            return logits_bag, logits_inst, score_inst,cluster_num
+            return logits_bag, None, None,cluster_num
+            #return logits_bag, logits_inst, score_inst,cluster_num
 
 @register_model
 def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):
