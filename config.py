@@ -102,7 +102,7 @@ _C.RDD_TRANS.NOT_INST_TEST = True
 
 _C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
 _C.RDD_TRANS.CLUSTER.NAME='gcn'
-_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'euclidean'  # kmeans default euclidean, gcn cosine
+_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # kmeans default euclidean, gcn cosine
 # kmeans paras 
 _C.RDD_TRANS.CLUSTER.NUM_CLUSTER = None
 # _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
@@ -118,8 +118,8 @@ _C.RDD_TRANS.CLUSTER.THR = 0.75
 # -----------------------------------------------------------------------------
 _C.TRAIN = CN()
 _C.TRAIN.START_EPOCH = 0
-_C.TRAIN.EPOCHS = 20
-_C.TRAIN.WARMUP_EPOCHS = 2
+_C.TRAIN.EPOCHS = 30
+_C.TRAIN.WARMUP_EPOCHS = 3
 _C.TRAIN.WEIGHT_DECAY = 0
 _C.TRAIN.BASE_LR = 1e-4
 _C.TRAIN.WARMUP_LR = 5e-7
@@ -248,7 +248,7 @@ _C.LOG_WANDB = False
 _C.LOCAL_RANK = 0
 _C.DISTRIBUTED = False
 _C.WORLD_SIZE = 0
-
+_C.MODEL_EMA = False
 _C.TRAIN_MODE = 't_e'
 
 
@@ -311,6 +311,8 @@ def update_config(config, args):
         config.DATA.PRETRAINED_DIR = args.pretrained_backbone
     if args.train_mode:
         config.TRAIN_MODE = args.train_mode
+    if args.ema:
+        config.MODEL_EMA = args.ema
 
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         config.DISTRIBUTED = int(os.environ['WORLD_SIZE']) > 1

@@ -90,6 +90,7 @@ def parse_option():
     parser.add_argument('--log-wandb', action='store_true', default=False,
                         help='log training and validation metrics to wandb')
     parser.add_argument('--thumb', action='store_true', help='Use thumb data')
+    parser.add_argument('--ema', action='store_true', help='Use thumb data')
     parser.add_argument('--binary-train', action='store_true', help='train the model with binary setting')
     parser.add_argument('--load-test-dir', type=str, metavar='PATH',help='the file of tested data')
     parser.add_argument('--pretrained-backbone', type=str, metavar='PATH',help='the file of pretrained model')
@@ -217,7 +218,7 @@ def main(config):
             return
     teacher_ema = None
     model_ema = None
-    if not config.THUMB_MODE:
+    if not config.THUMB_MODE or config.MODEL_EMA:
         # cpt = torch.load('/home/tangwenhao/rdd/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
         # std = cpt['state_dict']
         # std['head_instance.weight'] = std['head.weight']
@@ -422,7 +423,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         with amp_autocast():
             if config.THUMB_MODE:
                 p = 1
-                predictions,_ = model(samples)
+                predictions = model(samples)
                 #print(predictions)
                 del samples
                 if config.BINARYTRAIN_MODE:
@@ -589,7 +590,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 optimizer.step()
 
             if model_ema is not None:
-                cluster_ema_num_meter.update(sum(cluster_num_ema),b)
+                if not config.THUMB_MODE:
+                    cluster_ema_num_meter.update(sum(cluster_num_ema),b)
                 if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup' or config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
                     #teacher_ema.decay_diff = (epoch * num_steps + idx) / (config.TRAIN.EPOCHS * num_steps)
                     model_ema.decay = 0
@@ -759,7 +761,8 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             loss_meter.update(loss.item(), targets.size(0))
             acc1_meter.update(acc1.item(), targets.size(0))
             acc5_meter.update(acc5.item(), targets.size(0))
-            cluster_num_meter.update(sum(cluster_num),targets.size(0))
+            if not config.THUMB_MODE:
+                cluster_num_meter.update(sum(cluster_num),targets.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
