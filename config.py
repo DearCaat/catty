@@ -56,7 +56,7 @@ _C.DATA.TEST_SPLIT = 'test'
 _C.DATA.EPOCH_REPEATS = 0
 # Default timm thumb image loader
 _C.DATA.TIMM = True
-_C.DATA.TIMM_PREFETCHER = False
+_C.DATA.TIMM_PREFETCHER = True
 
 _C.DATA.PATCH_SIZE=300
 # for cfd 150 cracktree200 150 cqu_bpdd 300
@@ -103,7 +103,7 @@ _C.RDD_TRANS.NOT_INST_TEST = True
 
 _C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
 _C.RDD_TRANS.CLUSTER.NAME='gcn'
-_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # kmeans default euclidean, gcn cosine
+_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'euclidean'  # kmeans default euclidean, gcn cosine
 # kmeans paras 
 _C.RDD_TRANS.CLUSTER.NUM_CLUSTER = None
 # _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
@@ -169,7 +169,7 @@ _C.TRAIN.LOSS.LAMBDA_L1 = 1e-3
 # -----------------------------------------------------------------------------
 _C.AUG = CN()
 # Norm mean and std, default is [IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD], but old wsplin model use [(0.455,0.455,0.455),(0.225,0.225,0.225)]  effi-b3 use [(0.5,0.5,0.5),(0.5,0.5,0.5)]
-_C.AUG.NORM = [IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD]
+_C.AUG.NORM = [(0.3105,0.3105,0.3105),(0.143,0.143,0.143)]
 # Disable all training augmentation, override other train aug args
 _C.AUG.NO_AUG = True
 # Random resize scale (default: 0.08 1.0)

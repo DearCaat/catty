@@ -302,18 +302,18 @@ def main(config):
             if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
                 save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,None,is_ema=True)
 
-    f1 = eval_metrics['macro_f1']
-    is_best = (auc > best_auc if config.BINARYTRAIN_MODE else f1 > max_f1) and epoch>0
-    max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
-    best_auc = max(best_auc,auc) if epoch > 0 else 0
-    max_f1 = max(max_f1,f1)
+        f1 = eval_metrics['macro_f1']
+        is_best = (auc > best_auc if config.BINARYTRAIN_MODE else f1 > max_f1) and epoch>0
+        max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
+        best_auc = max(best_auc,auc) if epoch > 0 else 0
+        max_f1 = max(max_f1,f1)
 
-    update_summary(
-                epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
-                write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
+        update_summary(
+                    epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
+                    write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
 
-    if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-        save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,model_ema)
+        if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
+            save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,model_ema)
 
     logger.info(f'Max accuracy: {max_accuracy:.2f}%\t'
                 f'Max f1: {max_f1:.2f}%\t'
@@ -422,10 +422,12 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         # timm dataloader prefetcher will do this
         if mixup_fn is not None and not config.DATA.TIMM:
             samples, targets = mixup_fn(samples, targets)
-        
+
+        p = 1
+        b = targets.size(0)
+        cluster_num_ema=[0]
         with amp_autocast():
             if config.THUMB_MODE:
-                p = 1
                 predictions = model(samples)
                 #print(predictions)
                 del samples
@@ -440,17 +442,17 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 torch.cuda.empty_cache()
                 # 设定正常图片在类别中的索引
                 pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
-                with torch.no_grad():
-                    _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples)
-                    torch.cuda.empty_cache()
+                
                    #_,pl_inst = teacher_ema.module(samples)
                 #output_pl = torch.nn.functional.softmax(pl_inst,dim=2)
-                
                 if config.RDD_TRANS.INST_NUM_CLASS != 2:
                     targets_pl = targets
                 else:
                     targets_pl = targets_bin
                 if persudo_inst: 
+                    with torch.no_grad():
+                        _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples)
+                        torch.cuda.empty_cache()
                     b,p,cls = pl_inst.shape
                     t_cpu = targets_pl.cpu()
                     ins_t = targets_pl.unsqueeze(-1).repeat((1,p))
@@ -540,17 +542,19 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 classify_loss = criterion(output, targets)
                 loss = classify_loss
 
-                del samples, mask_ins
+                del samples
         
         if not config.DISTRIBUTED:
             loss_meter.update(loss.item(), targets.size(0))
-            if config.THUMB_MODE:
-                dis_ins_meter.update(0 / (targets.size(0) * p),targets.size(0))
-            else:
+
+            if persudo_inst:
                 dis_ins_meter.update(dis_ins / (targets.size(0) * p),targets.size(0))
-            if loss_teacher is not None and o_inst.size(0)>0:
-                loss_teacher_meter.update(loss_pl.item(), targets.size(0))
+                if loss_teacher is not None and o_inst.size(0)>0:
+                    loss_teacher_meter.update(loss_pl.item(), targets.size(0))
+                else:
+                    loss_teacher_meter.update(0, targets.size(0))
             else:
+                dis_ins_meter.update(0 / (targets.size(0) * p),targets.size(0))
                 loss_teacher_meter.update(0, targets.size(0))
        # with torch.autograd.detect_anomaly():
         if config.TRAIN.ACCUMULATION_STEPS > 1:
