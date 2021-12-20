@@ -16,6 +16,7 @@ class RddTransformer(nn.Module):
         elif cluster == kmeans:
             self.cluster_centers = []
             self.cluster_num = kwargs['num_cluster']
+        self.thr = kwargs.pop('select_cluster_thr')
         num_classes = kwargs.pop('num_classes')
         self.instance_feature_extractor=backbone
         self.avgpool = nn.AdaptiveAvgPool1d(1)
@@ -27,7 +28,7 @@ class RddTransformer(nn.Module):
         initialize_weights(self.head_instance)
         initialize_weights(self.head)
 
-    def cluster_classifier(self,clusters_feat,scores_inst,clusters_idcs):
+    def cluster_classifier(self,clusters_feat,scores_inst,clusters_idcs,thr = 0.8):
         B = len(clusters_feat)
         D = clusters_feat[0][0].size(-1)
         cluster_num = []
@@ -61,6 +62,9 @@ class RddTransformer(nn.Module):
         j=0
         for b in range(B):
             max_clu_index = torch.argmax(scores[j:j+cluster_num[b]])
+            # 在测试阶段，如果最高病害置信度小于一定值，那我认为它是正常包，使用置信度最低的一个簇
+            if not self.training and scores[j+max_clu_index] < thr:
+                max_clu_index = torch.argmin(scores[j:j+cluster_num[b]])
             if b == 0:
                 feats = feats_tmp[j:j+cluster_num[b]][max_clu_index]
             else:
@@ -78,7 +82,7 @@ class RddTransformer(nn.Module):
             clusters_feat.append(instance_feat[cluster_indic])
         return clusters_feat
 
-    def forward(self,x,bag_label=None,is_training=False):
+    def forward(self,x,bag_label=None):
         # step 1, get the instance feat by backbone Network
         _, inst_feature=self.instance_feature_extractor.forward_features(x) #B*N*D
         
@@ -123,10 +127,10 @@ class RddTransformer(nn.Module):
         # logits_inst = logits_inst.view(B,N,-1)
         # score_inst = self.soft_max(logits_inst)
         # bag classify
-        logits_bag,cluster_num = self.cluster_classifier(clusters_feat,None,clusters_idcs)
+        logits_bag,cluster_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr)
         #print(logits_bag.size())
         del clusters_feat, clusters_idcs
-        if is_training:
+        if self.training:
             #return logits_bag, logits_inst, score_inst,cluster_num
             return logits_bag, None, None,cluster_num
         else:

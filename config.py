@@ -103,15 +103,16 @@ _C.RDD_TRANS.NOT_INST_TEST = True
 
 _C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
 _C.RDD_TRANS.CLUSTER.NAME='gcn'
-_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'euclidean'  # kmeans default euclidean, gcn cosine
+_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # kmeans default euclidean, gcn cosine
 # kmeans paras 
 _C.RDD_TRANS.CLUSTER.NUM_CLUSTER = None
 # _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
 # _C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
 # gcn paras
-_C.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION = 3
-_C.RDD_TRANS.CLUSTER.IPS_K_AT_HOP = (3,0)  # 先不考虑第二跳，因为效率问题
+_C.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION = 2
+_C.RDD_TRANS.CLUSTER.IPS_K_AT_HOP = (2,0)  # 先不考虑第二跳，因为效率问题
 _C.RDD_TRANS.CLUSTER.THR = 0.75
+_C.RDD_TRANS.CLUSTER.SELECT_THR = 0.5
 
 
 # -----------------------------------------------------------------------------
@@ -169,7 +170,7 @@ _C.TRAIN.LOSS.LAMBDA_L1 = 1e-3
 # -----------------------------------------------------------------------------
 _C.AUG = CN()
 # Norm mean and std, default is [IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD], but old wsplin model use [(0.455,0.455,0.455),(0.225,0.225,0.225)]  effi-b3 use [(0.5,0.5,0.5),(0.5,0.5,0.5)]
-_C.AUG.NORM = [(0.3105,0.3105,0.3105),(0.143,0.143,0.143)]
+_C.AUG.NORM = [IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD]
 # Disable all training augmentation, override other train aug args
 _C.AUG.NO_AUG = True
 # Random resize scale (default: 0.08 1.0)

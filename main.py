@@ -286,7 +286,7 @@ def main(config):
         acc1, acc5,loss,auc,eval_metrics = validate(config, data_loader_val, model_without_ddp,amp_autocast=amp_autocast,criterion=criterion)
         if teacher_ema is not None:
             acc1_ema, acc5_ema,loss_ema,auc_ema,eval_metrics_ema = validate(config, data_loader_val, teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion)
-        if model_ema is not None:
+        elif model_ema is not None:
             acc1_ema, acc5_ema,loss_ema,auc_ema,eval_metrics_ema = validate(config, data_loader_val, model_ema.module,amp_autocast=amp_autocast,criterion=criterion)
         logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
         for i in range(len(thr_list)):
@@ -317,6 +317,7 @@ def main(config):
 
     logger.info(f'Max accuracy: {max_accuracy:.2f}%\t'
                 f'Max f1: {max_f1:.2f}%\t'
+                f'Max ema_f1: {max_f1_ema:.2f}%\t'
                 f'Best AUC: {best_auc:.2f}%')
     # except:
     #     print(torch.cuda.memory_stats())
@@ -534,11 +535,12 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     label_pl = label_pl.view(-1)
                     o_inst = o_inst.view(-1,cls)
                     patch_num_meter.update(len(label_pl) / (p*b),b)
-                    cluster_num_meter.update(sum(cluster_num) / b,b)
                     if o_inst.size(0)>0:
                         loss_pl = loss_teacher(o_inst,label_pl)
                     else:
                         loss_pl = 0
+
+                cluster_num_meter.update(sum(cluster_num) / b,b)
                 classify_loss = criterion(output, targets)
                 loss = classify_loss
 
@@ -651,7 +653,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 f'cluster_ema_num {cluster_ema_num_meter.val:.4f} ({cluster_ema_num_meter.avg:.4f}) \t'
                 #f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
                 f'mem {memory_used:.0f}MB')
-    if not config.THUMB_MODE and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+    if persudo_inst and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
         for i in range(len(thr_list)):
             dis_ratio_tmp= np.sort(np.array(dis_ratio_list[i]))
             thr_list[i] = 0.75 * thr_list[i] + 0.25 * dis_ratio_tmp[math.floor(len(dis_ratio_tmp) * 0.01)]
@@ -707,8 +709,8 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                 output = model(images)
             if isinstance(output, (tuple, list)):
                 index = 0 if config.THUMB_MODE or config.RDD_TRANS.NOT_INST_TEST else 1
-                output = output[index]
                 cluster_num = output[-1]
+                output = output[index]
 
             output_soft = torch.nn.functional.softmax(output,dim=-1)
 
@@ -769,7 +771,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             acc1_meter.update(acc1.item(), targets.size(0))
             acc5_meter.update(acc5.item(), targets.size(0))
             if not config.THUMB_MODE:
-                cluster_num_meter.update(sum(cluster_num),targets.size(0))
+                cluster_num_meter.update(sum(cluster_num) / targets.size(0),targets.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
