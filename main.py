@@ -198,7 +198,7 @@ def main(config):
             else:
                 acc1, acc5, loss, auc,pred,label,eval_metrics = validate(config, data_loader_test, model,save_pre=True,amp_autocast=amp_autocast,criterion=criterion)
                 logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
-                _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[1])+'.npz'
+                _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
                 np.savez(_save_path,pred=pred,label=label)
                 if 'cqu_bpdd' in config.DATA.DATASET:
                     for m in range(len(label)):
@@ -377,10 +377,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     model.train()
     torch.cuda.empty_cache()
     loss_teacher = None
-    if teacher_ema is not None:
-        teacher_ema.module.eval()
-    if model_ema is not None:
-        model_ema.module.eval()
+
     if not config.THUMB_MODE:
         loss_teacher = torch.nn.CrossEntropyLoss()
         loss_teacher.cuda()
@@ -686,6 +683,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
 
     end = time.time()
     last_idx = len(data_loader) - 1
+    
     with torch.no_grad():
         for idx, (images, targets) in enumerate(data_loader):
             last_batch = idx == last_idx
@@ -787,13 +785,16 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     f'Acc@5 {acc5_meter.val:.3f} ({acc5_meter.avg:.3f})\t'
                     f'Cluster_num {cluster_num_meter.val:.3f} ({cluster_num_meter.avg:.3f})\t'
                     f'Mem {memory_used:.0f}MB')
-
+            
         save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
         ma_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='macro')
         mi_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='micro')
         auc = 0
         #if config.BINARYTRAIN_MODE:
-        auc = roc_auc_score(np.array(save_label!=6,dtype=int), 1-save_pred[:,6])
+        try:
+            auc = roc_auc_score(np.array(save_label!=6,dtype=int), 1-save_pred[:,6])
+        except:
+            print(save_pred)
         logger.info(f' * Acc@1 {acc1_meter.avg:.3f} Acc@5 {acc5_meter.avg:.3f} AUC {auc*100:.3f} F1@Macro {ma_f1*100:.3f} F1@Micro {mi_f1*100:.3f}')
     metrics = OrderedDict([('loss', loss_meter.avg), ('top1', acc1_meter.avg), ('top5', acc5_meter.avg),('auc',auc),('macro_f1',ma_f1),('micro_f1',mi_f1)])
     torch.cuda.empty_cache()
@@ -856,7 +857,7 @@ if __name__ == '__main__':
     assert rank >= 0
     
         
-    #random_seed(config.SEED, rank)
+    random_seed(config.SEED, rank)
     cudnn.benchmark = True
 
     # linear scale the learning rate according to total batch size, may not be optimal

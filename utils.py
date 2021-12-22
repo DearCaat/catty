@@ -162,7 +162,7 @@ class ModelEmaV3(torch.nn.Module):
     This class is sensitive where it is initialized in the sequence of model init,
     GPU assignment and distributed training wrappers.
     """
-    def __init__(self, model, decay=0.9999, device=None,diff_layers = []):
+    def __init__(self, model, decay=0.9999, device=None,diff_layers = [],ban_para = [],init_para=[]):
         super(ModelEmaV3, self).__init__()
         # make a copy of the model for accumulating moving average of weights
         self.module = deepcopy(model)
@@ -170,6 +170,7 @@ class ModelEmaV3(torch.nn.Module):
         self.decay = decay
         self.decay_diff = decay
         self.diff_layers = diff_layers
+        self.ban_para = ban_para
         self.device = device  # perform ema on different device from model if set
         if self.device is not None:
             self.module.to(device=device)
@@ -179,10 +180,11 @@ class ModelEmaV3(torch.nn.Module):
             for k,ema_v, model_v in zip(self.module.state_dict().keys(),self.module.state_dict().values(), model.state_dict().values()):
                 if self.device is not None:
                     model_v = model_v.to(device=self.device)
-                if k.split('.')[0] in self.diff_layers:
-                    ema_v.copy_(update_fn(ema_v, model_v,self.decay_diff))
-                else:
-                    ema_v.copy_(update_fn(ema_v, model_v,self.decay))
+                if k.split('.')[0] not in self.ban_para:
+                    if k.split('.')[0] in self.diff_layers:
+                        ema_v.copy_(update_fn(ema_v, model_v,self.decay_diff))
+                    else:
+                        ema_v.copy_(update_fn(ema_v, model_v,self.decay))
 
     def update(self, model):
         self._update(model, update_fn=lambda e, m, decay: decay * e + (1. - decay) * m)

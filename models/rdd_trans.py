@@ -1,8 +1,11 @@
+from networkx.algorithms import cluster
+from numpy.core.fromnumeric import size
 import torch.nn as nn
 from timm.models.registry import register_model
 from .gcn_cluster import *
 from .swin import _create_swin_transformer
-from cv2 import kmeans
+from kmeans_pytorch import kmeans,kmeans_predict
+
 
 class RddTransformer(nn.Module):
     # 二分类考虑用BCE + Node (512,1)  多分类使用CE + Node(512,cls)
@@ -10,12 +13,14 @@ class RddTransformer(nn.Module):
         super().__init__()
         self.cluster_model = cluster
         self.cluster_distance = kwargs['cluster_distance']
+        self.cluster_num = None
         if type(cluster)==GCN:
             self.graph = graph
             self.clustre_thr = kwargs['cluster_thr']
         elif cluster == kmeans:
-            self.cluster_centers = []
             self.cluster_num = kwargs['num_cluster']
+            self.register_parameter('cluster_centers',nn.Parameter(torch.zeros(size=(self.cluster_num,dim)),requires_grad=False))
+            
         self.thr = kwargs.pop('select_cluster_thr')
         num_classes = kwargs.pop('num_classes')
         self.instance_feature_extractor=backbone
@@ -28,24 +33,33 @@ class RddTransformer(nn.Module):
         initialize_weights(self.head_instance)
         initialize_weights(self.head)
 
-    def cluster_classifier(self,clusters_feat,scores_inst,clusters_idcs,thr = 0.8):
+    def cluster_classifier(self,clusters_feat,scores_inst,clusters_idcs,thr = 0.8,cluster_num=None,clusters_mask=None):
         B = len(clusters_feat)
         D = clusters_feat[0][0].size(-1)
-        cluster_num = []
+        clusters_num = [] if cluster_num == None else [cluster_num] * B
         for b in range(B):
-            C = len(clusters_feat[b])
-            cluster_num.append(C)
+            if cluster_num is not None:
+                C = cluster_num
+            else:
+                C = len(clusters_feat[b])
+                clusters_num.append(C)
+                
             for i in range(C):
                 # score, index_inst = torch.max(scores_inst[b,clusters_idcs[b][i],1], dim=0)
                 # if i == 0:
                 #     scores = score.unsqueeze_(0)
                 # else:
                 #     scores = torch.cat((scores,score.unsqueeze_(0)))
-                if b==0 and i == 0:
-                    feats_tmp = self.avgpool(clusters_feat[b][i].transpose(0,1)).unsqueeze(0)
+                if clusters_mask is not None:
+                    if b==0 and i == 0:
+                        feats_tmp = self.avgpool(clusters_feat[b][clusters_mask[i][b]].transpose(0,1)).unsqueeze(0)
+                    else:
+                        feats_tmp = torch.cat((feats_tmp,self.avgpool(clusters_feat[b][clusters_mask[i][b]].transpose(0,1)).unsqueeze(0)))
                 else:
-                    feats_tmp = torch.cat((feats_tmp,self.avgpool(clusters_feat[b][i].transpose(0,1)).unsqueeze(0)))
-            
+                    if b==0 and i == 0:
+                        feats_tmp = self.avgpool(clusters_feat[b][i].transpose(0,1)).unsqueeze(0)
+                    else:
+                        feats_tmp = torch.cat((feats_tmp,self.avgpool(clusters_feat[b][i].transpose(0,1)).unsqueeze(0)))
             # 选取病害置信度最高实例所在的簇，并将这个簇中所有实例的平均特征作为包特征，对于病害包来说，这是完全正确的，需要选取病害部分来做为包的代表，对于正常包来说，这样做能够使得网络模型的鲁棒性更强，这主要是因为这要求正常包里最像病害的部分也强约束成正常
             #max_clu_index = torch.argmax(scores)
             # if b == 0:
@@ -55,37 +69,77 @@ class RddTransformer(nn.Module):
             #     feats = torch.cat((feats,self.avgpool(clusters_feat[b][max_clu_index].transpose(0, 1)).unsqueeze_(0)))
         
         #feats = feats.view(B,-1)
+        if torch.isnan(feats_tmp).any() == True:
+            print('feats_tmp:')
+            print(feats_tmp)
         feats_tmp = feats_tmp.view(-1,D)
         feats_tmp = self.head(feats_tmp)
         scores = self.soft_max(feats_tmp)
         scores = 1 - scores[:,6]
-        j=0
-        for b in range(B):
-            max_clu_index = torch.argmax(scores[j:j+cluster_num[b]])
+        #簇数量固定时，尽量不使用循环
+        if cluster_num is not None:
+            scores = scores.view(B,cluster_num)
+            mask_max = scores.clone()
+            mask_max[:,:] = 0
+            max_clu_index = torch.argmax(scores,dim=1).view(B,1)
+            mask_max = mask_max.scatter_(1,max_clu_index,1) == 1
             # 在测试阶段，如果最高病害置信度小于一定值，那我认为它是正常包，使用置信度最低的一个簇
-            if not self.training and scores[j+max_clu_index] < thr:
-                max_clu_index = torch.argmin(scores[j:j+cluster_num[b]])
-            if b == 0:
-                feats = feats_tmp[j:j+cluster_num[b]][max_clu_index]
-            else:
-                feats = torch.cat((feats,feats_tmp[j:j+cluster_num[b]][max_clu_index]))
-            j = j+cluster_num[b]
+            if not self.training:
+                mask_min = scores.clone()
+                mask_min[:,:] = 0
+                min_clu_index = torch.argmin(scores,dim=1).view(B,1)
+                mask_min = mask_min.scatter_(1,min_clu_index,1) == 1
+                inverse_mask = scores[mask_max] < thr
+                mask_max[inverse_mask] = mask_min[inverse_mask]
+            feats_tmp = feats_tmp.view(B,cluster_num,-1)
+            feats = feats_tmp[mask_max]
+        else:
+            j=0
+            for b in range(B):
+                max_clu_index = torch.argmax(scores[j:j+cluster_num[b]])
+                # 在测试阶段，如果最高病害置信度小于一定值，那我认为它是正常包，使用置信度最低的一个簇
+                if not self.training and scores[j+max_clu_index] < thr:
+                    max_clu_index = torch.argmin(scores[j:j+cluster_num[b]])
+                if b == 0:
+                    feats = feats_tmp[j:j+cluster_num[b]][max_clu_index]
+                else:
+                    feats = torch.cat((feats,feats_tmp[j:j+cluster_num[b]][max_clu_index]))
+                j = j+cluster_num[b]
 
-        return feats.view(B,-1),cluster_num
+        return feats.view(B,-1),clusters_num
     
     # for kmeans
-    def kmeans_cluster(self,instance_feat,clusters_indic):
+    def kmeans_cluster(self,inst_feature):
         #assert len(instance_feat.shape) == 3 and len(clusters_indic.shape)==2
-        clusters_feat = list()
+        B,N,D = inst_feature.shape
+        for b in range(B):
+            if self.training:
+                # 这里更改原始实现里最后返回部分，原始实现中这里最后强制返回cpu向量，我去掉了这一部分
+                clu_labels,self.get_parameter('cluster_centers').data = self.cluster_model(X=inst_feature[b],num_clusters=self.cluster_num,device=torch.cuda.current_device(),cluster_centers = self.get_parameter('cluster_centers').data if self.get_parameter('cluster_centers').data.any() != 0 else [],tqdm_flag=False,distance=self.cluster_distance)
+            else:
+                clu_labels = kmeans_predict(X=inst_feature[b],device=torch.cuda.current_device(),cluster_centers = self.get_parameter('cluster_centers').data,tqdm_flag=False,distance=self.cluster_distance)
+
+            clu_labels = torch.unsqueeze(clu_labels,dim=0)
+            if b == 0:
+                    clusters_idcs = clu_labels.clone()
+            else:
+                clusters_idcs = torch.cat((clusters_idcs,clu_labels))
+        
+        #cluster mask for generate cluster features
         for i in range(self.cluster_num):
-            cluster_indic = clusters_indic - i == 0
-            clusters_feat.append(instance_feat[cluster_indic])
-        return clusters_feat
+            cluster_mask = clusters_idcs - i == 0
+            if i == 0:
+                clusters_mask = cluster_mask.clone().unsqueeze(0)
+            else:
+                clusters_mask = torch.cat((clusters_mask,cluster_mask.clone().unsqueeze(0)))
+        return clusters_idcs,clusters_mask
 
     def forward(self,x,bag_label=None):
         # step 1, get the instance feat by backbone Network
         _, inst_feature=self.instance_feature_extractor.forward_features(x) #B*N*D
-        
+        if torch.isnan(inst_feature).any() == True:
+            print('inst:')
+            print(inst_feature)
         B,N,D = inst_feature.shape
         # step 2, cluster 
         if type(self.cluster_model) == GCN:
@@ -106,15 +160,10 @@ class RddTransformer(nn.Module):
         # 暂时放弃kmeans
         else:
             # kmeans cluster 
-            for b in range(B):
-                clu_labels,self.cluster_centers = self.cluster_model(X=inst_feature[b],num_clusters=self.cluster_num,device=torch.cuda.current_device(),cluster_centers = self.cluster_centers,tqdm_flag=False,distance=self.cluster_distance)
-                clu_labels = torch.unsqueeze(clu_labels,dim=0)
-                if b == 0:
-                     cluster_indic = clu_labels.clone()
-                else:
-                    cluster_indic = torch.cat((cluster_indic,clu_labels))
+            
             # find cluster features
-            clusters_feat = self.kmeans_cluster(inst_feature,cluster_indic)
+            clusters_idcs,clusters_mask = self.kmeans_cluster(inst_feature)
+            clusters_feat = inst_feature
         # for i in range(len(clusters_feat)):
         #     for m in range(len(clusters_feat[i])):
         #         print(clusters_feat[i][m].size())
@@ -127,7 +176,7 @@ class RddTransformer(nn.Module):
         # logits_inst = logits_inst.view(B,N,-1)
         # score_inst = self.soft_max(logits_inst)
         # bag classify
-        logits_bag,cluster_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr)
+        logits_bag,cluster_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = self.cluster_num,clusters_mask=clusters_mask)
         #print(logits_bag.size())
         del clusters_feat, clusters_idcs
         if self.training:
