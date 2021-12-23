@@ -107,7 +107,7 @@ _C.RDD_TRANS.CLUSTER.NAME='kmeans'    #kmeans gcn
 _C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # euclidean cosine, default cosine, it's often better
 _C.RDD_TRANS.CLUSTER.SELECT_THR = 0.9
 # kmeans paras 
-_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 5
+_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 4
 _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
 _C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
 # gcn paras
