@@ -401,7 +401,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     start = time.time()
     end = time.time()
     last_idx = len(data_loader) - 1
-    persudo_inst = False
+    persudo_inst = config.RDD_TRANS.PERSUDO_LEARNING
 
     for idx, (samples, targets) in enumerate(data_loader):
         last_batch = idx == last_idx

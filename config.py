@@ -100,13 +100,14 @@ _C.RDD_TRANS.NOR_THR = 0.05
 _C.RDD_TRANS.TEST_THR = 0.995
 _C.RDD_TRANS.INST_NUM_CLASS = 2
 _C.RDD_TRANS.NOT_INST_TEST = True
+_C.RDD_TRANS.PERSUDO_LEARNING = False
 
 _C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
 _C.RDD_TRANS.CLUSTER.NAME='kmeans'    #kmeans gcn
-_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # kmeans default euclidean, gcn cosine
+_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # euclidean cosine, default cosine, it's often better
 _C.RDD_TRANS.CLUSTER.SELECT_THR = 0.9
 # kmeans paras 
-_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 2
+_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 4
 _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
 _C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
 # gcn paras
