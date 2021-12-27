@@ -787,14 +787,24 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     f'Mem {memory_used:.0f}MB')
             
         save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
-        ma_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='macro')
-        mi_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='micro')
         auc = 0
+        if config.BINARYTRAIN_MODE:
+            ma_f1 = f1_score(np.array(save_label!=6,dtype=int),np.argmax(save_pred,axis=1),average='bianry')
+            mi_f1 = ma_f1
+            try:
+                auc = roc_auc_score(np.array(save_label!=6,dtype=int), save_pred[:,1])
+            except:
+                print(save_pred)
+        else:
+            ma_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='macro')
+            mi_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='micro')
+            try:
+                auc = roc_auc_score(np.array(save_label!=6,dtype=int), 1-save_pred[:,6])
+            except:
+                print(save_pred)
+        
         #if config.BINARYTRAIN_MODE:
-        try:
-            auc = roc_auc_score(np.array(save_label!=6,dtype=int), 1-save_pred[:,6])
-        except:
-            print(save_pred)
+        
         logger.info(f' * Acc@1 {acc1_meter.avg:.3f} Acc@5 {acc5_meter.avg:.3f} AUC {auc*100:.3f} F1@Macro {ma_f1*100:.3f} F1@Micro {mi_f1*100:.3f}')
     metrics = OrderedDict([('loss', loss_meter.avg), ('top1', acc1_meter.avg), ('top5', acc5_meter.avg),('auc',auc),('macro_f1',ma_f1),('micro_f1',mi_f1)])
     torch.cuda.empty_cache()
@@ -817,7 +827,6 @@ if __name__ == '__main__':
     if config.LOG_WANDB:
         if has_wandb:
             wandb.init(project=config.EXP_NAME, config=config)
-            print('a')
         else: 
             logger.warning("You've requested to log metrics to wandb but package not found. "
                             "Metrics not being logged to wandb, try `pip install wandb`")

@@ -67,8 +67,8 @@ _C.DATA.CROP_SIZE=300
 # Model settings
 # -----------------------------------------------------------------------------
 _C.MODEL = CN()
-# Model type        #swin_small_patch4_window7_224  efficientnetv2_rw_s  deit_base_patch16_224
-_C.MODEL.NAME = 'cluster_swin_small_patch4_window7_224'
+# Model type        #swin_small_patch4_window7_224  efficientnetv2_rw_s  deit_base_patch16_224  tf_efficientnet_b3 vit_base_patch32_224
+_C.MODEL.NAME = 'deit_small_patch16_224'
 # Model name
 _C.MODEL.BACKBONE = ''
 # Checkpoint to resume, could be overwritten by command line argument
@@ -105,7 +105,7 @@ _C.RDD_TRANS.PERSUDO_LEARNING = False
 _C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
 _C.RDD_TRANS.CLUSTER.NAME='kmeans'    #kmeans gcn
 _C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # euclidean cosine, default cosine, it's often better
-_C.RDD_TRANS.CLUSTER.SELECT_THR = 0.9
+_C.RDD_TRANS.CLUSTER.SELECT_THR = 0.5
 # kmeans paras 
 _C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 4
 _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default

@@ -18,6 +18,7 @@ import torch.nn.functional as F
 from torch.nn import init
 import networkx as nx
 import torch.multiprocessing as mp
+from .similarity import similarity_matrix
 
 def gcn_cluster(edge_col_indices,scores,feat,thr=0.75):
     #B,N,K1 = edge_col_indices.shape
@@ -38,40 +39,6 @@ def gcn_cluster(edge_col_indices,scores,feat,thr=0.75):
             cluster_idcs[b].append(c)
     #del crow_indices
     return cluster_feat,cluster_idcs
-
-    new_feat=[]
-    new_graph=connected_component(edges,scores)
-    for i in new_graph:
-        ips_graph=list()
-        for j in i:
-            ips_graph.append(vectors[j])
-        ips_graph = torch.stack(ips_graph,0)
-        ips_graph=torch.mean(ips_graph,dim=0)
-        new_feat.append(ips_graph)
-    new_feature = torch.stack(new_feat,0)
-    return new_feature
-
-def ConsineDistance(vectors):
-    """
-    Implementation of adjacency matrix
-    """
-    B,N,D = vectors.shape
-    cosine_similarity = torch.nn.CosineSimilarity(dim=-1)
-    vecs_i = vectors.unsqueeze(1).repeat(1, N, 1, 1)                # (B, N , N, feature_dim)
-    vecs_j = vectors.unsqueeze(2).repeat(1, 1, N, 1)                # (B, N , N, feature_dim)
-    similarity = cosine_similarity(vecs_i, vecs_j)
-    # sort_index = torch.argsort(similarity, dim=-1, descending=True)[:, 1:k+1]
-    # A = torch.zeros(N,N)
-    # A[np.repeat(np.arange(N), k), sort_index.flatten()] = 1
-    return similarity   # (B, N,N)
-
-def EuclideanDistances(vectors):
-    B,N,D = vectors.shape
-    pdist = torch.nn.PairwiseDistance()
-    a = vectors.unsqueeze(1).repeat(1, N, 1, 1)                # (B, N , N, feature_dim)
-    b = vectors.unsqueeze(2).repeat(1, 1, N, 1)                # (B, N , N, feature_dim)
-    similarity = pdist(a, b)
-    return similarity
 
 def normalize_adj(A, type="AD"):
     if type == "DAD":
@@ -190,11 +157,11 @@ class KnnGraph(object):
         self.distance = distance
     def get_KNN(self,feats,distance='cosine'):
         if distance == 'cosine':
-            similarity_matrix=ConsineDistance(feats)  # B*N*N
-            knn_graph = torch.argsort(similarity_matrix, axis=2,descending=True)  # B*N*N
+            _similarity_matrix=similarity_matrix(feats,feats,'cosine')  # B*N*N
+            knn_graph = torch.argsort(_similarity_matrix, axis=2,descending=True)  # B*N*N
         elif distance == 'euclidean':
-            similarity_matrix=EuclideanDistances(feats)
-            knn_graph = torch.argsort(similarity_matrix, axis=2,descending=False)  # B*N*N
+            _similarity_matrix=similarity_matrix(feats,feats,'euclidean')
+            knn_graph = torch.argsort(_similarity_matrix, axis=2,descending=False)  # B*N*N
         return knn_graph
     def get_KNN_adj(self,knn=None,feat=None):
         if knn==None and feat is not None:

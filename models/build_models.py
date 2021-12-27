@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from timm.models import create_model
 from .swin import *
-from .deit import *
 from .rdd_trans import *
 
 def build_model(config):
