@@ -22,12 +22,18 @@ def build_model(config):
             cluster_thr = config.RDD_TRANS.CLUSTER.THR,
             select_cluster_thr = config.RDD_TRANS.CLUSTER.SELECT_THR
         )
-    else:
+    elif model_name.startswith('vgg'):
         model = create_model(
             config.MODEL.NAME,
             pretrained=config.MODEL.PRETRAINED,
             num_classes=config.MODEL.NUM_CLASSES,
-            drop_rate=config.MODEL.DROP_RATE,
-            drop_path_rate=config.MODEL.DROP_PATH_RATE
+        )
+    else:
+        # drop_rate=config.MODEL.DROP_RATE,
+        # drop_path_rate=config.MODEL.DROP_PATH_RATE
+        model = create_model(
+            config.MODEL.NAME,
+            pretrained=config.MODEL.PRETRAINED,
+            num_classes=config.MODEL.NUM_CLASSES,
         )
     return model

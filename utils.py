@@ -39,19 +39,21 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger):
     logger.info(msg)
     max_accuracy = 0.0
     best_auc = 0.0
-    if not config.TRAIN_MODE=='eval' and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-        config.defrost()
-        config.TRAIN.START_EPOCH = checkpoint['epoch'] + 1
-        config.freeze()
-        if 'amp' in checkpoint and config.APEX_AMP and checkpoint['config'].APEX_AMP:
-            amp.initialize(model, opt_level='O1')
-            amp.load_state_dict(checkpoint['amp'])
-        logger.info(f"=> loaded successfully '{config.MODEL.RESUME}' (epoch {checkpoint['epoch']})")
-        if 'max_accuracy' in checkpoint and 'best_auc' in checkpoint:
-            max_accuracy = checkpoint['max_accuracy']
-            best_auc = checkpoint['best_auc']
+    if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e' :
+        if 'lr_scheduler' in checkpoint:
+            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+        if 'optimizer' in checkpoint and 'epoch' in checkpoint:
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            config.defrost()
+            config.TRAIN.START_EPOCH = checkpoint['epoch'] + 1
+            config.freeze()
+            if 'amp' in checkpoint and config.APEX_AMP and checkpoint['config'].APEX_AMP:
+                amp.initialize(model, opt_level='O1')
+                amp.load_state_dict(checkpoint['amp'])
+            logger.info(f"=> loaded successfully '{config.MODEL.RESUME}' (epoch {checkpoint['epoch']})")
+            if 'max_accuracy' in checkpoint and 'best_auc' in checkpoint:
+                max_accuracy = checkpoint['max_accuracy']
+                best_auc = checkpoint['best_auc']
 
     del checkpoint
     torch.cuda.empty_cache()
@@ -60,12 +62,13 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger):
 def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,ema,is_ema=False):
     save_state = {'state_dict': model.state_dict(),
                   'optimizer': optimizer.state_dict(),
-                  'lr_scheduler': lr_scheduler.state_dict(),
                   'max_accuracy': max_accuracy,
                   'best_auc': best_auc,
                   'epoch': epoch,
                   'config': config,
                   'ema':ema.module.state_dict() if ema is not None else None}
+    if config.TRAIN.LR_SCHEDULER.NAME is not None:
+        save_state['lr_scheduler'] = lr_scheduler.state_dict()
     if config.APEX_AMP:
         amp.initialize(model, opt_level='O1')
         save_state['amp'] = amp.state_dict()

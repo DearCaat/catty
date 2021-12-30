@@ -94,10 +94,11 @@ def parse_option():
     parser.add_argument('--binary-train', action='store_true', help='train the model with binary setting')
     parser.add_argument('--load-test-dir', type=str, metavar='PATH',help='the file of tested data')
     parser.add_argument('--pretrained-backbone', type=str, metavar='PATH',help='the file of pretrained model')
-    parser.add_argument('--train-mode', type=str, default='t_e', choices=['train', 'eval', 't-e'],
+    parser.add_argument('--train-mode', type=str, default='t_e', choices=['train', 'eval', 't-e','predict'],
                         help='train: only train, '
                              'eval: only test , '
-                             't_e: first train the model, and use it to eval')
+                             't_e: first train the model, and use it to eval'
+                             'predict: only output predict score')
 
     # distributed training
     parser.add_argument("--local_rank", default=0, type=int, help='local rank for DistributedDataParallel')
@@ -109,7 +110,7 @@ def parse_option():
 
 
 def main(config):
-    if not config.TRAIN_MODE=='eval':
+    if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e':
         dataset_train, dataset_val, data_loader_train, data_loader_val, mixup_fn = build_loader(is_train=True,config=config)
     else:
         dataset_test,data_loader_test = build_loader(is_train=False,config=config)
@@ -159,7 +160,7 @@ def main(config):
             logger.info('AMP not enabled. Training in float32.')
 
     # setup learning rate schedule and starting epoch
-    if config.TRAIN_MODE=='eval':
+    if config.TRAIN_MODE=='eval' or config.TRAIN_MODE=='predict':
         lr_scheduler = ''
     else:
         lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train))
@@ -215,6 +216,12 @@ def main(config):
                 stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
                 patr=getDataByStick([precision,recall],stick)
                 logger.info(patr)
+            return
+        elif config.TRAIN_MODE=='predict':
+            pred,label= predict(config, data_loader_test, model,amp_autocast=amp_autocast)
+            _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_predict_'+config.DATA.DATASET.split('/')[-1])+'.npz'
+            np.savez(_save_path,pred=pred,label=label)
+
             return
     teacher_ema = None
     model_ema = None
@@ -604,11 +611,11 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
                     model_ema.decay = config.RDD_TRANS.EMA_DECAY if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH else model_ema.decay
                 model_ema.update(model)
-
-            if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
-                lr_scheduler.step(epoch * num_steps + idx)
-            else:
-                lr_scheduler.step_update(epoch * num_steps + idx)
+            if config.TRAIN.LR_SCHEDULER.NAME is not None:
+                if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
+                    lr_scheduler.step(epoch * num_steps + idx)
+                else:
+                    lr_scheduler.step_update(epoch * num_steps + idx)
         if teacher_ema is not None:
             if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup' or config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
                 #teacher_ema.decay_diff = (epoch * num_steps + idx) / (config.TRAIN.EPOCHS * num_steps)
@@ -667,6 +674,65 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         optimizer.sync_lookahead()
     torch.cuda.empty_cache()
     return loss,OrderedDict([('loss', loss_meter.avg)])
+
+def predict(config, data_loader, model,amp_autocast=suppress, log_suffix=''):
+    model.eval()
+    torch.cuda.empty_cache()
+
+    batch_time = AverageMeter()
+    
+    save_pred = np.array([])
+    save_label = np.array([])
+
+    end = time.time()
+    last_idx = len(data_loader) - 1
+    
+    with torch.no_grad():
+        for idx, (images, targets) in enumerate(data_loader):
+            last_batch = idx == last_idx
+            # timm dataloader prefetcher will do this
+            if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
+                images = images.cuda(non_blocking=True)
+                targets = targets.cuda(non_blocking=True)
+
+            #if config.EVAL_MODE:
+            targets_bin = targets.clone()
+
+            if 'cqu_bpdd' in config.DATA.DATASET:
+                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
+                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+            # compute output
+            with amp_autocast():
+                output = model(images)
+            if isinstance(output, (tuple, list)):
+                index = 0 if config.THUMB_MODE or config.RDD_TRANS.NOT_INST_TEST else 1
+
+                output = output[index]
+
+            output_soft = torch.nn.functional.softmax(output,dim=-1)
+    
+            save_pred = np.append(save_pred,output_soft.cpu().numpy())
+            save_label = np.append(save_label,targets.cpu().numpy())
+            
+            torch.cuda.synchronize()
+
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            if last_batch or idx % config.PRINT_FREQ == 0:
+                memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+                logger.info(
+                    f'Test: [{idx}/{len(data_loader)}]\t'
+                    f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                    f'Mem {memory_used:.0f}MB')
+            
+        save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
+
+    torch.cuda.empty_cache()
+
+    return save_pred,save_label
+
 
 def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, log_suffix='',criterion=None):
     model.eval()
@@ -789,7 +855,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
         save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
         auc = 0
         if config.BINARYTRAIN_MODE:
-            ma_f1 = f1_score(np.array(save_label!=6,dtype=int),np.argmax(save_pred,axis=1),average='bianry')
+            ma_f1 = f1_score(np.array(save_label!=6,dtype=int),np.argmax(save_pred,axis=1),average='binary')
             mi_f1 = ma_f1
             try:
                 auc = roc_auc_score(np.array(save_label!=6,dtype=int), save_pred[:,1])
