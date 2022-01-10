@@ -35,26 +35,30 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger):
             config.MODEL.RESUME, map_location='cpu', check_hash=True)
     else:
         checkpoint = torch.load(config.MODEL.RESUME, map_location='cpu')
-    msg = model.load_state_dict(checkpoint['state_dict'], strict=False)
-    logger.info(msg)
-    max_accuracy = 0.0
-    best_auc = 0.0
-    if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e' :
-        if 'lr_scheduler' in checkpoint:
-            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-        if 'optimizer' in checkpoint and 'epoch' in checkpoint:
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            config.defrost()
-            config.TRAIN.START_EPOCH = checkpoint['epoch'] + 1
-            config.freeze()
-            if 'amp' in checkpoint and config.APEX_AMP and checkpoint['config'].APEX_AMP:
-                amp.initialize(model, opt_level='O1')
-                amp.load_state_dict(checkpoint['amp'])
-            logger.info(f"=> loaded successfully '{config.MODEL.RESUME}' (epoch {checkpoint['epoch']})")
-            if 'max_accuracy' in checkpoint and 'best_auc' in checkpoint:
-                max_accuracy = checkpoint['max_accuracy']
-                best_auc = checkpoint['best_auc']
-
+    # 是否只读取模型
+    if 'state_dict' in checkpoint:
+        msg = model.load_state_dict(checkpoint['state_dict'], strict=False)
+        logger.info(msg)
+        max_accuracy = 0.0
+        best_auc = 0.0
+        if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e' :
+            if 'lr_scheduler' in checkpoint:
+                lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+            if 'optimizer' in checkpoint and 'epoch' in checkpoint:
+                optimizer.load_state_dict(checkpoint['optimizer'])
+                config.defrost()
+                config.TRAIN.START_EPOCH = checkpoint['epoch'] + 1
+                config.freeze()
+                if 'amp' in checkpoint and config.APEX_AMP and checkpoint['config'].APEX_AMP:
+                    amp.initialize(model, opt_level='O1')
+                    amp.load_state_dict(checkpoint['amp'])
+                logger.info(f"=> loaded successfully '{config.MODEL.RESUME}' (epoch {checkpoint['epoch']})")
+                if 'max_accuracy' in checkpoint and 'best_auc' in checkpoint:
+                    max_accuracy = checkpoint['max_accuracy']
+                    best_auc = checkpoint['best_auc']
+    else:
+        msg = model.load_state_dict(checkpoint, strict=False)
+        logger.info(msg)
     del checkpoint
     torch.cuda.empty_cache()
     return max_accuracy,best_auc
