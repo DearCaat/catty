@@ -1,5 +1,5 @@
 import torch
-from kmeans_pytorch import kmeans,kmeans_predict
+from kmeans_pytorch import kmeans
 from similarity import *
 
 def spectral_embedding(
@@ -43,6 +43,7 @@ def spectral_clustering(
     n_components=None,
     n_init=10,
     assign_labels="kmeans",
+    distance='euclidean',
     gamma=1,
     cluster_center=None,
     is_training=True
@@ -66,10 +67,47 @@ def spectral_clustering(
     # Only support kmeans
     if assign_labels == "kmeans":
         if is_training:
-            _, labels, _ = kmeans(
-                maps, n_clusters, cluster_center=cluster_center, n_init=n_init, tqdm_flag=False, 
-            )
+            for b in maps.size(0):
+                labels, cluster_center = kmeans(
+                    maps[b], n_clusters, cluster_center=cluster_center, n_init=n_init, tqdm_flag=False, 
+                )
+            return labels,cluster_center
         else:
-            labels = kmeans_predict(X=maps,device=torch.cuda.current_device(),cluster_centers = self.get_parameter('cluster_centers').data,tqdm_flag=False,distance=self.cluster_distance)
+            labels = kmeans_predict_bs(X=maps,device=torch.cuda.current_device(),cluster_centers = cluster_center,distance=distance)
 
-    return labels
+            return labels
+
+def kmeans_predict_bs(
+    X,
+    cluster_centers,
+    distance='euclidean',
+    device=torch.device('cpu'),
+):
+    """
+    predict using cluster centers for batch data
+    :param X: (torch.tensor) matrix
+    :param cluster_centers: (torch.tensor) cluster centers
+    :param distance: (str) distance [options: 'euclidean', 'cosine'] [default: 'euclidean']
+    :param device: (torch.device) device [default: 'cpu']
+    :return: (torch.tensor) (batch_size,cluster ids)
+    """
+    assert len(cluster_centers.size()) == 2
+    if len(X.size()) == 2:
+        X.unsqueeze_(0)
+    if distance == 'euclidean':
+        pairwise_distance_function = SimilarityMatrix('euclidean')
+    elif distance == 'cosine':
+        pairwise_distance_function = SimilarityMatrix('cosine',True)
+    else:
+        raise NotImplementedError
+    
+    # convert to float
+    X = X.float()
+
+    # transfer to device
+    X = X.to(device)
+    
+    dis = pairwise_distance_function(X, cluster_centers.unsqueeze(0).repeat(X.size(0),1,1))
+    choice_cluster = torch.argmin(dis, dim=2)
+
+    return choice_cluster

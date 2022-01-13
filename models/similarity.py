@@ -5,20 +5,20 @@ def similarity_matrix(data1,data2,distance,invert=False):
     '''
     invert  bool  Whether invert the result   1-result for cosine
     '''
-    if distance.lower() == 'euclidean':
-        dis_func = torch.nn.PairwiseDistance(p=2)
-    elif distance.lower() == 'cosine':
-        dis_func = torch.nn.CosineSimilarity(dim=-1)
     # B N D
     if len(data1.size()) == 2:
         data1.unsqueeze_(0)
     if len(data2.size()) == 2:
         data2.unsqueeze_(0) 
-    
-    similarity = dis_func(data1.unsqueeze(1), data2.unsqueeze(2))
-
-    if distance.lower() == 'cosine' and invert:
-        similarity = 1 - similarity
+        
+    if distance.lower() == 'euclidean':
+        similarity = torch.cdist(data1,data2)
+    elif distance.lower() == 'cosine':
+        dis_func = torch.nn.CosineSimilarity(dim=-1)
+        similarity = dis_func(data1.unsqueeze(1), data2.unsqueeze(2))
+        
+        if invert:
+            similarity = 1 - similarity
     
     return similarity
 

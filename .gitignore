@@ -5,6 +5,7 @@
 /wandb/
 /train&eval.sh
 *.ipynb
+train.sh
 /models/__pycache__/
 /ranger/__pycache__/
 # Byte-compiled / optimized / DLL files

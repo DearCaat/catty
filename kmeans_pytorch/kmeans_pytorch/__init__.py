@@ -120,7 +120,6 @@ def kmeans(
 
     return choice_cluster, initial_state
 
-
 def kmeans_predict(
         X,
         cluster_centers,
