@@ -68,7 +68,7 @@ _C.DATA.CROP_SIZE=300
 # -----------------------------------------------------------------------------
 _C.MODEL = CN()
 # Model type        #swin_small_patch4_window7_224  efficientnetv2_rw_s  deit_base_patch16_224  tf_efficientnet_b3 vit_base_patch32_224
-_C.MODEL.NAME = 'deit_small_patch16_224'
+_C.MODEL.NAME = 'cluster_swin_small_patch4_window7_224'
 # Model name
 _C.MODEL.BACKBONE = ''
 # Checkpoint to resume, could be overwritten by command line argument
@@ -103,13 +103,17 @@ _C.RDD_TRANS.NOT_INST_TEST = True
 _C.RDD_TRANS.PERSUDO_LEARNING = False
 
 _C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
-_C.RDD_TRANS.CLUSTER.NAME='kmeans'    #kmeans gcn
+_C.RDD_TRANS.CLUSTER.NAME='spectral'    #kmeans gcn spectral
 _C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # euclidean cosine, default cosine, it's often better
 _C.RDD_TRANS.CLUSTER.SELECT_THR = 0.5
 # kmeans paras 
-_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 4
+_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 3
 _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
 _C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
+# spectral paras (default include kmeans paras)
+_C.RDD_TRANS.CLUSTER.RBF_DISTANCE = 'euclidean' # default 
+_C.RDD_TRANS.CLUSTER.SPECTRAL_AFFINITY = 'rbf'  # default, and not support others
+_C.RDD_TRANS.CLUSTER.N_COMPOENTS = None         # default None, it epuals num_cluster
 # gcn paras
 _C.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION = 2
 _C.RDD_TRANS.CLUSTER.IPS_K_AT_HOP = (2,0)  # 先不考虑第二跳，因为效率问题
@@ -120,10 +124,10 @@ _C.RDD_TRANS.CLUSTER.THR = 0.75
 # -----------------------------------------------------------------------------
 _C.TRAIN = CN()
 _C.TRAIN.START_EPOCH = 0
-_C.TRAIN.EPOCHS = 10
+_C.TRAIN.EPOCHS = 30
 _C.TRAIN.WARMUP_EPOCHS = 3
 _C.TRAIN.WEIGHT_DECAY = 0
-_C.TRAIN.BASE_LR = 1e-3
+_C.TRAIN.BASE_LR = 1e-4
 _C.TRAIN.WARMUP_LR = 5e-7
 _C.TRAIN.MIN_LR = 5e-7
 # Clip gradient norm                                     
@@ -153,7 +157,7 @@ _C.TRAIN.LR_SCHEDULER.DECAY_RATE = 0.1
 # Optimizer
 _C.TRAIN.OPTIMIZER = CN()
  #'Lookahead_adamw'
-_C.TRAIN.OPTIMIZER.NAME =  'adamw'
+_C.TRAIN.OPTIMIZER.NAME =  'lookahead_adamw'
 # Optimizer Epsilon
 _C.TRAIN.OPTIMIZER.EPS = 1e-8
 # Optimizer Betas

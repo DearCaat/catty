@@ -1,6 +1,6 @@
 import torch
 from kmeans_pytorch import kmeans
-from similarity import *
+from .similarity import *
 
 def spectral_embedding(
     affinity='rbf',
@@ -8,11 +8,12 @@ def spectral_embedding(
     n_components=3,
     norm_laplacian=True,
     drop_first=True,
-    gamma=1
+    gamma=1,
+    rbf_distance='euclidean'  # default euclidean, but i wanto try others.
 ):
 # only support rbf kernel
     B = feats.size(0)
-    d = rbf_similarity(similarity_matrix(feats,feats,'euclidean'),gamma)
+    d = rbf_similarity(similarity_matrix(feats,feats,rbf_distance),gamma)
     D_ = d.sum(-1)
     D = torch.diag_embed(D_)
     L = D - d
@@ -20,11 +21,11 @@ def spectral_embedding(
     if norm_laplacian:
         D = torch.diag_embed(torch.pow(D_,-0.5))
         L=D@L@D
-
+    # pytorch linalg.eig not implemented for fp16, pytorch1.10
+    L = L.float()
     U, V = torch.linalg.eig(L)
     U = torch.real(U)
     V = torch.real(V)
-
     _,idic=torch.sort(U)
     mask = idic.clone()
     mask[:] = 0
@@ -43,9 +44,10 @@ def spectral_clustering(
     n_components=None,
     n_init=10,
     assign_labels="kmeans",
-    distance='euclidean',
+    kmeans_distance='euclidean',
+    rbf_distance='euclidean',
     gamma=1,
-    cluster_center=None,
+    cluster_centers=None,
     is_training=True
 ):
     n_components = n_clusters if n_components is None else n_components
@@ -63,17 +65,23 @@ def spectral_clustering(
         norm_laplacian=True,
         drop_first=False,
         gamma=gamma,
+        rbf_distance=rbf_distance
     )
     # Only support kmeans
     if assign_labels == "kmeans":
         if is_training:
-            for b in maps.size(0):
-                labels, cluster_center = kmeans(
-                    maps[b], n_clusters, cluster_center=cluster_center, n_init=n_init, tqdm_flag=False, 
+            for b in range(maps.size(0)):
+                labels, cluster_centers = kmeans(
+                    maps[b], n_clusters, cluster_centers=cluster_centers, n_init=n_init, tqdm_flag=False,device=torch.cuda.current_device(),distance=kmeans_distance,iter_limit=100 
                 )
-            return labels,cluster_center
+                labels = torch.unsqueeze(labels,dim=0)
+                if b == 0:
+                        clusters_idcs = labels.clone()
+                else:
+                    clusters_idcs = torch.cat((clusters_idcs,labels))
+            return clusters_idcs,cluster_centers
         else:
-            labels = kmeans_predict_bs(X=maps,device=torch.cuda.current_device(),cluster_centers = cluster_center,distance=distance)
+            labels = kmeans_predict_bs(X=maps,device=torch.cuda.current_device(),cluster_centers = cluster_centers,distance= kmeans_distance)
 
             return labels
 
@@ -100,7 +108,8 @@ def kmeans_predict_bs(
         pairwise_distance_function = SimilarityMatrix('cosine',True)
     else:
         raise NotImplementedError
-    
+    B,N,D = X.size()
+
     # convert to float
     X = X.float()
 

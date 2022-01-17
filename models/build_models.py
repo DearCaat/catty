@@ -20,7 +20,9 @@ def build_model(config):
             ips_k_at_hop = config.RDD_TRANS.CLUSTER.IPS_K_AT_HOP,
             cluster_distance = config.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE.lower(),
             cluster_thr = config.RDD_TRANS.CLUSTER.THR,
-            select_cluster_thr = config.RDD_TRANS.CLUSTER.SELECT_THR
+            select_cluster_thr = config.RDD_TRANS.CLUSTER.SELECT_THR,
+            nor_index = config.DATA.NOR_CLS_INDEX,
+            cluster_rbf_distance = config.RDD_TRANS.CLUSTER.RBF_DISTANCE
         )
     elif model_name.startswith('vgg'):
         model = create_model(
@@ -35,5 +37,7 @@ def build_model(config):
             config.MODEL.NAME,
             pretrained=config.MODEL.PRETRAINED,
             num_classes=config.MODEL.NUM_CLASSES,
+            drop_rate=config.MODEL.DROP_RATE,
+            drop_path_rate=config.MODEL.DROP_PATH_RATE
         )
     return model

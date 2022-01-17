@@ -15,7 +15,8 @@ def similarity_matrix(data1,data2,distance,invert=False):
         similarity = torch.cdist(data1,data2)
     elif distance.lower() == 'cosine':
         dis_func = torch.nn.CosineSimilarity(dim=-1)
-        similarity = dis_func(data1.unsqueeze(1), data2.unsqueeze(2))
+        # 为了返回(B,N1,N2)的结果，这里torch的api没有统一不是很明白，只有自己替换了位置
+        similarity = dis_func(data2.unsqueeze(1), data1.unsqueeze(2))
         
         if invert:
             similarity = 1 - similarity
@@ -36,9 +37,9 @@ class SimilarityMatrix(torch.nn.Module):
         keepdim (bool, optional): Determines whether or not to keep the vector dimension.
             Default: False
     Shape:
-        - Input1: :math:`(B, N, D)` where `B = batch dimension` and `D = vector dimension`
-        - Input2: :math:`(B, N, D)` same shape as the Input1
-        - Output: :math:`(B, N, N)` 
+        - Input1: :math:`(B, N1, D)` where `B = batch dimension` and `D = vector dimension`
+        - Input2: :math:`(B, N2, D)` same shape as the Input1
+        - Output: :math:`(B, N1, N2)` 
     """
     __constants__ = ['distance', 'invert']
     distance: str

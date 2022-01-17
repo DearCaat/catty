@@ -29,7 +29,8 @@ def kmeans(
         tqdm_flag=True,
         iter_limit=0,
         device=torch.device('cpu'),
-        gamma_for_soft_dtw=0.001
+        gamma_for_soft_dtw=0.001,
+        n_init = 10,
 ):
     """
     perform kmeans

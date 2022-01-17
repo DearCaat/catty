@@ -3,6 +3,7 @@ from numpy.core.fromnumeric import size
 import torch.nn as nn
 from timm.models.registry import register_model
 from .gcn_cluster import *
+from .spectral_clustering import *
 from .swin import _create_swin_transformer
 from kmeans_pytorch import kmeans,kmeans_predict
 
@@ -13,6 +14,7 @@ class RddTransformer(nn.Module):
         super().__init__()
         self.cluster_model = cluster
         self.cluster_distance = kwargs['cluster_distance']
+        self.nor_index = kwargs['nor_index']
         self.cluster_num = None
         if type(cluster)==GCN:
             self.graph = graph
@@ -20,7 +22,12 @@ class RddTransformer(nn.Module):
         elif cluster == kmeans:
             self.cluster_num = kwargs['num_cluster']
             self.register_parameter('cluster_centers',nn.Parameter(torch.zeros(size=(self.cluster_num,dim)),requires_grad=False))
-            
+        
+        elif cluster == spectral_clustering:
+            self.cluster_num = kwargs['num_cluster']
+            self.register_parameter('cluster_centers',nn.Parameter(torch.zeros(size=(self.cluster_num,self.cluster_num)),requires_grad=False))
+            self.clustre_rbf_distance = kwargs['cluster_rbf_distance']
+
         self.thr = kwargs.pop('select_cluster_thr')
         num_classes = kwargs.pop('num_classes')
         self.instance_feature_extractor=backbone
@@ -99,7 +106,7 @@ class RddTransformer(nn.Module):
         feats_tmp = feats_tmp.view(-1,D)
         feats_tmp = self.head(feats_tmp)
         scores = self.soft_max(feats_tmp)
-        scores = 1 - scores[:,6]
+        scores = 1 - scores[:,self.nor_index]
         #簇数量固定时，尽量不使用循环
         if cluster_num is not None:
             scores = scores.view(B,cluster_num)
@@ -132,22 +139,35 @@ class RddTransformer(nn.Module):
 
         return feats.view(B,-1),clusters_num
     
-    # for kmeans
-    def kmeans_cluster(self,inst_feature):
+    # for sklear-based cluster api，主要补充了循环和返回的mask
+    def sklearn_cluster(self,inst_feature):
         #assert len(instance_feat.shape) == 3 and len(clusters_indic.shape)==2
         B,N,D = inst_feature.shape
-        for b in range(B):
-            if self.training:
-                # 这里更改原始实现里最后返回部分，原始实现中这里最后强制返回cpu向量，我去掉了这一部分
-                clu_labels,self.get_parameter('cluster_centers').data = self.cluster_model(X=inst_feature[b],num_clusters=self.cluster_num,device=torch.cuda.current_device(),cluster_centers = self.get_parameter('cluster_centers').data if self.get_parameter('cluster_centers').data.any() != 0 else [],tqdm_flag=False,distance=self.cluster_distance)
+        # 对kmeans使用循环，这是由于算法本质导致的，无法实现为batch-based
+        if self.cluster_model == kmeans:
+            for b in range(B):
+                if self.training:
+                    # 这里更改原始实现里最后返回部分，原始实现中这里最后强制返回cpu向量，我去掉了这一部分
+                    clu_labels,self.get_parameter('cluster_centers').data = self.cluster_model(X=inst_feature[b],num_clusters=self.cluster_num,device=torch.cuda.current_device(),cluster_centers = self.get_parameter('cluster_centers').data if self.get_parameter('cluster_centers').data.any() != 0 else [],tqdm_flag=False,distance=self.cluster_distance)
+                else:
+                    clu_labels = kmeans_predict(X=inst_feature[b],device=torch.cuda.current_device(),cluster_centers = self.get_parameter('cluster_centers').data,tqdm_flag=False,distance=self.cluster_distance)
+                clu_labels = torch.unsqueeze(clu_labels,dim=0)
+                if b == 0:
+                        clusters_idcs = clu_labels.clone()
+                else:
+                    clusters_idcs = torch.cat((clusters_idcs,clu_labels))
+        elif self.cluster_model == spectral_clustering:
+            output = self.cluster_model(feats=inst_feature,n_clusters=self.cluster_num,
+            cluster_centers = self.get_parameter('cluster_centers').data if self.get_parameter('cluster_centers').data.any() != 0 else [],
+            kmeans_distance=self.cluster_distance,
+            rbf_distance=self.clustre_rbf_distance,
+            is_training=self.training)
+
+            if isinstance(output, (tuple, list)):
+                [clusters_idcs,self.get_parameter('cluster_centers').data] = output
             else:
-                clu_labels = kmeans_predict(X=inst_feature[b],device=torch.cuda.current_device(),cluster_centers = self.get_parameter('cluster_centers').data,tqdm_flag=False,distance=self.cluster_distance)
-            clu_labels = torch.unsqueeze(clu_labels,dim=0)
-            if b == 0:
-                    clusters_idcs = clu_labels.clone()
-            else:
-                clusters_idcs = torch.cat((clusters_idcs,clu_labels))
-        
+                clusters_idcs = output
+
         #cluster mask for generate cluster features
         for i in range(self.cluster_num):
             cluster_mask = clusters_idcs - i == 0
@@ -178,16 +198,25 @@ class RddTransformer(nn.Module):
             torch.cuda.empty_cache()
             clusters_feat,clusters_idcs = gcn_cluster(None,adj, inst_feature,self.clustre_thr) # C*N*D
             
-        # 暂时放弃kmeans
-        else:
+        elif self.cluster_model == spectral_clustering:
+            # spectral_cluster
+            cluster_num = self.cluster_num
+            # find cluster features
+            clusters_idcs,clusters_mask = self.sklearn_cluster(inst_feature)
+            clusters_feat = inst_feature
+            # 谱聚类由于降维过多，导致在batch-based kmeans 训练中可能出现实际聚类数量少于设定值的情况
+            if torch.max(clusters_idcs,dim=1)[0].any() < self.cluster_num-1:
+                cluster_num = None
+        elif self.cluster_model == kmeans:
             # kmeans cluster 
             cluster_num = self.cluster_num
             # find cluster features
-            clusters_idcs,clusters_mask = self.kmeans_cluster(inst_feature)
+            clusters_idcs,clusters_mask = self.sklearn_cluster(inst_feature)
             clusters_feat = inst_feature
-            #测试时kmeans认为每个包的簇数目不定，使用聚类方法的predict
-            if not self.training:
-                cluster_num = None
+
+        #测试时聚类方法都认为不存在固定聚类数目
+        if not self.training:
+            cluster_num = None
         # for i in range(len(clusters_feat)):
         #     for m in range(len(clusters_feat[i])):
         #         print(clusters_feat[i][m].size())
@@ -200,7 +229,11 @@ class RddTransformer(nn.Module):
         # logits_inst = logits_inst.view(B,N,-1)
         # score_inst = self.soft_max(logits_inst)
         # bag classify
-        logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
+        try:
+            logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
+        except:
+            np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
+
         if self.training:
             #return logits_bag, logits_inst, score_inst,cluster_num
             return logits_bag, None, None,clusters_num
@@ -221,4 +254,4 @@ def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):
     elif kwargs['cluster_name'].lower() == 'gcn':
         return RddTransformer(backbone=backbone,cluster=GCN(in_dim=768,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
     elif kwargs['cluster_name'].lower() == 'spectral':
-        return RddTransformer(backbone=backbone,cluster=kmeans,**kwargs)
+        return RddTransformer(backbone=backbone,cluster=spectral_clustering,**kwargs)
