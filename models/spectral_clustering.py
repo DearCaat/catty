@@ -2,7 +2,11 @@ import torch
 from kmeans_pytorch import kmeans
 from .similarity import *
 import numpy as np
-
+'''
+pytorch 的谱聚类简单实现，旨在解决batch-based数据的并行处理问题，主流的实现或者API很少支持batch-based
+没有支持多种特征值eigsovler，使用了torch.linear.eigh
+在计算lapacian matrix时，基本和Sklearn一致，因为得到的RBF核得到的数据可能是稀疏矩阵的问题，所以常规矩阵的求解方法无效
+'''
 def spectral_embedding(
     affinity='rbf',
     feats=None,
