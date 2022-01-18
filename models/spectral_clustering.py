@@ -1,6 +1,7 @@
 import torch
 from kmeans_pytorch import kmeans
 from .similarity import *
+import numpy as np
 
 def spectral_embedding(
     affinity='rbf',
@@ -11,14 +12,17 @@ def spectral_embedding(
     gamma=1,
     rbf_distance='euclidean'  # default euclidean, but i wanto try others.
 ):
-    d = rbf_similarity(similarity_matrix(feats.double(),feats.double(),rbf_distance),gamma)
-    d = d.float()
+    # 采用rbf核算相似度存在绝大多数距离值为0的情况无法进行下面的计算。具体原因未知（(N,768)维度情况下，考虑是否维度过大？），暂定采用# cosine距离
+    # d = rbf_similarity(similarity_matrix(feats.double(),feats.double(),rbf_distance),gamma)
+    # d = d.float()
+    d = similarity_matrix(feats,feats,'cosine',False)
+    
     # 因为torch.sum的位数问题，才有将主对角线取0，再求度矩阵，再求L矩阵的形式
     # 前提是输入的矩阵为欧式距离正则化的邻接矩阵，主对角线全为1
     # 稀疏拉普拉斯
     # Get laplacian
     B_SIZE,D_SIZE,_ = d.size()
-    E = torch.eye(D_SIZE).unsqueeze(0).repeat(B_SIZE,1,1)
+    E = torch.eye(D_SIZE).unsqueeze(0).repeat(B_SIZE,1,1).cuda(non_blocking=True)
     d = d - torch.diag_embed(torch.diagonal(d,dim1=-2,dim2=-1))
     #d = d - E
     D_ = d.sum(-1)
@@ -35,12 +39,18 @@ def spectral_embedding(
     # cal eig 
     L = L.float()
     L *= -1
-    U, V = torch.linalg.eigh(L) #已经排好序，从大到小
+    _, V = torch.linalg.eigh(L) #已经排好序，从大到小
     V = V[:,:,-n_components:]
     V = V.transpose(1,2).flip(1)  #skleran [n_compoents,::-1]
     if norm_laplacian:
         V = V.div(dd.unsqueeze(1))
-    
+
+    # except RuntimeError:
+    #     # When submatrices are exactly singular, an LU decomposition
+    #     # in arpack fails. We fallback to lobpcg
+    #     L *= -1
+    #     L = L.double()
+    #     V = 0
     # sklearn _deterministic_vector_sign_flip
     max_abs_rows = torch.argmax(torch.abs(V), dim=2)
     mask = V.clone()

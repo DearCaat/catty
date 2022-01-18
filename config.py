@@ -113,7 +113,8 @@ _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
 _C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
 # spectral paras (default include kmeans paras)
 _C.RDD_TRANS.CLUSTER.RBF_DISTANCE = 'euclidean' # default 
-_C.RDD_TRANS.CLUSTER.SPECTRAL_AFFINITY = 'rbf'  # default, and not support others
+# sklearn default rbf, and not support others. But in my case, rbf will get many, many zero. Use cosine instead.
+_C.RDD_TRANS.CLUSTER.SPECTRAL_AFFINITY = 'cosine'  
 _C.RDD_TRANS.CLUSTER.N_COMPOENTS = None         # default None, it epuals num_cluster
 # gcn paras
 _C.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION = 2
@@ -147,7 +148,7 @@ _C.TRAIN.USE_CHECKPOINT = False
 
 # LR scheduler
 _C.TRAIN.LR_SCHEDULER = CN()
-_C.TRAIN.LR_SCHEDULER.NAME = None  #'cosine'
+_C.TRAIN.LR_SCHEDULER.NAME = 'cosine'  #'cosine'
 # STEP interval to decay LR, used in flat_cosine
 _C.TRAIN.LR_SCHEDULER.DECAY_STEPS_RATIO=0.5
 # Epoch interval to decay LR, used in StepLRScheduler
