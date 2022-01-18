@@ -23,8 +23,9 @@ def similarity_matrix(data1,data2,distance,invert=False):
     
     return similarity
 
+# euclidean_distances
 def rbf_similarity(d,gamma=1):
-    return torch.exp(-gamma*(d))
+    return torch.exp(-gamma*(d**2))
 
 class SimilarityMatrix(torch.nn.Module):
     r"""

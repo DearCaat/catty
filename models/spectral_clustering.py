@@ -11,31 +11,44 @@ def spectral_embedding(
     gamma=1,
     rbf_distance='euclidean'  # default euclidean, but i wanto try others.
 ):
-# only support rbf kernel
-    B = feats.size(0)
-    d = rbf_similarity(similarity_matrix(feats,feats,rbf_distance),gamma)
+    d = rbf_similarity(similarity_matrix(feats.double(),feats.double(),rbf_distance),gamma)
+    d = d.float()
+    # 因为torch.sum的位数问题，才有将主对角线取0，再求度矩阵，再求L矩阵的形式
+    # 前提是输入的矩阵为欧式距离正则化的邻接矩阵，主对角线全为1
+    # 稀疏拉普拉斯
+    # Get laplacian
+    B_SIZE,D_SIZE,_ = d.size()
+    E = torch.eye(D_SIZE).unsqueeze(0).repeat(B_SIZE,1,1)
+    d = d - torch.diag_embed(torch.diagonal(d,dim1=-2,dim2=-1))
+    #d = d - E
     D_ = d.sum(-1)
     D = torch.diag_embed(D_)
-    L = D - d
+    L = D-d
 
     if norm_laplacian:
-        D = torch.diag_embed(torch.pow(D_,-0.5))
+        dd = torch.pow(D_,0.5)  # sklearn实现出现该值，为了计算出特征矩阵后进行进一步normalized
+        D_ = torch.sign(D_) * torch.pow(torch.abs(D_), -0.5)  #直接pow会得到nan
+        D = torch.diag_embed(D_)
         L=D@L@D
-    # pytorch linalg.eig not implemented for fp16, pytorch1.10
+        L = L - torch.diag_embed(torch.diagonal(L,dim1=-2,dim2=-1)) + E  #因为精度问题，有些对角线元素不为1
+    
+    # cal eig 
     L = L.float()
-    U, V = torch.linalg.eig(L)
-    U = torch.real(U)
-    V = torch.real(V)
-    _,idic=torch.sort(U)
-    mask = idic.clone()
+    L *= -1
+    U, V = torch.linalg.eigh(L) #已经排好序，从大到小
+    V = V[:,:,-n_components:]
+    V = V.transpose(1,2).flip(1)  #skleran [n_compoents,::-1]
+    if norm_laplacian:
+        V = V.div(dd.unsqueeze(1))
+    
+    # sklearn _deterministic_vector_sign_flip
+    max_abs_rows = torch.argmax(torch.abs(V), dim=2)
+    mask = V.clone()
     mask[:] = 0
-    if drop_first:
-        mask = mask.scatter_(1,idic[:,1:n_components+1],1) == 1
-    else:
-        mask = mask.scatter_(1,idic[:,:n_components],1) == 1
-
-    V = V[mask].view(B,n_components,-1).transpose(1,2)
-    return V
+    mask = mask.scatter_(2,max_abs_rows.unsqueeze(-1),1) == 1
+    sign = torch.sign(V[mask].view(B_SIZE,n_components)).unsqueeze(-1)
+    V *= sign
+    return V.transpose(1,2)
 
 def spectral_clustering(
     affinity='rbf',
@@ -108,7 +121,6 @@ def kmeans_predict_bs(
         pairwise_distance_function = SimilarityMatrix('cosine',True)
     else:
         raise NotImplementedError
-    B,N,D = X.size()
 
     # convert to float
     X = X.float()

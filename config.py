@@ -96,6 +96,7 @@ _C.RDD_TRANS.EMA_DECAY_SCHEDULER = None #warmup    warmup_flat
 _C.RDD_TRANS.EMA_DECAY_SCHEDULER_FLAT_RATIO = 0.01
 _C.RDD_TRANS.INIT_STAGE_EPOCH = 0
 _C.RDD_TRANS.EMA_FORCE_CPU = False
+
 _C.RDD_TRANS.NOR_THR = 0.05
 _C.RDD_TRANS.TEST_THR = 0.995
 _C.RDD_TRANS.INST_NUM_CLASS = 2
@@ -105,7 +106,7 @@ _C.RDD_TRANS.PERSUDO_LEARNING = False
 _C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
 _C.RDD_TRANS.CLUSTER.NAME='spectral'    #kmeans gcn spectral
 _C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # euclidean cosine, default cosine, it's often better
-_C.RDD_TRANS.CLUSTER.SELECT_THR = 0.5
+_C.RDD_TRANS.CLUSTER.SELECT_THR = 0.9
 # kmeans paras 
 _C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 3
 _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default

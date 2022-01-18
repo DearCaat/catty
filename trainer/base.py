@@ -18,14 +18,14 @@ def update_metrics(config,metrics,values,count,distributed=False):
         for metric,value in zip(metrics,values):
             metric.update(value,count)
 
-def init_metrics(m_str_list):
-    metrics = OrderedDict()
-    for m_str in m_str_list:
-        m_lower = m_str.lower()
-        m_split = m_lower.split('_')
-        m_lower = m_split[-1]
-        if len(m_split)>1:
-            if m_split[0] == 'list':
+# def init_metrics(m_str_list):
+#     metrics = OrderedDict()
+#     for m_str in m_str_list:
+#         m_lower = m_str.lower()
+#         m_split = m_lower.split('_')
+#         m_lower = m_split[-1]
+#         if len(m_split)>1:
+#             if m_split[0] == 'list':
                 
 
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,logger=None,**kwargs):
@@ -38,7 +38,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     batch_time = AverageMeter()
     loss_meter = AverageMeter()
     #acc1_meter = AverageMeter()
-    metrics_meter = init_metric()
+    metrics_meter = kwargs['metrics']
+    train_cal_loss = kwargs['cal_loss_func']
     loss_rec = np.array([])
 
     start = time.time()

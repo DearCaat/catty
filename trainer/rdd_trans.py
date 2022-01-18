@@ -10,6 +10,12 @@ import torch
 from timm.utils import *
 from timm.models import  model_parameters
 
+class RddTransTrainer:
+    def __init__(self) -> None:
+        
+
+train_metrics = OrderedDict([('loss_teacher_meter',AverageMeter()),('dis_ins_meter',AverageMeter()),('patch_num_meter',AverageMeter()),('cluster_num_meter',AverageMeter()),('cluster_ema_num_meter',AverageMeter()),('dis_ratio_list',[[] for i in range(len(thr_list))]),('')])
+
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,teacher_ema=None, thr_list=[],logger=None):
     model.train()
     torch.cuda.empty_cache()
@@ -17,7 +23,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
     loss_teacher = torch.nn.CrossEntropyLoss()
     loss_teacher.cuda()
-
+   
     optimizer.zero_grad()
     second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
     num_steps = len(data_loader)
