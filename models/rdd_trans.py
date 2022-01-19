@@ -26,9 +26,10 @@ class RddTransformer(nn.Module):
         
         elif cluster == spectral_clustering:
             self.cluster_num = kwargs['num_cluster']
-            self.register_parameter('cluster_centers',nn.Parameter(torch.zeros(size=(self.cluster_num,self.cluster_num)),requires_grad=False))
             self.clustre_rbf_distance = kwargs['cluster_rbf_distance']
             self.cluster_rbf_gamma = kwargs['cluster_rbf_gamma']
+            self.n_compoents = kwargs['cluster_n_compoents']
+            self.register_parameter('cluster_centers',nn.Parameter(torch.zeros(size=(self.cluster_num,self.n_compoents)),requires_grad=False))
 
         self.thr = kwargs.pop('select_cluster_thr')
         num_classes = kwargs.pop('num_classes')
@@ -164,6 +165,7 @@ class RddTransformer(nn.Module):
             kmeans_distance=self.cluster_distance,
             rbf_distance=self.clustre_rbf_distance,
             gamma = self.cluster_rbf_gamma,
+            n_components = self.n_compoents,
             is_training=self.training)
 
             if isinstance(output, (tuple, list)):
