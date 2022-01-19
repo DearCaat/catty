@@ -26,9 +26,10 @@ class RddTransformer(nn.Module):
         
         elif cluster == spectral_clustering:
             self.cluster_num = kwargs['num_cluster']
-            self.register_parameter('cluster_centers',nn.Parameter(torch.zeros(size=(self.cluster_num,self.cluster_num)),requires_grad=False))
             self.clustre_rbf_distance = kwargs['cluster_rbf_distance']
             self.cluster_rbf_gamma = kwargs['cluster_rbf_gamma']
+            self.n_compoents = kwargs['cluster_n_compoents']
+            self.register_parameter('cluster_centers',nn.Parameter(torch.zeros(size=(self.cluster_num,self.n_compoents)),requires_grad=False))
 
         self.thr = kwargs.pop('select_cluster_thr')
         num_classes = kwargs.pop('num_classes')
@@ -164,6 +165,7 @@ class RddTransformer(nn.Module):
             kmeans_distance=self.cluster_distance,
             rbf_distance=self.clustre_rbf_distance,
             gamma = self.cluster_rbf_gamma,
+            n_components = self.n_compoents,
             is_training=self.training)
 
             if isinstance(output, (tuple, list)):
@@ -207,6 +209,7 @@ class RddTransformer(nn.Module):
             # find cluster features
             clusters_idcs,clusters_mask = self.sklearn_cluster(inst_feature)
             clusters_feat = inst_feature
+            print(clusters_mask.size())
             # 谱聚类由于降维过多，导致在batch-based kmeans 训练中可能出现实际聚类数量少于设定值的情况
             if torch.max(clusters_idcs,dim=1)[0].any() < self.cluster_num-1:
                 cluster_num = None
@@ -232,10 +235,10 @@ class RddTransformer(nn.Module):
         # logits_inst = logits_inst.view(B,N,-1)
         # score_inst = self.soft_max(logits_inst)
         # bag classify
-        try:
-            logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
-        except:
-            np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
+        # try:
+        logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
+        # except:
+        #     np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
 
         if self.training:
             #return logits_bag, logits_inst, score_inst,cluster_num

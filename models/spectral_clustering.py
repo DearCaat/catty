@@ -113,7 +113,8 @@ def spectral_clustering(
             maps = map_.clone()
         else:
             maps = torch.cat((maps,map_))
-    #print(maps.size())
+            
+    maps = maps.cuda(non_blocking=True)
     # Only support kmeans
     if assign_labels == "kmeans":
         if is_training:
