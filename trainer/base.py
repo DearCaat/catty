@@ -1,11 +1,13 @@
 from contextlib import suppress
 import time
 import numpy as np
+from numpy import ndarray
 import datetime
 from collections import OrderedDict
 from sklearn.metrics import roc_auc_score,precision_recall_curve,f1_score
 
 import torch
+from torch import Tensor
 from timm.utils import *
 from timm.models import  model_parameters
 
@@ -26,7 +28,25 @@ def update_metrics(config,metrics,values,count,distributed=False):
 #         m_lower = m_split[-1]
 #         if len(m_split)>1:
 #             if m_split[0] == 'list':
-                
+
+def _log_list_meter(list,key,logger):
+    log_str = ''
+    for item in list:
+        if isinstance(item,(list,tuple,Tensor,ndarray)):
+            _log_list_meter(item)
+        else:
+            log_str += f'{key} {item.val:4f} ({item.avg:.4f})\t'
+    logger.info(log_str)
+
+def log_meter(metrics,log_list,logger):
+        log_str = ''
+        for key, value in metrics.items():
+            if key in log_list:
+                if isinstance(value,(list,tuple,Tensor,ndarray)):
+                    _log_list_meter(value,key,logger)
+                else:
+                    log_str += f'{key} {value.val:4f} ({value.avg:.4f})\t'
+        logger.info(log_str)
 
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,logger=None,**kwargs):
     model.train()
@@ -156,8 +176,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
                 #f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
                 f'mem {memory_used:.0f}MB')
-
-            train_iter_log(logger,metrics)
+            # log per iter
+            log_meter()
 
     update_per_epoch()
 
@@ -166,8 +186,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
     epoch_time = time.time() - start
     logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
-
-    train_epoch_log(logger)
+    # log per epoch
+    log_meter()
 
     torch.cuda.empty_cache()
     return loss,OrderedDict([('loss', loss_meter.avg)])
@@ -236,9 +256,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
 
     batch_time = AverageMeter()
     loss_meter = AverageMeter()
-    acc1_meter = AverageMeter()
-    acc5_meter = AverageMeter()
-    
+
     save_pred = np.array([])
     save_label = np.array([])
 
@@ -293,17 +311,13 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             # phase_pred = np.append(phase_pred, preds.cpu().numpy())
 
             # measure accuracy and record loss
-            acc1, acc5 = accuracy(output, targets, topk=topk)
+            #acc1, acc5 = accuracy(output, targets, topk=topk)
             if config.DISTRIBUTED:
-                acc1 = reduce_tensor(acc1)
-                acc5 = reduce_tensor(acc5)
                 loss = reduce_tensor(loss)
 
             torch.cuda.synchronize()
 
             loss_meter.update(loss.item(), targets.size(0))
-            acc1_meter.update(acc1.item(), targets.size(0))
-            acc5_meter.update(acc5.item(), targets.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -315,8 +329,6 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     f'Test: [{idx}/{len(data_loader)}]\t'
                     f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                     f'Loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
-                    f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
-                    f'Acc@5 {acc5_meter.val:.3f} ({acc5_meter.avg:.3f})\t'
                     f'Mem {memory_used:.0f}MB')
             
         save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)

@@ -12,16 +12,23 @@ from torch import Tensor
 from timm.utils import *
 from timm.models import  model_parameters
 
+
 class RddTransTrainer:
     def __init__(self,thr_list) -> None:
-        self.train_metrics = OrderedDict([('loss_teacher_meter',AverageMeter()),
-        ('dis_ins_meter',AverageMeter()),('patch_num_meter',AverageMeter()),
+        self.train_metrics = OrderedDict([
+        ('loss_teacher_meter',AverageMeter()),
+        ('dis_ins_meter',AverageMeter()),
+        ('patch_num_meter',AverageMeter()),
         ('cluster_num_meter',AverageMeter()),
         ('cluster_ema_num_meter',AverageMeter()),
         ('dis_rec_meters',np.array([AverageMeter() for i in range(len(thr_list))])),
         ('selec_rec_meters',np.array([AverageMeter() for i in range(len(thr_list))]))
         ])
         self.train_metrics_epoch_log =['dis_rec_meters','selec_rec_meters']
+        self.train_metrics_iter_log =['loss_teacher_meter','dis_ins_meter','patch_num_meter','cluster_num_meter','cluster_ema_num_meter']
+
+        self.test_metrics = 
+
     def cal_loss_func(self,config,model,idx,samples,targets,targets_bin,epoch,num_steps,criterion,**kwargs,):
         thr_list,dis_ratio_list,criterion_teacher = kwargs['thr_list'],kwargs['dis_ratio_list'],kwargs['criterion']
 
@@ -162,26 +169,10 @@ class RddTransTrainer:
             #teacher_ema.decay_diff = 0.9997
             # 前面10个epoch不更新特征层
             #teacher_ema.decay = 1 if epoch < 10 else config.RDD_TRANS.EMA_DECAY
-
             teacher_ema.update(model)
 
     def update_per_epoch(self,**kwargs):
-
-    def train_iter_log(self,config,logger,**kwargs):
-        log_str = ''
-        for key, value in self.train_metrics.items():
-            if key not in self.train_metrics_epoch_log:
-                 
-        logger.info(
-            f'loss_tea {loss_teacher_meter.val:.4f} ({loss_teacher_meter.avg:.4f})\t'
-            f'dis_ins {dis_ins_meter.val:.4f} ({dis_ins_meter.avg:.4f}) \t'
-            f'patch_num {patch_num_meter.val:.4f} ({patch_num_meter.avg:.4f}) \t'
-            f'cluster_num {cluster_num_meter.val:.4f} ({cluster_num_meter.avg:.4f}) \t'
-            f'cluster_ema_num {cluster_ema_num_meter.val:.4f} ({cluster_ema_num_meter.avg:.4f}) \t')
-            #f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
-    def train_epoch_log(self,logger,**kwargs):
-
-
+        pass
 
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,teacher_ema=None, thr_list=[],logger=None):
     model.train()

@@ -232,10 +232,10 @@ class RddTransformer(nn.Module):
         # logits_inst = logits_inst.view(B,N,-1)
         # score_inst = self.soft_max(logits_inst)
         # bag classify
-        try:
-            logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
-        except:
-            np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
+        # try:
+        logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
+        # except:
+        #     np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
 
         if self.training:
             #return logits_bag, logits_inst, score_inst,cluster_num
