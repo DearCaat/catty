@@ -209,7 +209,6 @@ class RddTransformer(nn.Module):
             # find cluster features
             clusters_idcs,clusters_mask = self.sklearn_cluster(inst_feature)
             clusters_feat = inst_feature
-            print(clusters_mask.size())
             # 谱聚类由于降维过多，导致在batch-based kmeans 训练中可能出现实际聚类数量少于设定值的情况
             if torch.max(clusters_idcs,dim=1)[0].any() < self.cluster_num-1:
                 cluster_num = None
