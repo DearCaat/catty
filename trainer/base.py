@@ -40,6 +40,9 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     #acc1_meter = AverageMeter()
     metrics_meter = kwargs['metrics']
     train_cal_loss = kwargs['cal_loss_func']
+    update_per_iter = kwargs['update_per_iter']
+    update_per_epoch = kwargs['update_per_epoch']
+
     loss_rec = np.array([])
 
     start = time.time()
@@ -59,7 +62,9 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
             targets_bin = targets.clone()
             targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
             targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
-        
+        else:
+            targets_bin = None
+
         # timm dataloader prefetcher will do this
         if mixup_fn is not None and not config.DATA.TIMM:
             samples, targets = mixup_fn(samples, targets)
@@ -94,7 +99,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 else:
                     lr_scheduler.step_update(epoch * num_steps + idx)
                 
-                update_model_custom()
+                update_per_iter()
         else:
             #loss = criterion(outputs, targets)
             optimizer.zero_grad()
@@ -111,8 +116,6 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE),
                         value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
             
-            update_model_custom()
-
             optimizer.step()
             if model_ema is not None:
                 model_ema.update(model)
@@ -122,6 +125,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     lr_scheduler.step(epoch * num_steps + idx)
                 else:
                     lr_scheduler.step_update(epoch * num_steps + idx)
+
+            update_per_iter()
 
         torch.cuda.synchronize()
         if not config.DISTRIBUTED:
@@ -152,13 +157,18 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 #f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
                 f'mem {memory_used:.0f}MB')
 
-            train_log(metrics)
+            train_iter_log(logger,metrics)
+
+    update_per_epoch()
+
+    if hasattr(optimizer, 'sync_lookahead'):
+        optimizer.sync_lookahead()
 
     epoch_time = time.time() - start
     logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
 
-    if hasattr(optimizer, 'sync_lookahead'):
-        optimizer.sync_lookahead()
+    train_epoch_log(logger)
+
     torch.cuda.empty_cache()
     return loss,OrderedDict([('loss', loss_meter.avg)])
 

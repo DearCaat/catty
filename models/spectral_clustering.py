@@ -2,12 +2,14 @@ import torch
 from kmeans_pytorch import kmeans
 from .similarity import *
 import numpy as np
+from sklearn.manifold import spectral_embedding
+
 '''
 pytorch 的谱聚类简单实现，旨在解决batch-based数据的并行处理问题，主流的实现或者API很少支持batch-based
 没有支持多种特征值eigsovler，使用了torch.linear.eigh
 在计算lapacian matrix时，基本和Sklearn一致，因为得到的RBF核得到的数据可能是稀疏矩阵的问题，所以常规矩阵的求解方法无效
 '''
-def spectral_embedding(
+def spectral_embedding_torch(
     affinity='rbf',
     feats=None,
     n_components=3,
@@ -17,9 +19,11 @@ def spectral_embedding(
     rbf_distance='euclidean'  # default euclidean, but i wanto try others.
 ):
     # 采用rbf核算相似度存在绝大多数距离值为0的情况无法进行下面的计算。具体原因未知（(N,768)维度情况下，考虑是否维度过大？），暂定采用# cosine距离
-    # d = rbf_similarity(similarity_matrix(feats.double(),feats.double(),rbf_distance),gamma)
-    # d = d.float()
-    d = similarity_matrix(feats,feats,'cosine',False)
+    if affinity == 'rbf':
+        d = rbf_similarity(similarity_matrix(feats.double().detach(),feats.double().detach(),rbf_distance)**2,gamma)
+        #d = d.float()
+    elif affinity == 'cosine':
+        d = similarity_matrix(feats,feats,'cosine',False)
     
     # 因为torch.sum的位数问题，才有将主对角线取0，再求度矩阵，再求L矩阵的形式
     # 前提是输入的矩阵为欧式距离正则化的邻接矩阵，主对角线全为1
@@ -41,11 +45,12 @@ def spectral_embedding(
         L = L - torch.diag_embed(torch.diagonal(L,dim1=-2,dim2=-1)) + E  #因为精度问题，有些对角线元素不为1
     
     # cal eig 
-    L = L.float()
+    #L = L.float()
     L *= -1
-    _, V = torch.linalg.eigh(L) #已经排好序，从大到小
-    V = V[:,:,-n_components:]
-    V = V.transpose(1,2).flip(1)  #skleran [n_compoents,::-1]
+    _, V = torch.linalg.eigh(L) #已经排好序，从小到大
+    #V = V[:,:,-n_components:]
+    #V = V.transpose(1,2).flip(1)  #skleran [n_compoents,::-1]
+    V = V.transpose(1,2)[:,:n_components]
     if norm_laplacian:
         V = V.div(dd.unsqueeze(1))
 
@@ -85,21 +90,36 @@ def spectral_clustering(
     # The first eigenvector is constant only for fully connected graphs
     # and should be kept for spectral clustering (drop_first = False)
     # See spectral_embedding documentation.
-    maps = spectral_embedding(
-        affinity,
-        feats,
-        n_components=n_components,
-        norm_laplacian=True,
-        drop_first=False,
-        gamma=gamma,
-        rbf_distance=rbf_distance
-    )
+    # maps = spectral_embedding_torch(
+    #     affinity,
+    #     feats,
+    #     n_components=n_components,
+    #     norm_laplacian=True,
+    #     drop_first=False,
+    #     gamma=gamma,
+    #     rbf_distance=rbf_distance
+    # )
+    if affinity == 'rbf':
+        d = rbf_similarity(similarity_matrix(feats.double(),feats.double(),rbf_distance)**2,gamma)
+        #d = d.float()
+    elif affinity == 'cosine':
+        d = similarity_matrix(feats,feats,'cosine',False)
+
+    d = d.cpu().detach().numpy()
+    for i in range(len(d)):
+        map_ = torch.from_numpy(spectral_embedding(d[i],drop_first=False,n_components=n_components))
+        map_.unsqueeze_(0)
+        if i == 0:
+            maps = map_.clone()
+        else:
+            maps = torch.cat((maps,map_))
+    #print(maps.size())
     # Only support kmeans
     if assign_labels == "kmeans":
         if is_training:
             for b in range(maps.size(0)):
                 labels, cluster_centers = kmeans(
-                    maps[b], n_clusters, cluster_centers=cluster_centers, n_init=n_init, tqdm_flag=False,device=torch.cuda.current_device(),distance=kmeans_distance,iter_limit=100 
+                    maps[b], n_clusters, cluster_centers=cluster_centers, n_init=n_init, tqdm_flag=False,device=torch.cuda.current_device(),distance=kmeans_distance,iter_limit=2000 
                 )
                 labels = torch.unsqueeze(labels,dim=0)
                 if b == 0:

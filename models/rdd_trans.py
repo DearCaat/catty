@@ -1,3 +1,4 @@
+from math import gamma
 from networkx.algorithms import cluster
 from numpy.core.fromnumeric import size
 import torch.nn as nn
@@ -27,6 +28,7 @@ class RddTransformer(nn.Module):
             self.cluster_num = kwargs['num_cluster']
             self.register_parameter('cluster_centers',nn.Parameter(torch.zeros(size=(self.cluster_num,self.cluster_num)),requires_grad=False))
             self.clustre_rbf_distance = kwargs['cluster_rbf_distance']
+            self.cluster_rbf_gamma = kwargs['cluster_rbf_gamma']
 
         self.thr = kwargs.pop('select_cluster_thr')
         num_classes = kwargs.pop('num_classes')
@@ -161,6 +163,7 @@ class RddTransformer(nn.Module):
             cluster_centers = self.get_parameter('cluster_centers').data if self.get_parameter('cluster_centers').data.any() != 0 else [],
             kmeans_distance=self.cluster_distance,
             rbf_distance=self.clustre_rbf_distance,
+            gamma = self.cluster_rbf_gamma,
             is_training=self.training)
 
             if isinstance(output, (tuple, list)):

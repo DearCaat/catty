@@ -22,7 +22,8 @@ def build_model(config):
             cluster_thr = config.RDD_TRANS.CLUSTER.THR,
             select_cluster_thr = config.RDD_TRANS.CLUSTER.SELECT_THR,
             nor_index = config.DATA.NOR_CLS_INDEX,
-            cluster_rbf_distance = config.RDD_TRANS.CLUSTER.RBF_DISTANCE
+            cluster_rbf_distance = config.RDD_TRANS.CLUSTER.RBF_DISTANCE,
+            cluster_rbf_gamma = config.RDD_TRANS.CLUSTER.RBF_GAMMA
         )
     elif model_name.startswith('vgg'):
         model = create_model(
