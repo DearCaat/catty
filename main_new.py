@@ -60,7 +60,6 @@ except ImportError:
 
 def parse_option():
     parser = argparse.ArgumentParser('WSPLIN training and evaluation script', add_help=False)
-    parser.add_argument('--cfg-trainer', type=str,  metavar="FILE", help='path to trainer config file', )
     parser.add_argument('--cfg', type=str,  metavar="FILE", help='path to config file', )
     parser.add_argument(
         "--opts",
@@ -72,6 +71,7 @@ def parse_option():
     # easy config modification
     parser.add_argument('--batch-size', type=int, help="batch size for single GPU")
     parser.add_argument('--data-path', type=str, help='path to dataset')
+    parser.add_argument('--trainer', type=str, help='trainer name')
     parser.add_argument('--tfrecord', action='store_true', help='use zipped dataset instead of folder dataset')
     parser.add_argument('--cache-mode', type=str, default='part', choices=['no', 'full', 'part'],
                         help='no: no cache, '

@@ -94,41 +94,6 @@ _C.MODEL.PRETRAINED = True
 _C.MODEL.NUM_PATCHES=17
 
 # -----------------------------------------------------------------------------
-# RDD_TRANS settings
-# -----------------------------------------------------------------------------
-# _C.RDD_TRANS = CN()
-# _C.RDD_TRANS.EMA_DECAY = 0.9997
-# _C.RDD_TRANS.EMA_DECAY_SCHEDULER = None #warmup    warmup_flat
-# _C.RDD_TRANS.EMA_DECAY_SCHEDULER_FLAT_RATIO = 0.01
-# _C.RDD_TRANS.INIT_STAGE_EPOCH = 0
-# _C.RDD_TRANS.EMA_FORCE_CPU = False
-
-# _C.RDD_TRANS.NOR_THR = 0.05
-# _C.RDD_TRANS.TEST_THR = 0.995
-# _C.RDD_TRANS.INST_NUM_CLASS = 2
-# _C.RDD_TRANS.NOT_INST_TEST = True
-# _C.RDD_TRANS.PERSUDO_LEARNING = False
-
-# _C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
-# _C.RDD_TRANS.CLUSTER.NAME='spectral'    #kmeans gcn spectral
-# _C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # euclidean cosine, default cosine, it's often better in kmeans
-# _C.RDD_TRANS.CLUSTER.SELECT_THR = 0.5
-# # kmeans paras 
-# _C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 3
-# _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
-# _C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
-# # spectral paras (default include kmeans paras)
-# _C.RDD_TRANS.CLUSTER.RBF_DISTANCE = 'euclidean' # default 
-# # sklearn default rbf, and not support others. But in my case, rbf will get many, many zero. Use cosine instead.
-# _C.RDD_TRANS.CLUSTER.SPECTRAL_AFFINITY = 'rbf'  
-# _C.RDD_TRANS.CLUSTER.RBF_GAMMA = 0.01
-# _C.RDD_TRANS.CLUSTER.N_COMPOENTS = None         # default None, it epuals num_cluster
-# # gcn paras
-# _C.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION = 2
-# _C.RDD_TRANS.CLUSTER.IPS_K_AT_HOP = (2,0)  # 先不考虑第二跳，因为效率问题
-# _C.RDD_TRANS.CLUSTER.THR = 0.75
-
-# -----------------------------------------------------------------------------
 # Training settings
 # -----------------------------------------------------------------------------
 _C.TRAIN = CN()
@@ -284,8 +249,10 @@ def _update_config_from_file(config, cfg_file):
 
 
 def update_config(config, args):
-    if args.cfg_trainer:
-        _update_config_from_file(config, args.cfg_trainer)
+    if args.trainer:
+        pth = os.path.join(os.path.abspath('.'),'configs',args.trainer+'.yaml')
+        _update_config_from_file(config, pth)
+        
     if args.cfg:
         _update_config_from_file(config, args.cfg)
 
