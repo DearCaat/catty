@@ -1,9 +1,7 @@
 import os
-from networkx.algorithms import cluster
 
 from torch.nn.modules import module
 
-from main import predict, train_one_epoch, validate
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import time
 import argparse
@@ -73,6 +71,7 @@ def parse_option():
     # easy config modification
     parser.add_argument('-b','--batch-size', type=int, help="batch size for single GPU")
     parser.add_argument('--data-path', type=str, help='path to dataset')
+    parser.add_argument('--trainer', type=str, help='trainer name')
     parser.add_argument('--tfrecord', action='store_true', help='use zipped dataset instead of folder dataset')
     parser.add_argument('--cache-mode', type=str, default='part', choices=['no', 'full', 'part'],
                         help='no: no cache, '

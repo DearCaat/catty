@@ -18,6 +18,7 @@ from timm.models import  model_parameters
 class RddTransTrainer:
     def __init__(self,**kwargs):
         self.thr_list,self.dis_ratio_list,self.criterion_teacher = kwargs['thr_list'],kwargs['dis_ratio_list'],kwargs['criterion_teacher']
+
         self.train_metrics = OrderedDict([
         ('loss_teacher_meter',AverageMeter()),
         ('dis_ins_meter',AverageMeter()),
@@ -43,6 +44,10 @@ class RddTransTrainer:
 
 
     def cal_loss_func(self,config,model,idx,samples,targets,targets_bin,epoch,num_steps,criterion,**kwargs,):
+
+        criterion_teacher = self.criterion_teacher if self.criterion_teacher is not None else criterion
+        dis_ins = 0
+
         output,o_inst,_,cluster_num = model(samples)
         # 设定正常图片在类别中的索引
         pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
@@ -66,7 +71,6 @@ class RddTransTrainer:
             t_cpu = targets_pl.cpu()
             ins_t = targets_pl.unsqueeze(-1).repeat((1,p))
 
-            dis_ins = 0
             output_bag_label = output_pl[torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1].view(b,p)        #包所属标签下的置信度
             if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                 out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]
@@ -144,7 +148,7 @@ class RddTransTrainer:
             label_pl = label_pl.view(-1)
             o_inst = o_inst.view(-1,cls)
             if o_inst.size(0)>0:
-                loss_pl = self.criterion_teacher(o_inst,label_pl)
+                loss_pl = criterion_teacher(o_inst,label_pl)
             else:
                 loss_pl = 0
         else:
@@ -188,7 +192,9 @@ class RddTransTrainer:
             for i in range(len(self.thr_list)):
                 dis_ratio_tmp= np.sort(np.array(self.dis_ratio_list[i]))
                 self.thr_list[i] = 0.75 * self.thr_list[i] + 0.25 * dis_ratio_tmp[math.floor(len(dis_ratio_tmp) * 0.01)]
-
+        
+        # 每一轮更新内部参数
+        self.dis_ratio_list=[[] for i in range(len(self.thr_list))]
     def measure_per_iter(self,output,targets,**kwargs):
         topk = (1,5)
         cluster_num = kwargs['cluster_num']

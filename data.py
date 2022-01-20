@@ -7,7 +7,6 @@ from torchvision import transforms
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD,DEFAULT_CROP_PCT
 from timm.data import Mixup
 from timm.data import create_transform,create_parser,create_dataset,create_loader
-from timm.data.transforms import _pil_interp
 import numpy as np
 from PIL import Image
 import logging
