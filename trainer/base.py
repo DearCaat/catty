@@ -11,31 +11,36 @@ from torch import Tensor
 from timm.utils import *
 from timm.models import  model_parameters
 
-def update_metrics(config,metrics,values,count,distributed=False):
-    if distributed:
-        for metric,value in zip(metrics,values):
-            reduced_value = reduce_tensor(value,config.WORLD_SIZE)
-            metric.update(reduced_value.item(),count)
-    else:
-        for metric,value in zip(metrics,values):
-            metric.update(value,count)
-
-# def init_metrics(m_str_list):
-#     metrics = OrderedDict()
-#     for m_str in m_str_list:
-#         m_lower = m_str.lower()
-#         m_split = m_lower.split('_')
-#         m_lower = m_split[-1]
-#         if len(m_split)>1:
-#             if m_split[0] == 'list':
+def _update_list_meter(config,metrics_list,value_list,distributed=False):
+    for metric,value in zip(metrics_list,value_list):
+        if isinstance(metric,(list,tuple,Tensor,ndarray)):
+            _update_list_meter(config,metric,value,distributed)
+        elif isinstance(metric,AverageMeter):
+            if distributed:
+                value[0] = reduce_tensor(value[0],config.WORLD_SIZE)
+            metric.update(value[0].item(),value[1])
+        else:
+            metric = value
+def update_metrics(config,metrics,values,distributed=False):
+    for key,value in values.items():
+        if isinstance(metrics[key],(list,tuple,Tensor,ndarray)):
+            _update_list_meter(metrics[key],value)
+        elif isinstance(metrics[key],AverageMeter):
+            if distributed:
+                value[0] = reduce_tensor(value[0],config.WORLD_SIZE)
+            metrics[key].update(value[0].item(),value[1])
+        else:
+            metrics[key] = value
 
 def _log_list_meter(list,key,logger):
     log_str = ''
     for item in list:
         if isinstance(item,(list,tuple,Tensor,ndarray)):
             _log_list_meter(item)
-        else:
+        elif isinstance(item,AverageMeter):
             log_str += f'{key} {item.val:4f} ({item.avg:.4f})\t'
+        else:
+            log_str += f'{key} {item:4f}\t'
     logger.info(log_str)
 
 def log_meter(metrics,log_list,logger):
@@ -44,316 +49,284 @@ def log_meter(metrics,log_list,logger):
             if key in log_list:
                 if isinstance(value,(list,tuple,Tensor,ndarray)):
                     _log_list_meter(value,key,logger)
-                else:
+                elif isinstance(value,AverageMeter):
                     log_str += f'{key} {value.val:4f} ({value.avg:.4f})\t'
+                else:
+                    log_str += f'{key} {value:4f}\t'
         logger.info(log_str)
 
-def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,logger=None,**kwargs):
-    model.train()
-    torch.cuda.empty_cache()
-    optimizer.zero_grad()
-    second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
-    num_steps = len(data_loader)
+class BaseTrainer():
+    def __init__(self,trainer,**kwargs):
+        self.trainer = trainer
+    def train_one_epoch(self,config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,logger=None,**kwargs):
+        model.train()
+        torch.cuda.empty_cache()
+        optimizer.zero_grad()
+        second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
+        num_steps = len(data_loader)
 
-    batch_time = AverageMeter()
-    loss_meter = AverageMeter()
-    #acc1_meter = AverageMeter()
-    metrics_meter = kwargs['metrics']
-    train_cal_loss = kwargs['cal_loss_func']
-    update_per_iter = kwargs['update_per_iter']
-    update_per_epoch = kwargs['update_per_epoch']
+        batch_time = AverageMeter()
+        loss_meter = AverageMeter()
 
-    loss_rec = np.array([])
+        loss_rec = np.array([])
+        start = time.time()
+        end = time.time()
+        last_idx = len(data_loader) - 1
 
-    start = time.time()
-    end = time.time()
-    last_idx = len(data_loader) - 1
+        for idx, (samples, targets) in enumerate(data_loader):
+            last_batch = idx == last_idx
+            
+            # timm dataloader prefetcher will do this
+            if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
+                samples = samples.cuda(non_blocking=config.DATA.PIN_MEMORY)
+                targets = targets.cuda(non_blocking=config.DATA.PIN_MEMORY)
 
-    for idx, (samples, targets) in enumerate(data_loader):
-        last_batch = idx == last_idx
-        
-        # timm dataloader prefetcher will do this
-        if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
-            samples = samples.cuda(non_blocking=config.DATA.PIN_MEMORY)
-            targets = targets.cuda(non_blocking=config.DATA.PIN_MEMORY)
-
-        # 当伪标签为二分类时或二分类训练时，需要二分类标签进行loss计算
-        if config.BINARYTRAIN_MODE:
-            targets_bin = targets.clone()
-            targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-            targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
-        else:
-            targets_bin = None
-
-        # timm dataloader prefetcher will do this
-        if mixup_fn is not None and not config.DATA.TIMM:
-            samples, targets = mixup_fn(samples, targets)
-
-        with amp_autocast():
-            loss,output = train_cal_loss(config,model,samples,targets)
-            if isinstance(output, (tuple, list)):
-                predictions = output[0]
-
-       # with torch.autograd.detect_anomaly():
-        if config.TRAIN.ACCUMULATION_STEPS > 1:
-            loss = loss / config.TRAIN.ACCUMULATION_STEPS
-            if loss_scaler is not None:
-                loss_scaler(
-                    loss, optimizer,
-                    clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
-                    parameters=model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
-                    create_graph=second_order)
+            # 当伪标签为二分类时或二分类训练时，需要二分类标签进行loss计算
+            if config.BINARYTRAIN_MODE:
+                targets_bin = targets.clone()
+                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
+                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
             else:
-                loss.backward(create_graph=second_order)
-                if config.TRAIN.CLIP_GRAD > 0:
-                    dispatch_clip_grad(
-                        model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
-                        value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
-            if (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0:
-                optimizer.step()
+                targets_bin = None
+
+            # timm dataloader prefetcher will do this
+            if mixup_fn is not None and not config.DATA.TIMM:
+                samples, targets = mixup_fn(samples, targets)
+
+            with amp_autocast():
+                loss,metrics_values,output = self.trainer.train_cal_loss(config,model,idx,samples,targets,targets_bin,epoch,num_steps,criterion)
+                if isinstance(output, (tuple, list)):
+                    predictions = output[0]
+
+        # with torch.autograd.detect_anomaly():
+            if config.TRAIN.ACCUMULATION_STEPS > 1:
+                loss = loss / config.TRAIN.ACCUMULATION_STEPS
+                if loss_scaler is not None:
+                    loss_scaler(
+                        loss, optimizer,
+                        clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
+                        parameters=model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
+                        create_graph=second_order)
+                else:
+                    loss.backward(create_graph=second_order)
+                    if config.TRAIN.CLIP_GRAD > 0:
+                        dispatch_clip_grad(
+                            model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
+                            value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
+                if (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0:
+                    optimizer.step()
+                    optimizer.zero_grad()
+                    if model_ema is not None:
+                        model_ema.update(model)
+                    if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
+                        lr_scheduler.step(epoch * num_steps + idx)
+                    else:
+                        lr_scheduler.step_update(epoch * num_steps + idx)
+                    
+                    self.trainer.update_per_iter(config,epoch,idx)
+            else:
+                #loss = criterion(outputs, targets)
                 optimizer.zero_grad()
+                if loss_scaler is not None:
+                    loss_scaler(
+                        loss, optimizer,
+                        clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
+                        parameters=model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
+                        create_graph=second_order)
+                else:
+                    loss.backward(create_graph=second_order)
+                    if config.TRAIN.CLIP_GRAD > 0:
+                        dispatch_clip_grad(
+                            model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE),
+                            value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
+                
+                optimizer.step()
                 if model_ema is not None:
                     model_ema.update(model)
-                if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
-                    lr_scheduler.step(epoch * num_steps + idx)
-                else:
-                    lr_scheduler.step_update(epoch * num_steps + idx)
-                
-                update_per_iter()
-        else:
-            #loss = criterion(outputs, targets)
-            optimizer.zero_grad()
-            if loss_scaler is not None:
-                loss_scaler(
-                    loss, optimizer,
-                    clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
-                    parameters=model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
-                    create_graph=second_order)
-            else:
-                loss.backward(create_graph=second_order)
-                if config.TRAIN.CLIP_GRAD > 0:
-                    dispatch_clip_grad(
-                        model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE),
-                        value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
-            
-            optimizer.step()
-            if model_ema is not None:
-                model_ema.update(model)
 
-            if config.TRAIN.LR_SCHEDULER.NAME is not None:
-                if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
-                    lr_scheduler.step(epoch * num_steps + idx)
-                else:
-                    lr_scheduler.step_update(epoch * num_steps + idx)
+                if config.TRAIN.LR_SCHEDULER.NAME is not None:
+                    if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
+                        lr_scheduler.step(epoch * num_steps + idx)
+                    else:
+                        lr_scheduler.step_update(epoch * num_steps + idx)
 
-            update_per_iter()
+                self.trainer.update_per_iter(config,epoch,idx)
 
-        torch.cuda.synchronize()
-        if not config.DISTRIBUTED:
-            loss_meter.update(loss.item(), targets.size(0))
-        #acc1_meter.update(acc1.item(), targets.size(0))
-            update_metrics()
+            torch.cuda.synchronize()
+            if not config.DISTRIBUTED:
+                loss_meter.update(loss.item(), targets.size(0))
+            #acc1_meter.update(acc1.item(), targets.size(0))
+                update_metrics(config,self.trainer.train_metrics,metrics_values)
 
-        batch_time.update(time.time() - end)
-        np.append(loss_rec,loss_meter.avg)
+            batch_time.update(time.time() - end)
+            np.append(loss_rec,loss_meter.avg)
+            end = time.time()
+
+            if last_batch or idx % config.PRINT_FREQ == 0:
+                if config.DISTRIBUTED:
+                    reduced_loss = reduce_tensor(loss.data)
+                    loss_meter.update(reduced_loss.item(), input.size(0))
+                    update_metrics(config,self.trainer.train_metrics,metrics_values,distributed=True)
+                #lr = optimizer.param_groups[0]['lr']
+                lrl = [param_group['lr'] for param_group in optimizer.param_groups]
+                lr = sum(lrl) / len(lrl)
+                memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+                etas = batch_time.avg * (num_steps - idx)
+
+                logger.info(
+                    f'Train: [{epoch}/{config.TRAIN.EPOCHS}][{idx}/{num_steps}]\t'
+                    f'eta {datetime.timedelta(seconds=int(etas))} lr {lr:.6f}\t'
+                    f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
+                    f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
+                    f'mem {memory_used:.0f}MB')
+                # log per iter
+                log_meter(self.trainer.train_metrics,self.trainer.train_metrics_iter_log,logger)
+
+        self.trainer.update_per_epoch(config,epoch)
+
+        if hasattr(optimizer, 'sync_lookahead'):
+            optimizer.sync_lookahead()
+
+        epoch_time = time.time() - start
+        logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
+        # log per epoch
+        log_meter(self.trainer.train_metrics,self.trainer.train_metrics_epoch_log,logger)
+
+        torch.cuda.empty_cache()
+        return loss,OrderedDict([('loss', loss_meter.avg)])
+
+    def predict(config, data_loader, model,amp_autocast=suppress,logger=None):
+        model.eval()
+        torch.cuda.empty_cache()
+
+        batch_time = AverageMeter()
+        
+        save_pred = np.array([])
+        save_label = np.array([])
+
         end = time.time()
+        last_idx = len(data_loader) - 1
+        
+        with torch.no_grad():
+            for idx, (images, targets) in enumerate(data_loader):
+                last_batch = idx == last_idx
+                # timm dataloader prefetcher will do this
+                if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
+                    images = images.cuda(non_blocking=True)
+                    targets = targets.cuda(non_blocking=True)
 
-        if last_batch or idx % config.PRINT_FREQ == 0:
-            if config.DISTRIBUTED:
-                reduced_loss = reduce_tensor(loss.data)
-                loss_meter.update(reduced_loss.item(), input.size(0))
-                update_metrics(distributed=True)
-            #lr = optimizer.param_groups[0]['lr']
-            lrl = [param_group['lr'] for param_group in optimizer.param_groups]
-            lr = sum(lrl) / len(lrl)
-            memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
-            etas = batch_time.avg * (num_steps - idx)
+                #if config.EVAL_MODE:
+                targets_bin = targets.clone()
 
-            logger.info(
-                f'Train: [{epoch}/{config.TRAIN.EPOCHS}][{idx}/{num_steps}]\t'
-                f'eta {datetime.timedelta(seconds=int(etas))} lr {lr:.6f}\t'
-                f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
-                f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
-                #f'Acc@1 {acc1_meter.val:.3f} ({acc1_meter.avg:.3f})\t'
-                f'mem {memory_used:.0f}MB')
-            # log per iter
-            log_meter()
+                if 'cqu_bpdd' in config.DATA.DATASET:
+                    targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
+                    targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+                # compute output
+                with amp_autocast():
+                    output = model(images)
+                if isinstance(output, (tuple, list)):
+                    index = 0 if config.THUMB_MODE or config.RDD_TRANS.NOT_INST_TEST else 1
 
-    update_per_epoch()
+                    output = output[index]
 
-    if hasattr(optimizer, 'sync_lookahead'):
-        optimizer.sync_lookahead()
-
-    epoch_time = time.time() - start
-    logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
-    # log per epoch
-    log_meter()
-
-    torch.cuda.empty_cache()
-    return loss,OrderedDict([('loss', loss_meter.avg)])
-
-def predict(config, data_loader, model,amp_autocast=suppress,logger=None):
-    model.eval()
-    torch.cuda.empty_cache()
-
-    batch_time = AverageMeter()
-    
-    save_pred = np.array([])
-    save_label = np.array([])
-
-    end = time.time()
-    last_idx = len(data_loader) - 1
-    
-    with torch.no_grad():
-        for idx, (images, targets) in enumerate(data_loader):
-            last_batch = idx == last_idx
-            # timm dataloader prefetcher will do this
-            if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
-                images = images.cuda(non_blocking=True)
-                targets = targets.cuda(non_blocking=True)
-
-            #if config.EVAL_MODE:
-            targets_bin = targets.clone()
-
-            if 'cqu_bpdd' in config.DATA.DATASET:
-                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
-            # compute output
-            with amp_autocast():
-                output = model(images)
-            if isinstance(output, (tuple, list)):
-                index = 0 if config.THUMB_MODE or config.RDD_TRANS.NOT_INST_TEST else 1
-
-                output = output[index]
-
-            output_soft = torch.nn.functional.softmax(output,dim=-1)
-    
-            save_pred = np.append(save_pred,output_soft.cpu().numpy())
-            save_label = np.append(save_label,targets.cpu().numpy())
-            
-            torch.cuda.synchronize()
-
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
-
-            if last_batch or idx % config.PRINT_FREQ == 0:
-                memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
-                logger.info(
-                    f'Test: [{idx}/{len(data_loader)}]\t'
-                    f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                    f'Mem {memory_used:.0f}MB')
-            
-        save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
-
-    torch.cuda.empty_cache()
-
-    return save_pred,save_label
-
-def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, log_suffix='',criterion=None,logger=None):
-    model.eval()
-    torch.cuda.empty_cache()
-
-    batch_time = AverageMeter()
-    loss_meter = AverageMeter()
-
-    save_pred = np.array([])
-    save_label = np.array([])
-
-    end = time.time()
-    last_idx = len(data_loader) - 1
-    
-    with torch.no_grad():
-        for idx, (images, targets) in enumerate(data_loader):
-            last_batch = idx == last_idx
-            # timm dataloader prefetcher will do this
-            if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
-                images = images.cuda(non_blocking=True)
-                targets = targets.cuda(non_blocking=True)
-
-            topk = (1,5)
-            #if config.EVAL_MODE:
-            targets_bin = targets.clone()
-            if config.BINARYTRAIN_MODE:
-                topk = (1,1)
-            m = 0
-            if 'cqu_bpdd' in config.DATA.DATASET:
-                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
-
-            # compute output
-            with amp_autocast():
-                output = model(images)
-            if isinstance(output, (tuple, list)):
-                output = output[0]
-
-            output_soft = torch.nn.functional.softmax(output,dim=-1)
-
-            if config.BINARYTRAIN_MODE:
-                loss = criterion(output, targets_bin)
-            else:
-                loss = criterion(output, targets)
+                output_soft = torch.nn.functional.softmax(output,dim=-1)
+        
+                save_pred = np.append(save_pred,output_soft.cpu().numpy())
+                save_label = np.append(save_label,targets.cpu().numpy())
                 
-            save_pred = np.append(save_pred,output_soft.cpu().numpy())
-            save_label = np.append(save_label,targets.cpu().numpy())
-            
-            
-            # if config.BINARYTRAIN_MODE:
-            #     acc1, acc5 = accuracy(output, target_bin, topk=topk)
-            #     output = torch.nn.functional.softmax(output,dim=1)
-            #     preds = output[:,1]
-            # else:
-            #     acc1, acc5 = accuracy(output, target, topk=topk)
-            #     output = torch.nn.functional.softmax(output,dim=1)
-            #     preds = 1-output[:,config.DATA.NOR_CLS_INDEX]
-            
-            # phase_label = np.append(phase_label, target_bin.data.cpu().numpy())
-            # phase_pred = np.append(phase_pred, preds.cpu().numpy())
+                torch.cuda.synchronize()
 
-            # measure accuracy and record loss
-            #acc1, acc5 = accuracy(output, targets, topk=topk)
-            if config.DISTRIBUTED:
-                loss = reduce_tensor(loss)
+                # measure elapsed time
+                batch_time.update(time.time() - end)
+                end = time.time()
 
-            torch.cuda.synchronize()
+                if last_batch or idx % config.PRINT_FREQ == 0:
+                    memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+                    logger.info(
+                        f'Test: [{idx}/{len(data_loader)}]\t'
+                        f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                        f'Mem {memory_used:.0f}MB')
+                
+            save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
 
-            loss_meter.update(loss.item(), targets.size(0))
+        torch.cuda.empty_cache()
 
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
+        return save_pred,save_label
 
-            if last_batch or idx % config.PRINT_FREQ == 0:
-                memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
-                logger.info(
-                    f'Test: [{idx}/{len(data_loader)}]\t'
-                    f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                    f'Loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
-                    f'Mem {memory_used:.0f}MB')
-            
-        save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
-        auc = 0
-        if config.BINARYTRAIN_MODE:
-            ma_f1 = f1_score(np.array(save_label!=config.DATA.NOR_CLS_INDEX,dtype=int),np.argmax(save_pred,axis=1),average='binary')
-            mi_f1 = ma_f1
-            try:
-                auc = roc_auc_score(np.array(save_label!=config.DATA.NOR_CLS_INDEX,dtype=int), save_pred[:,1])
-            except:
-                print(save_pred)
-        else:
-            ma_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='macro')
-            mi_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='micro')
-            try:
-                auc = roc_auc_score(np.array(save_label!=config.DATA.NOR_CLS_INDEX,dtype=int), 1-save_pred[:,config.DATA.NOR_CLS_INDEX])
-            except:
-                print(save_pred)
+    def validate(self, config, data_loader, model,save_pre=False,amp_autocast=suppress, log_suffix='',criterion=None,logger=None,**kwargs):
+        model.eval()
+        torch.cuda.empty_cache()
+
+        batch_time = AverageMeter()
+        loss_meter = AverageMeter()
+
+        save_pred = np.array([])
+        save_label = np.array([])
+
+        end = time.time()
+        last_idx = len(data_loader) - 1
         
-        #if config.BINARYTRAIN_MODE:
-        
-        logger.info(f' * Acc@1 {acc1_meter.avg:.3f} Acc@5 {acc5_meter.avg:.3f} AUC {auc*100:.3f} F1@Macro {ma_f1*100:.3f} F1@Micro {mi_f1*100:.3f}')
-    metrics = OrderedDict([('loss', loss_meter.avg), ('top1', acc1_meter.avg), ('top5', acc5_meter.avg),('auc',auc),('macro_f1',ma_f1),('micro_f1',mi_f1)])
-    torch.cuda.empty_cache()
-    if save_pre:
-        return acc1_meter.avg, acc5_meter.avg, loss_meter.avg, auc,save_pred,save_label,metrics
-    else:    
-        return acc1_meter.avg, acc5_meter.avg, loss_meter.avg, auc,metrics
+        with torch.no_grad():
+            for idx, (images, targets) in enumerate(data_loader):
+                last_batch = idx == last_idx
+                # timm dataloader prefetcher will do this
+                if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
+                    images = images.cuda(non_blocking=True)
+                    targets = targets.cuda(non_blocking=True)
+
+                #if config.EVAL_MODE:
+                targets_bin = targets.clone()
+
+                if 'cqu_bpdd' in config.DATA.DATASET:
+                    targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
+                    targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+
+                # compute output
+                with amp_autocast():
+                    output = model(images)
+                if isinstance(output, (tuple, list)):
+                    predition = output[0]
+
+                output_soft = torch.nn.functional.softmax(predition,dim=-1)
+
+                if config.BINARYTRAIN_MODE:
+                    loss = criterion(predition, targets_bin)
+                else:
+                    loss = criterion(predition, targets)
+                    
+                save_pred = np.append(save_pred,output_soft.cpu().numpy())
+                save_label = np.append(save_label,targets.cpu().numpy())
+                
+                metrics_values,others = self.trainer.measure_per_iter(output,targets)
+
+                if config.DISTRIBUTED:
+                    loss = reduce_tensor(loss)
+                loss_meter.update(loss.item(), targets.size(0))
+                update_metrics(config,self.trainer.test_metrics,metrics_values,config.DISTRIBUTED)
+
+                torch.cuda.synchronize()
+                # measure elapsed time
+                batch_time.update(time.time() - end)
+                end = time.time()
+
+                if last_batch or idx % config.PRINT_FREQ == 0:
+                    memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+                    logger.info(
+                        f'Test: [{idx}/{len(data_loader)}]\t'
+                        f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                        f'Loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
+                        f'Mem {memory_used:.0f}MB')
+                    log_meter(self.trainer.test_metrics,self.trainer.test_metrics_iter_log,logger)
+            
+            save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
+
+            metrics_values_epoch,others_epoch = trainer.measure_per_epoch(config,others=others,label=save_label,pred=save_pred)
+            update_metrics(config,trainer.test_metrics,metrics_values_epoch)
+            log_meter(metrics_values_epoch,trainer.test_metrics_epoch_log,logger)
+
+        metrics = OrderedDict([('loss', loss_meter.avg), ('top1', acc1_meter.avg), ('top5', acc5_meter.avg),('auc',auc),('macro_f1',ma_f1),('micro_f1',mi_f1)])
+        torch.cuda.empty_cache()
+        if save_pre:
+            return loss_meter.avg, metrics, save_pred, save_label
+        else:    
+            return loss_meter.avg, metrics

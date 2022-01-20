@@ -115,8 +115,8 @@ _C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
 _C.RDD_TRANS.CLUSTER.RBF_DISTANCE = 'euclidean' # default 
 # sklearn default rbf, and not support others. But in my case, rbf will get many, many zero. Use cosine instead.
 _C.RDD_TRANS.CLUSTER.SPECTRAL_AFFINITY = 'rbf'  
-_C.RDD_TRANS.CLUSTER.RBF_GAMMA = 0.05
-_C.RDD_TRANS.CLUSTER.N_COMPOENTS = 10         # default None, it epuals num_cluster
+_C.RDD_TRANS.CLUSTER.RBF_GAMMA = 0.01
+_C.RDD_TRANS.CLUSTER.N_COMPOENTS = None         # default None, it epuals num_cluster
 # gcn paras
 _C.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION = 2
 _C.RDD_TRANS.CLUSTER.IPS_K_AT_HOP = (2,0)  # 先不考虑第二跳，因为效率问题
