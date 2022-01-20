@@ -18,6 +18,7 @@ from timm.models import  model_parameters
 class RddTransTrainer:
     def __init__(self,**kwargs):
         self.thr_list,self.dis_ratio_list,self.criterion_teacher = kwargs['thr_list'],kwargs['dis_ratio_list'],kwargs['criterion_teacher']
+
         self.train_metrics = OrderedDict([
         ('loss_teacher_meter',AverageMeter()),
         ('dis_ins_meter',AverageMeter()),
@@ -43,6 +44,9 @@ class RddTransTrainer:
 
 
     def cal_loss_func(self,config,model,idx,samples,targets,targets_bin,epoch,num_steps,criterion,**kwargs,):
+
+        criterion_teacher = self.criterion_teacher if self.criterion_teacher is not None else criterion
+
         output,o_inst,_,cluster_num = model(samples)
         # 设定正常图片在类别中的索引
         pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
@@ -144,7 +148,7 @@ class RddTransTrainer:
             label_pl = label_pl.view(-1)
             o_inst = o_inst.view(-1,cls)
             if o_inst.size(0)>0:
-                loss_pl = self.criterion_teacher(o_inst,label_pl)
+                loss_pl = criterion_teacher(o_inst,label_pl)
             else:
                 loss_pl = 0
         else:

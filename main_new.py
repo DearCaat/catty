@@ -1,9 +1,7 @@
 import os
-from networkx.algorithms import cluster
 
 from torch.nn.modules import module
 
-from main import predict, train_one_epoch, validate
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import time
 import argparse
@@ -62,6 +60,7 @@ except ImportError:
 
 def parse_option():
     parser = argparse.ArgumentParser('WSPLIN training and evaluation script', add_help=False)
+    parser.add_argument('--cfg-trainer', type=str,  metavar="FILE", help='path to trainer config file', )
     parser.add_argument('--cfg', type=str,  metavar="FILE", help='path to config file', )
     parser.add_argument(
         "--opts",
