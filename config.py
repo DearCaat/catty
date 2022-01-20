@@ -64,7 +64,7 @@ _C.DATA.STRIDE=300
 _C.DATA.CROP_SIZE=300
 
 # -----------------------------------------------------------------------------
-# Trainer settings
+# Trainer settings, more settings please refer to /configs/**.yaml
 # -----------------------------------------------------------------------------
 _C.TRAINER = CN()
 _C.TRAINER.NAME = 'rdd_trans'
@@ -252,7 +252,7 @@ def update_config(config, args):
     if args.trainer:
         pth = os.path.join(os.path.abspath('.'),'configs',args.trainer+'.yaml')
         _update_config_from_file(config, pth)
-        
+
     if args.cfg:
         _update_config_from_file(config, args.cfg)
 

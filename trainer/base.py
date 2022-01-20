@@ -94,7 +94,7 @@ class BaseTrainer():
                 samples, targets = mixup_fn(samples, targets)
 
             with amp_autocast():
-                loss,metrics_values,output = self.trainer.train_cal_loss(config,model,idx,samples,targets,targets_bin,epoch,num_steps,criterion)
+                loss,metrics_values,output = self.trainer.cal_loss_func(config,model,idx,samples,targets,targets_bin,epoch,num_steps,criterion)
                 if isinstance(output, (tuple, list)):
                     predictions = output[0]
 
