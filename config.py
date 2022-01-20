@@ -108,14 +108,14 @@ _C.RDD_TRANS.CLUSTER.NAME='spectral'    #kmeans gcn spectral
 _C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # euclidean cosine, default cosine, it's often better in kmeans
 _C.RDD_TRANS.CLUSTER.SELECT_THR = 0.5
 # kmeans paras 
-_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 3
+_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 4
 _C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
 _C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
 # spectral paras (default include kmeans paras)
 _C.RDD_TRANS.CLUSTER.RBF_DISTANCE = 'euclidean' # default 
 # sklearn default rbf, and not support others. But in my case, rbf will get many, many zero. Use cosine instead.
 _C.RDD_TRANS.CLUSTER.SPECTRAL_AFFINITY = 'rbf'  
-_C.RDD_TRANS.CLUSTER.RBF_GAMMA = 0.01
+_C.RDD_TRANS.CLUSTER.RBF_GAMMA = 0.05
 _C.RDD_TRANS.CLUSTER.N_COMPOENTS = None         # default None, it epuals num_cluster
 # gcn paras
 _C.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION = 2
