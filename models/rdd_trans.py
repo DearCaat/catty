@@ -28,7 +28,8 @@ class RddTransformer(nn.Module):
             self.cluster_num = kwargs['num_cluster']
             self.clustre_rbf_distance = kwargs['cluster_rbf_distance']
             self.cluster_rbf_gamma = kwargs['cluster_rbf_gamma']
-            self.n_compoents = kwargs['cluster_n_compoents'] if 'cluster_n_compoents' in kwargs else self.cluster_num
+            self.n_compoents = kwargs['cluster_n_compoents'] if 'cluster_n_compoents' in kwargs and kwargs['cluster_n_compoents'] is not None else self.cluster_num
+            #print()
             self.register_parameter('cluster_centers',nn.Parameter(torch.zeros(size=(self.cluster_num,self.n_compoents)),requires_grad=False))
 
         self.thr = kwargs.pop('select_cluster_thr')

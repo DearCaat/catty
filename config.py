@@ -57,6 +57,8 @@ _C.DATA.EPOCH_REPEATS = 0
 # Default timm thumb image loader
 _C.DATA.TIMM = True
 _C.DATA.TIMM_PREFETCHER = True
+_C.DATA.DROP_LAST = False
+
 
 _C.DATA.PATCH_SIZE=300
 # for cfd 150 cracktree200 150 cqu_bpdd 300
@@ -188,13 +190,16 @@ _C.AUG.MIXUP = 0.
 _C.AUG.CUTMIX = 0.
 # Number of augmentation splits (default: 0, valid: 0 or >=2)
 _C.AUG.SPLITS=0
+# output multi-view images, "strong_weak","strong_none","weak_none"
+# "teacher_student"
+_C.AUG.MULTI_VIEW = "strong_weak" 
 
 # -----------------------------------------------------------------------------
 # Testing settings
 # -----------------------------------------------------------------------------
 _C.TEST = CN()
 # Whether to use center crop when testing
-_C.TEST.CROP = False
+_C.TEST.CROP = 1
 
 # -----------------------------------------------------------------------------
 # Misc
@@ -298,6 +303,11 @@ def update_config(config, args):
         config.TRAIN_MODE = args.train_mode
     if args.ema:
         config.MODEL_EMA = args.ema
+
+    # timm 暂时不支持multi_view
+    if config.AUG.MULTI_VIEW is not None:
+        config.DATA.TIMM_PREFETCHER = False
+        config.DATA.TIMM = False
 
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         config.DISTRIBUTED = int(os.environ['WORLD_SIZE']) > 1

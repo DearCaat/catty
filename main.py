@@ -444,7 +444,10 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 loss = classify_loss
             #custom model
             else:
-                output,o_inst,_,cluster_num = model(samples)
+                if config.AUG.MULTI_VIEW is not None:
+                    output,o_inst,_,cluster_num = model(samples[1])
+                else:
+                    output,o_inst,_,cluster_num = model(samples)
                 torch.cuda.empty_cache()
                 # 设定正常图片在类别中的索引
                 pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
@@ -457,7 +460,10 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     targets_pl = targets_bin
                 if persudo_inst: 
                     with torch.no_grad():
-                        _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples)
+                        if config.AUG.MULTI_VIEW is not None:
+                            _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples[0])
+                        else:
+                            _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples)
                         torch.cuda.empty_cache()
                     b,p,cls = pl_inst.shape
                     t_cpu = targets_pl.cpu()

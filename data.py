@@ -12,6 +12,8 @@ from PIL import Image
 import logging
 #from utils import get_shape
 import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import cv2
 
 
 #Cacha 功能没有实现，现在只能在队列中随机shuffle
@@ -193,83 +195,60 @@ class PatchImageDataset(data.Dataset):
 def build_transform(is_train,config):
     if is_train:
         #first transform
+        if config.AUG.MULTI_VIEW is not None:
+            transform_strong = create_transform(
+                                input_size=config.DATA.IMG_SIZE,
+                                is_training=True,
+                                no_aug = config.AUG.NO_AUG,
+                                color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                                auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
+                                re_prob=config.AUG.REPROB,
+                                re_mode=config.AUG.REMODE,
+                                re_count=config.AUG.RECOUNT,
+                                interpolation=config.DATA.INTERPOLATION)
+            transform_weak = A.Compose([
+                                A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
+                                A.HorizontalFlip(p=0.5),
+                                A.VerticalFlip(p=0.5),
+                                A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                                A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
+                                ToTensorV2()
+                                ])
+            transform_no_aug = create_transform(input_size=config.DATA.IMG_SIZE,
+                                is_training=True,
+                                no_aug = True)
+            if config.AUG.MULTI_VIEW == 'strong_weak':
+                return [transform_strong,transform_weak]
+            elif config.AUG.MULTI_VIEW == 'strong_none':
+                return [transform_weak,transform_no_aug]
+            elif config.AUG.MULTI_VIEW == 'weak_none':
+                return [transform_weak,transform_no_aug]
+            else:
+                raise NotImplementedError
+        
         transform = create_transform(
-                    input_size=config.DATA.IMG_SIZE,
-                    is_training=True,
-                    no_aug = config.AUG.NO_AUG,
-                    color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
-                    auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
-                    re_prob=config.AUG.REPROB,
-                    re_mode=config.AUG.REMODE,
-                    re_count=config.AUG.RECOUNT,
-                    interpolation=config.DATA.INTERPOLATION,
-        )
+                                input_size=config.DATA.IMG_SIZE,
+                                is_training=True,
+                                no_aug = config.AUG.NO_AUG,
+                                color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                                auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
+                                re_prob=config.AUG.REPROB,
+                                re_mode=config.AUG.REMODE,
+                                re_count=config.AUG.RECOUNT,
+                                interpolation=config.DATA.INTERPOLATION)
         return transform
-        # t1 = []
-        # t2 = []
-        # t1 = A.Compose([
-        #     # A.RandomBrightnessContrast(p=0.5),
-        #     A.HorizontalFlip(p=0.5),
-        #     A.VerticalFlip(p=0.5),
-        #     # chagne rotate limit from 25 to 15 on 20/7/2020
-        #     A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
-        #     A.OneOf([
-        #         A.IAAEmboss(p=1),
-        #         A.IAASharpen(p=1),
-        #         A.Blur(p=1)
-        #     ], p=0.5)
-        # ])
-        # t2.append(transforms.ToTensor())
-        # t2.append(transforms.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]))
-        # #return [transform_1,transform_2]
-        # return [t1,transforms.Compose(t2)]
-        #last transform
-        '''transform = create_transform(
-                    input_size=config.DATA.PATCH_SIZE,
-                    is_training=True,
-                    color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
-                    auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
-                    re_prob=config.AUG.REPROB,
-                    re_mode=config.AUG.REMODE,
-                    re_count=config.AUG.RECOUNT,
-                    interpolation=config.DATA.INTERPOLATION,
-        )
-        return transform'''
+
     else:
         t1 = []
         t2 = []
-        #resize_im = False if 'cqu_bpdd' in config.DATA.DATASET else True
-        '''resize_im  = True
-        if resize_im:
-            if config.TEST.CROP:
-                # for imagenet
-                size = np.array(((224+32) / 224)) * config.DATA.IMG_SIZE
-                size = list(np.array(size,dtype='int'))
-                t1.append(
-                    transforms.Resize(size))
-                    # to maintain same ratio w.r.t. 224 images
-                t1.append(transforms.CenterCrop(config.DATA.IMG_SIZE))
-            else:
-                if config.THUMB_MODE:
-                    t1.append(
-                        transforms.Resize(config.DATA.IMG_SIZE,
-                                        interpolation=_pil_interp(config.DATA.INTERPOLATION))
-                    )
-        else:
-            t1.append(transforms.RandomHorizontalFlip(p=1))
-            t1.append(transforms.RandomVerticalFlip(p=1))
-            t1.append(RotationTransform(30))
-            t1.append(
-                    transforms.Resize(config.DATA.IMG_SIZE,
-                                      interpolation=_pil_interp(config.DATA.INTERPOLATION))
-                )'''
         t1 = A.Compose([
+            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.ShiftScaleRotate(rotate_limit=15.0, p=0.7)
         ])
-        t2.append(transforms.ToTensor())
-        t2.append(transforms.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]))
+        t2.append(A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]))
+        t2.append(ToTensorV2())
         #return [transform_1,transform_2]
         return [t1,transforms.Compose(t2)]
 
@@ -395,10 +374,14 @@ def pytorch_dataloader(is_train,config):
         else:
             #占位，考虑文件夹数据集
             #暂时不考虑训练
-            dataset_val = create_dataset(name=config.DATA.DATASET,root=config.DATA.DATA_PATH,thumb=config.THUMB_MODE)
+            #dataset_val = create_dataset(name=config.DATA.DATASET,root=config.DATA.DATA_PATH,thumb=config.THUMB_MODE)
+            transform_train = build_transform(is_train=True,config=config)
+            transform_val = build_transform(is_train=False,config=config)
+            dataset_train = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TEST_SPLIT),transform=transform_train,is_multi_view=config.AUG.MULTI_VIEW)
+            dataset_val = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.VAL_SPLIT),transform=transform_val,is_multi_view=config.AUG.MULTI_VIEW)
 
-        loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY)
-        loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY)
+        loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,drop_last=config.DATA.DROP_LAST,persistent_workers=True)
+        loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
         
         
         return dataset_train, dataset_val, loader_train, loader_val
@@ -410,8 +393,93 @@ def pytorch_dataloader(is_train,config):
         else:
             #占位，考虑文件夹数据集
             transform_test = build_transform(is_train=False,config=config)
-            dataset_test = PatchImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,transform=transform_test,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,eval=True,class_to_idx={'diseased':1,'normal':0},thumb=config.THUMB_MODE)
-        loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY)
+            # 之前做WSPLIN其它数据库测试用
+            #dataset_test = PatchImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,transform=transform_test,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,eval=True,class_to_idx={'diseased':1,'normal':0},thumb=config.THUMB_MODE)
+            dataset_test = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TEST_SPLIT),transform=transform_test,is_multi_view=config.AUG.MULTI_VIEW)
+        loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
         return dataset_test,loader_test
+
+# 适用于常见的多数据增强的方法，暂时考虑两个视角
+class MulitiViewImageDataset(data.Dataset):
+
+    def __init__(
+            self,
+            root,
+            parser=None,
+            class_map=None,
+            load_bytes=False,
+            transform=None,
+            target_transform=None,
+            is_multi_view=None
+    ):
+        if parser is None or isinstance(parser, str):
+            parser = create_parser(parser or '', root=root, class_map=class_map)
+        self.parser = parser
+        self.load_bytes = load_bytes
+        self.transform = transform
+        self.target_transform = target_transform 
+        self._consecutive_errors = 0
+        self.is_multi_view = is_multi_view
+
+    def __getitem__(self, index):
+        img, target = self.parser[index]
+        try:
+            img = img.read() if self.load_bytes else Image.open(img).convert('RGB')
+        except Exception as e:
+            _logger.warning(f'Skipped sample (index {index}, file {self.parser.filename(index)}). {str(e)}')
+            self._consecutive_errors += 1
+            if self._consecutive_errors < _ERROR_RETRY:
+                return self.__getitem__((index + 1) % len(self.parser))
+            else:
+                raise e
+        self._consecutive_errors = 0
+        if self.transform is not None:
+            if self.is_multi_view is not None:
+                for idx,transform in enumerate(self.transform):
+                    try:
+                        # pytorch transforms
+                        if idx == 0:
+                            imgs = transform(img=img).unsqueeze(0)
+                        imgs = torch.cat((imgs,transform(img=img).unsqueeze(0)))
+                    except:
+                        # albumentations
+                        if idx == 0:
+                            imgs = transform(image=np.asarray(img))['image'].unsqueeze(0)
+                        imgs = torch.cat((imgs,transform(image=np.asarray(img))['image'].unsqueeze(0)))
+            else:
+                imgs = self.transform(img=img)    
+        if target is None:
+            target = -1
+        elif self.target_transform is not None:
+            target = self.target_transform(target)
+        return imgs, target
+
+    def __len__(self):
+        return len(self.parser)
+
+    def filename(self, index, basename=False, absolute=False):
+        return self.parser.filename(index, basename, absolute)
+
+    def filenames(self, basename=False, absolute=False):
+        return self.parser.filenames(basename, absolute)
+
+def _search_split(root, split):
+    # look for sub-folder with name of split in root and use that if it exists
+    split_name = split.split('[')[0]
+    try_root = os.path.join(root, split_name)
+    if os.path.exists(try_root):
+        return try_root
+
+    def _try(syn):
+        for s in syn:
+            try_root = os.path.join(root, s)
+            if os.path.exists(try_root):
+                return try_root
+        return root
+    if split_name in _TRAIN_SYNONYM:
+        root = _try(_TRAIN_SYNONYM)
+    elif split_name in _EVAL_SYNONYM:
+        root = _try(_EVAL_SYNONYM)
+    return root
 
 # DALI data loader，以后考虑DALI的实现
