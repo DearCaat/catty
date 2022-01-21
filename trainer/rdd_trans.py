@@ -46,7 +46,7 @@ class RddTransTrainer:
     def cal_loss_func(self,config,model,idx,samples,targets,targets_bin,epoch,num_steps,criterion,**kwargs,):
 
         criterion_teacher = self.criterion_teacher if self.criterion_teacher is not None else criterion
-        dis_ins = 0
+        dis_ins,p,label_pl,b,cluster_num_ema = 0,1,[],targets.size(0),[0]
 
         output,o_inst,_,cluster_num = model(samples)
         # 设定正常图片在类别中的索引
