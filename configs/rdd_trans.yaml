@@ -5,12 +5,12 @@ RDD_TRANS:
     IPS_ACTIVE_CONNECTION: 2
     IPS_K_AT_HOP: [ 2, 0 ]
     NAME: spectral
-    NUM_CLUSTER: 3
+    NUM_CLUSTER: 5
     NUM_INIT: 10
-    N_COMPOENTS: 10
+    N_COMPOENTS: None
     RBF_DISTANCE: euclidean
     RBF_GAMMA: 0.05
-    SELECT_THR: 0.5
+    SELECT_THR: 0.9 
     SPECTRAL_AFFINITY: rbf
     THR: 0.75
   EMA_DECAY: 0.9997
