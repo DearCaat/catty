@@ -1,3 +1,4 @@
+from curses import A_HORIZONTAL
 import os
 from numpy.lib.function_base import append
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -250,10 +251,13 @@ def build_transform(is_train,config):
             A.VerticalFlip(p=0.5),
             A.ShiftScaleRotate(rotate_limit=15.0, p=0.7)
         ])
-        t2.append(A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]))
-        t2.append(ToTensorV2())
+        t2 = A.Compose([
+            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
+            A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
+            ToTensorV2()
+        ])
         #return [transform_1,transform_2]
-        return [transforms.Compose(t2)]
+        return t2
 
 def build_loader(is_train,config):
     mixup_fn = None
@@ -380,7 +384,7 @@ def pytorch_dataloader(is_train,config):
             #dataset_val = create_dataset(name=config.DATA.DATASET,root=config.DATA.DATA_PATH,thumb=config.THUMB_MODE)
             transform_train = build_transform(is_train=True,config=config)
             transform_val = build_transform(is_train=False,config=config)
-            dataset_train = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TEST_SPLIT),transform=transform_train,is_multi_view=config.AUG.MULTI_VIEW)
+            dataset_train = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform_train,is_multi_view=config.AUG.MULTI_VIEW)
             dataset_val = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.VAL_SPLIT),transform=transform_val)
 
         loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,drop_last=config.DATA.DROP_LAST,persistent_workers=True)
@@ -452,7 +456,8 @@ class MulitiViewImageDataset(data.Dataset):
                         else:
                             imgs = torch.cat((imgs,transform(image=np.asarray(img))['image'].unsqueeze(0)))
             else:
-                imgs = self.transform(img=img)    
+                # default albumentations
+                imgs = self.transform(image=np.asarray(img))['image'] 
         if target is None:
             target = -1
         elif self.target_transform is not None:

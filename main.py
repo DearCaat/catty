@@ -118,7 +118,18 @@ def main(config):
         
     logger.info(f"Creating model:{config.MODEL.NAME}/{config.MODEL.BACKBONE}")
     model = build_model(config)
-    model_teacher = None
+    if config.RDD_TRANS.TEACHER_INIT:
+        model_teacher = build_model(config)
+        model_teacher.cuda()
+        cpt = torch.load('/home/tangwenhao/output/swin/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
+        std = cpt['state_dict']
+        std['head_instance.weight'] = std['head.weight']
+        std['head_instance.bias'] = std['head.bias']
+        model_teacher.instance_feature_extractor.load_state_dict(std, strict=True)
+        
+    else:
+        model_teacher = model
+        
     #if not config.THUMB_MODE:
         # model_teacher = build_model(config)
         # model_teacher.cuda()
@@ -224,15 +235,15 @@ def main(config):
             np.savez(_save_path,pred=pred,label=label)
 
             return
-    teacher_ema = None
+    teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[])
     model_ema = None
-    if not config.THUMB_MODE or config.MODEL_EMA:
+    if config.MODEL_EMA:
         # cpt = torch.load('/home/tangwenhao/rdd/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
         # std = cpt['state_dict']
         # std['head_instance.weight'] = std['head.weight']
         # std['head_instance.bias'] = std['head.bias']
         # model.load_state_dict(std)
-        #teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[])
+        
         model_ema = ModelEmaV3(model, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None)
 
     # setup exponential moving average of model weights, SWA could be used here too
@@ -463,14 +474,16 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     targets_pl = targets_bin
                 if persudo_inst: 
                     with torch.no_grad():
-                        _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples_teacher)
+                        _,pl_inst,output_pl,cluster_num_ema = teacher_ema.module(samples_teacher)
                         torch.cuda.empty_cache()
                     b,p,cls = pl_inst.shape
                     t_cpu = targets_pl.cpu()
                     ins_t = targets_pl.unsqueeze(-1).repeat((1,p))
 
                     dis_ins = 0
-                    output_bag_label = output_pl[torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1].view(b,p)        #包所属标签下的置信度
+                    #包所属标签下的置信度
+                    output_bag_label = output_pl[torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1].view(b,p)
+                    #该包中局部相对病害阈值        
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]
                         min_nor_thr = out_tmp_sort[[i for i in range(b)],np.floor(p*thr_list[t_cpu])] # [b 1]
@@ -490,6 +503,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
                     #将所有实例设为正常
                     label_pl[:,:] = pl_nor_cls_index 
+                    # 包中的绝对病害阈值
                     # sigmod函数来保证前期增加速率远远高于后期，优于线性增长
                     thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
                     thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
@@ -497,11 +511,25 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         #判断为相应病害的实例置为包标签
                         #mask_ins =  (label_tmp - ins_t  == 0)
-                        #将病害包里判断为不是正常的实例都置为包标签 & (output_bag_label > thr_min_conf)
-                        mask_ins =   ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf)) & (output_bag_label > thr_min_dis_conf) )  | (output_bag_label - min_nor_thr >  0))
+                        # 将病害包里判断为不是正常的实例都置为包标签，thr_list的值，保证了该类中至少有百分之n个病害实例
+                        # 对于病害包里的实例，采用两种阈值，相对阈值和绝对阈值，并且这两个阈值都是自适应的。一个病害包中的实例，如果它的正常概率小于绝对正常阈值并且病害概率大于绝对病害阈值，或者它的病害概率大于相对病害阈值，就认为它为病害
+                        #  & (output_bag_label > thr_min_dis_conf)
+                        mask_ins = ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf))  )  | (output_bag_label - min_nor_thr >  0))
+
+                        # 只要相对阈值
+                        #mask_ins = ps_mask_dis & ( output_bag_label - min_nor_thr >  0)
+
+                        # 只要绝对阈值 只要其正常置信度小于阈值即可
+                        #mask_ins = ps_mask_dis & (output_pl[:,:,pl_nor_cls_index] < (1-0.9))
+
                         label_pl[mask_ins] = ins_t[mask_ins]
-                        #选取部分置信度比较高的实例参与loss计算   label_tmp - 6  == 0
-                        mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
+
+                        # 选取部分置信度比较高的实例参与loss计算
+                        # 对于病害包来说，所有病害实例都用，只有teacher判定为正常的实例，并且其正常概率大于绝对病害阈值才纳用。对于正常包来说，其正常概率大于绝对病害阈值才纳用   
+                        #mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
+                        
+                        #全部都用
+                        mask_ins = (label_pl - label_pl == 0)
                     else:
                         #全部都用
                         #mask_ins = (label_tmp - label_tmp == 0)
@@ -553,7 +581,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
                 cluster_num_meter.update(sum(cluster_num) / b,b)
                 classify_loss = criterion(output, targets)
-                loss = classify_loss
+                loss = loss_pl
 
         
         if not config.DISTRIBUTED:
@@ -628,13 +656,13 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 teacher_ema.decay_diff = 0
             if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
                 teacher_ema.decay_diff = config.RDD_TRANS.EMA_DECAY if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH else teacher_ema.decay_diff
-            if epoch > 1:
+            #if epoch > 0:
                 # 将前面特征层与后面实例分类层分开更新，分类层更新率更高
                 #teacher_ema.decay_diff = 0.9997
                 # 前面10个epoch不更新特征层
                 #teacher_ema.decay = 1 if epoch < 10 else config.RDD_TRANS.EMA_DECAY
 
-                teacher_ema.update(model)
+            teacher_ema.update(model)
         #acc1, _ = accuracy(predictions, targets, topk=(1,1))
         
         torch.cuda.synchronize()
@@ -784,28 +812,33 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
 
             output_soft = torch.nn.functional.softmax(output,dim=-1)
 
-            # if not config.THUMB_MODE:
-            #     #使用max-pool来测试，取所有图块中得分最大的图块的置信度
-            #     b,p,cls = output.shape
-            #     max_score,max_index_cls = torch.max(output_soft,dim=-1)
+            if not config.THUMB_MODE and not config.RDD_TRANS.NOT_INST_TEST:
+                #使用max-pool来测试
+                b,p,cls = output.shape
+                max_score,max_index_cls = torch.max(output_soft,dim=-1)  # B P
+                # 实例中最大的病害类别置信度大于阈值 
+                mask = (max_score - config.RDD_TRANS.TEST_THR > 0) & (max_index_cls - config.DATA.NOR_CLS_INDEX != 0)
+                mask_max_nor = max_index_cls == config.DATA.NOR_CLS_INDEX
+                max_index = []
+                for i in range(b):
+                    # 如果包中有任一实例满足该条件,找出满足要求的最大置信度实例作为包的预测值
+                    if mask[i].any()==True:
+                        score_tmp = max_score[i,mask[i]]  # B
+                        _,max_inx_tmp = torch.max(score_tmp,dim=-1)
+                        max_index.append(torch.nonzero(mask[i])[max_inx_tmp,0].tolist())
+                    
+                    else:
+                        # 如果包中没有任一实例满足，则认为其为负样本包，取所有图块中得分最大的图块的置信度
+                        # _,index = torch.max(max_score[i],dim=-1)
+                        # max_index.append(index)
+                        # 取所有图块中正常类得分最大的图块的置信度
+                        score_tmp = max_score[i,mask_max_nor[i]]
+                        _,max_inx_tmp = torch.max(score_tmp,dim=-1)
+                        max_index.append(torch.nonzero(mask_max_nor[i])[max_inx_tmp,0].tolist())
 
-            #     mask = (max_score - config.RDD_TRANS.TEST_THR > 0) & (max_index_cls - 6 != 0)
-            #     if mask.any() == True:
-            #         max_index = []
-            #         for i in range(b):
-            #             if mask[i].any()==True:
-            #                 score_tmp = max_score[i,mask[i]]
-            #                 _,max_inx_tmp = torch.max(score_tmp,dim=-1)
-            #                 max_index.append(torch.nonzero(mask[i])[max_inx_tmp,0].tolist())
-            #             else:
-            #                 _,index = torch.max(max_score[i],dim=-1)
-            #                 max_index.append(index)
-            #     else:
-            #         max_score,max_index = torch.max(max_score,dim=-1)
-
-            #     output_soft = output_soft[[i for i in range(b)],max_index,:]
-            #     output = output[[i for i in range(b)],max_index,:]
-            #     del max_score,mask
+                output_soft = output_soft[[i for i in range(b)],max_index,:]
+                output = output[[i for i in range(b)],max_index,:]
+                del max_score,mask
 
             if config.BINARYTRAIN_MODE:
                 loss = criterion(output, targets_bin)
