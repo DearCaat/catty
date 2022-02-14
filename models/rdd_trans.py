@@ -243,7 +243,7 @@ class RddTransformer(nn.Module):
         if self.cluster_model is not None:
             logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
         else:
-            logits_bag,clusters_num = self.head(avg_bag_feature),1
+            logits_bag,clusters_num = self.head(avg_bag_feature),[1]
         
         # except:
         #     np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())

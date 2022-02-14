@@ -445,9 +445,12 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
             #custom model
             else:
                 if config.AUG.MULTI_VIEW is not None:
-                    output,o_inst,_,cluster_num = model(samples[0])
+                    [samples_student,samples_teacher] = samples.transpose(0, 1)
                 else:
-                    output,o_inst,_,cluster_num = model(samples)
+                    samples_student,samples_teacher = samples,samples
+
+                del samples
+                output,o_inst,_,cluster_num = model(samples_student)
                 torch.cuda.empty_cache()
                 # 设定正常图片在类别中的索引
                 pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
@@ -460,19 +463,13 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     targets_pl = targets_bin
                 if persudo_inst: 
                     with torch.no_grad():
-                        if config.AUG.MULTI_VIEW is not None:
-                            print(samples)
-                            _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples[1])
-                        else:
-                            _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples)
+                        _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples_teacher)
                         torch.cuda.empty_cache()
                     b,p,cls = pl_inst.shape
                     t_cpu = targets_pl.cpu()
                     ins_t = targets_pl.unsqueeze(-1).repeat((1,p))
 
                     dis_ins = 0
-                    _tmp = torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1
-                    print(_tmp.size())
                     output_bag_label = output_pl[torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1].view(b,p)        #包所属标签下的置信度
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]
@@ -558,7 +555,6 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 classify_loss = criterion(output, targets)
                 loss = classify_loss
 
-                del samples
         
         if not config.DISTRIBUTED:
             loss_meter.update(loss.item(), targets.size(0))

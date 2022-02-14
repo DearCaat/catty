@@ -215,9 +215,11 @@ def build_transform(is_train,config):
                                 A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
                                 ToTensorV2()
                                 ])
-            transform_no_aug = create_transform(input_size=config.DATA.IMG_SIZE,
-                                is_training=True,
-                                no_aug = True)
+            transform_no_aug = A.Compose([
+                                A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
+                                A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
+                                ToTensorV2()
+                                ])
             if config.AUG.MULTI_VIEW == 'strong_weak':
                 return [transform_strong,transform_weak]
             elif config.AUG.MULTI_VIEW == 'strong_none':
@@ -251,7 +253,7 @@ def build_transform(is_train,config):
         t2.append(A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]))
         t2.append(ToTensorV2())
         #return [transform_1,transform_2]
-        return [t1,transforms.Compose(t2)]
+        return [transforms.Compose(t2)]
 
 def build_loader(is_train,config):
     mixup_fn = None
@@ -379,7 +381,7 @@ def pytorch_dataloader(is_train,config):
             transform_train = build_transform(is_train=True,config=config)
             transform_val = build_transform(is_train=False,config=config)
             dataset_train = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TEST_SPLIT),transform=transform_train,is_multi_view=config.AUG.MULTI_VIEW)
-            dataset_val = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.VAL_SPLIT),transform=transform_val,is_multi_view=config.AUG.MULTI_VIEW)
+            dataset_val = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.VAL_SPLIT),transform=transform_val)
 
         loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,drop_last=config.DATA.DROP_LAST,persistent_workers=True)
         loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
@@ -396,7 +398,7 @@ def pytorch_dataloader(is_train,config):
             transform_test = build_transform(is_train=False,config=config)
             # 之前做WSPLIN其它数据库测试用
             #dataset_test = PatchImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,transform=transform_test,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,eval=True,class_to_idx={'diseased':1,'normal':0},thumb=config.THUMB_MODE)
-            dataset_test = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TEST_SPLIT),transform=transform_test,is_multi_view=config.AUG.MULTI_VIEW)
+            dataset_test = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TEST_SPLIT),transform=transform_test)
         loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
         return dataset_test,loader_test
 
@@ -441,12 +443,14 @@ class MulitiViewImageDataset(data.Dataset):
                         # pytorch transforms
                         if idx == 0:
                             imgs = transform(img=img).unsqueeze(0)
-                        imgs = torch.cat((imgs,transform(img=img).unsqueeze(0)))
+                        else:
+                            imgs = torch.cat((imgs,transform(img=img).unsqueeze(0)))
                     except:
                         # albumentations
                         if idx == 0:
                             imgs = transform(image=np.asarray(img))['image'].unsqueeze(0)
-                        imgs = torch.cat((imgs,transform(image=np.asarray(img))['image'].unsqueeze(0)))
+                        else:
+                            imgs = torch.cat((imgs,transform(image=np.asarray(img))['image'].unsqueeze(0)))
             else:
                 imgs = self.transform(img=img)    
         if target is None:
