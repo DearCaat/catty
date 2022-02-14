@@ -36,7 +36,7 @@ class RddTransformer(nn.Module):
         num_classes = kwargs.pop('num_classes')
         self.instance_feature_extractor=backbone
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.head_instance = nn.Linear(dim, 2)  #实例分类器为二分类器，主要用于判断实例是否为病害 0正常 1病害
+        self.head_instance = nn.Linear(dim, kwargs['ins_num_classes'])  #实例分类器为二分类器，主要用于判断实例是否为病害 0正常 1病害
         self.head = nn.Sequential(
             nn.Linear(dim,num_classes) if num_classes > 0 else nn.Identity()
         )
@@ -186,7 +186,7 @@ class RddTransformer(nn.Module):
 
     def forward(self,x,bag_label=None):
         # step 1, get the instance feat by backbone Network
-        _, inst_feature=self.instance_feature_extractor.forward_features(x) #B*N*D
+        avg_bag_feature, inst_feature=self.instance_feature_extractor.forward_features(x) #B*N*D
         B,N,D = inst_feature.shape
         # step 2, cluster 
         if type(self.cluster_model) == GCN:
@@ -230,6 +230,7 @@ class RddTransformer(nn.Module):
         # B C N* D
         # step 3 classify
         # instance classify
+        
         logits_inst = self.head_instance(inst_feature.view(-1,D))
         logits_inst = logits_inst.view(B,N,-1)
         score_inst = self.soft_max(logits_inst)
@@ -237,7 +238,7 @@ class RddTransformer(nn.Module):
         if self.cluster_model is not None:
             logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
         else:
-            logits_bag,clusters_num = self.head(self.avgpool(inst_feature.transpose(1, 2)).view(B,D)),1
+            logits_bag,clusters_num = self.head(avg_bag_feature),1
         
         # except:
         #     np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
