@@ -55,8 +55,8 @@ _C.DATA.TEST_SPLIT = 'test'
 # epoch repeat multiplier (number of times to repeat dataset epoch per train epoch).
 _C.DATA.EPOCH_REPEATS = 0
 # Default timm thumb image loader
-_C.DATA.TIMM = True
-_C.DATA.TIMM_PREFETCHER = True
+_C.DATA.TIMM = False
+_C.DATA.TIMM_PREFETCHER = False
 _C.DATA.DROP_LAST = False
 
 
@@ -191,8 +191,8 @@ _C.AUG.CUTMIX = 0.
 # Number of augmentation splits (default: 0, valid: 0 or >=2)
 _C.AUG.SPLITS=0
 # output multi-view images, "strong_weak","strong_none","weak_none"
-# "teacher_student"
-_C.AUG.MULTI_VIEW = "strong_weak" 
+# "student_teacher"
+_C.AUG.MULTI_VIEW = "weak_none" 
 
 # -----------------------------------------------------------------------------
 # Testing settings
@@ -255,8 +255,9 @@ def _update_config_from_file(config, cfg_file):
 
 def update_config(config, args):
     if args.trainer:
-        pth = os.path.join(os.path.abspath('.'),'configs',args.trainer+'.yaml')
-        _update_config_from_file(config, pth)
+        config.TRAINER.NAME = args.trainer
+    pth = os.path.join(os.path.abspath('.'),'configs',config.TRAINER.NAME+'.yaml')
+    _update_config_from_file(config, pth)
 
     if args.cfg:
         _update_config_from_file(config, args.cfg)

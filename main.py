@@ -445,7 +445,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
             #custom model
             else:
                 if config.AUG.MULTI_VIEW is not None:
-                    output,o_inst,_,cluster_num = model(samples[1])
+                    output,o_inst,_,cluster_num = model(samples[0])
                 else:
                     output,o_inst,_,cluster_num = model(samples)
                 torch.cuda.empty_cache()
@@ -461,7 +461,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 if persudo_inst: 
                     with torch.no_grad():
                         if config.AUG.MULTI_VIEW is not None:
-                            _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples[0])
+                            print(samples)
+                            _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples[1])
                         else:
                             _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples)
                         torch.cuda.empty_cache()
@@ -470,6 +471,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     ins_t = targets_pl.unsqueeze(-1).repeat((1,p))
 
                     dis_ins = 0
+                    _tmp = torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1
+                    print(_tmp.size())
                     output_bag_label = output_pl[torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1].view(b,p)        #包所属标签下的置信度
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]

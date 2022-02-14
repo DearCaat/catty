@@ -4,8 +4,8 @@ RDD_TRANS:
     INIT: k-means++
     IPS_ACTIVE_CONNECTION: 2
     IPS_K_AT_HOP: [ 2, 0 ]
-    NAME: spectral
-    NUM_CLUSTER: 5
+    NAME: kmeans
+    NUM_CLUSTER: 3
     NUM_INIT: 10
     N_COMPOENTS: null
     RBF_DISTANCE: euclidean

@@ -12,6 +12,7 @@ def build_model(config):
             config.MODEL.NAME,
             pretrained=config.MODEL.PRETRAINED,
             num_classes=config.MODEL.NUM_CLASSES,
+            ins_num_classes=config.RDD_TRANS.INST_NUM_CLASS,
             drop_rate=config.MODEL.DROP_RATE,
             drop_path_rate=config.MODEL.DROP_PATH_RATE,
             cluster_name = config.RDD_TRANS.CLUSTER.NAME,
