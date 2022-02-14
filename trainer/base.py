@@ -320,11 +320,11 @@ class BaseTrainer():
             
             save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
 
-            metrics_values_epoch,others_epoch = trainer.measure_per_epoch(config,others=others,label=save_label,pred=save_pred)
-            update_metrics(config,trainer.test_metrics,metrics_values_epoch)
-            log_meter(metrics_values_epoch,trainer.test_metrics_epoch_log,logger)
+            metrics_values_epoch,others_epoch = self.trainer.measure_per_epoch(config,others=others,label=save_label,pred=save_pred)
+            update_metrics(config,self.trainer.test_metrics,metrics_values_epoch)
+            log_meter(metrics_values_epoch,self.trainer.test_metrics_epoch_log,logger)
 
-        metrics = OrderedDict([('loss', loss_meter.avg), ('top1', acc1_meter.avg), ('top5', acc5_meter.avg),('auc',auc),('macro_f1',ma_f1),('micro_f1',mi_f1)])
+        metrics = OrderedDict([(key,value.avg) if isinstance(value,AverageMeter) else (key,value) for key,value in self.trainer.test_metrics.items()])
         torch.cuda.empty_cache()
         if save_pre:
             return loss_meter.avg, metrics, save_pred, save_label

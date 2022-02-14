@@ -76,7 +76,7 @@ _C.TRAINER.NAME = 'rdd_trans'
 # -----------------------------------------------------------------------------
 _C.MODEL = CN()
 # Model type        #swin_small_patch4_window7_224  efficientnetv2_rw_s  deit_base_patch16_224  tf_efficientnet_b3 vit_base_patch32_224
-_C.MODEL.NAME = 'cluster_swin_small_patch4_window7_224'
+_C.MODEL.NAME = 'rdd_trans_swin_small_patch4_window7_224'
 # Model name
 _C.MODEL.BACKBONE = ''
 # Checkpoint to resume, could be overwritten by command line argument

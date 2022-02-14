@@ -11,14 +11,14 @@ from kmeans_pytorch import kmeans,kmeans_predict
 
 class RddTransformer(nn.Module):
     # 二分类考虑用BCE + Node (512,1)  多分类使用CE + Node(512,cls)
-    def __init__(self, backbone=nn.Module,cluster=GCN(), graph=KnnGraph(),dim=768,**kwargs):
+    def __init__(self, backbone=nn.Module,cluster=GCN(),dim=768,**kwargs):
         super().__init__()
         self.cluster_model = cluster
         self.cluster_distance = kwargs['cluster_distance']
         self.nor_index = kwargs['nor_index']
         self.cluster_num = None
         if type(cluster)==GCN:
-            self.graph = graph
+            self.graph = kwargs['graph']
             self.clustre_thr = kwargs['cluster_thr']
         elif cluster == kmeans:
             self.cluster_num = kwargs['num_cluster']
@@ -219,27 +219,26 @@ class RddTransformer(nn.Module):
             # find cluster features
             clusters_idcs,clusters_mask = self.sklearn_cluster(inst_feature)
             clusters_feat = inst_feature
+        # 分簇包分类
+        if self.cluster_model is not None:
+            #测试时聚类方法都认为不存在固定聚类数目
+            if not self.training:
+                cluster_num = None
 
-        #测试时聚类方法都认为不存在固定聚类数目
-        if not self.training:
-            cluster_num = None
-        # for i in range(len(clusters_feat)):
-        #     for m in range(len(clusters_feat[i])):
-        #         print(clusters_feat[i][m].size())
-        #         print(clusters_idcs[i][m])
-        # B C N* D
-        # step 3 classify
-        # instance classify
-        #print(clusters_idcs[0])
-        # logits_inst = self.head_instance(inst_feature.view(-1,D))
-        # logits_inst = logits_inst.view(B,N,-1)
-        # score_inst = self.soft_max(logits_inst)
-        # bag classify
-        # try:
-        logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
-        # except:
-        #     np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
-
+            # B C N* D
+            # step 3 classify
+            # instance classify
+            #print(clusters_idcs[0])
+            # logits_inst = self.head_instance(inst_feature.view(-1,D))
+            # logits_inst = logits_inst.view(B,N,-1)
+            # score_inst = self.soft_max(logits_inst)
+            # bag classify
+            logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
+        else:
+            inst_feature = 
+            logits_bag = self.head()
+        logits_inst = self.head_instance(inst_feature.view(-1,D))
+        logits_inst = logits_inst.view(B,N,-1)
         if self.training:
             #return logits_bag, logits_inst, score_inst,cluster_num
             return logits_bag, None, None,clusters_num
@@ -249,7 +248,7 @@ class RddTransformer(nn.Module):
             #return logits_bag, logits_inst, score_inst,cluster_num
 
 @register_model
-def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):
+def rdd_trans_swin_small_patch4_window7_224(pretrained=False, **kwargs):
     """ Swin-S @ 224x224, trained ImageNet-1k
     """
     model_kwargs = dict(
@@ -261,3 +260,6 @@ def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):
         return RddTransformer(backbone=backbone,cluster=GCN(in_dim=768,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
     elif kwargs['cluster_name'].lower() == 'spectral':
         return RddTransformer(backbone=backbone,cluster=spectral_clustering,**kwargs)
+    else:
+        return RddTransformer(backbone=backbone,cluster=None,**kwargs)
+        

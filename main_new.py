@@ -122,7 +122,6 @@ def main(config):
         
     logger.info(f"Creating model:{config.MODEL.NAME}/{config.MODEL.BACKBONE}")
     model = build_model(config)
-    model_teacher = None
     #if not config.THUMB_MODE:
         # model_teacher = build_model(config)
         # model_teacher.cuda()

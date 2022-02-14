@@ -7,7 +7,7 @@ from .rdd_trans import *
 def build_model(config):
     model_name=config.MODEL.NAME
     # Use the official impl to use the gradient cheackpoint
-    if model_name.startswith('cluster'):
+    if model_name.startswith('rdd_trans'):
         model = create_model(
             config.MODEL.NAME,
             pretrained=config.MODEL.PRETRAINED,
