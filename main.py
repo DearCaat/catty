@@ -445,7 +445,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
             #custom model
             else:
                 if config.AUG.MULTI_VIEW is not None:
-                    output,o_inst,_,cluster_num = model(samples[1])
+                    output,o_inst,_,cluster_num = model(samples[0])
                 else:
                     output,o_inst,_,cluster_num = model(samples)
                 torch.cuda.empty_cache()
@@ -461,10 +461,11 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 if persudo_inst: 
                     with torch.no_grad():
                         if config.AUG.MULTI_VIEW is not None:
-                            _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples[0])
+                            _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples[1])
                         else:
                             _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples)
                         torch.cuda.empty_cache()
+                    
                     b,p,cls = pl_inst.shape
                     t_cpu = targets_pl.cpu()
                     ins_t = targets_pl.unsqueeze(-1).repeat((1,p))

@@ -208,6 +208,7 @@ def build_transform(is_train,config):
                                 interpolation=config.DATA.INTERPOLATION)
             transform_weak = A.Compose([
                                 A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
+                                A.RandomBrightnessContrast(p=0.5),
                                 A.HorizontalFlip(p=0.5),
                                 A.VerticalFlip(p=0.5),
                                 A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),

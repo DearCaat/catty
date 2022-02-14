@@ -4,8 +4,8 @@ RDD_TRANS:
     INIT: k-means++
     IPS_ACTIVE_CONNECTION: 2
     IPS_K_AT_HOP: [ 2, 0 ]
-    NAME: spectral
-    NUM_CLUSTER: 5
+    NAME: kmeans
+    NUM_CLUSTER: 3
     NUM_INIT: 10
     N_COMPOENTS: null
     RBF_DISTANCE: euclidean
@@ -21,6 +21,6 @@ RDD_TRANS:
   INST_NUM_CLASS: 2
   NOR_THR: 0.05
   NOT_INST_TEST: true
-  PERSUDO_LEARNING: false
+  PERSUDO_LEARNING: true
   TEACHER_LOSS : null
   TEST_THR: 0.995

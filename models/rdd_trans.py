@@ -230,23 +230,25 @@ class RddTransformer(nn.Module):
         # B C N* D
         # step 3 classify
         # instance classify
-        #print(clusters_idcs[0])
-        # logits_inst = self.head_instance(inst_feature.view(-1,D))
-        # logits_inst = logits_inst.view(B,N,-1)
-        # score_inst = self.soft_max(logits_inst)
+        logits_inst = self.head_instance(inst_feature.view(-1,D))
+        logits_inst = logits_inst.view(B,N,-1)
+        score_inst = self.soft_max(logits_inst)
         # bag classify
-        # try:
-        logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
+        if self.cluster_model is not None:
+            logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
+        else:
+            logits_bag,clusters_num = self.head(self.avgpool(inst_feature.transpose(1, 2)).view(B,D)),1
+        
         # except:
         #     np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
 
         if self.training:
-            #return logits_bag, logits_inst, score_inst,cluster_num
-            return logits_bag, None, None,clusters_num
+            return logits_bag, logits_inst, score_inst,clusters_num
+            #return logits_bag, None, None,clusters_num
         else:
             # bag classify
-            return logits_bag, None, None,clusters_num
-            #return logits_bag, logits_inst, score_inst,cluster_num
+            #return logits_bag, None, None,clusters_num
+            return logits_bag, logits_inst, score_inst,clusters_num
 
 @register_model
 def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):
@@ -255,9 +257,14 @@ def cluster_swin_small_patch4_window7_224(pretrained=False, **kwargs):
     model_kwargs = dict(
         patch_size=4, window_size=7, embed_dim=96, depths=(2, 2, 18, 2), num_heads=(3, 6, 12, 24), **kwargs)
     backbone = _create_swin_transformer('swin_small_patch4_window7_224', pretrained=pretrained, **model_kwargs)
-    if kwargs['cluster_name'].lower() == 'kmeans':
-        return RddTransformer(backbone=backbone,cluster=kmeans,**kwargs)
-    elif kwargs['cluster_name'].lower() == 'gcn':
-        return RddTransformer(backbone=backbone,cluster=GCN(in_dim=768,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
-    elif kwargs['cluster_name'].lower() == 'spectral':
-        return RddTransformer(backbone=backbone,cluster=spectral_clustering,**kwargs)
+    if 'cluster_name' in kwargs:
+        if kwargs['cluster_name'].lower() == 'kmeans':
+            return RddTransformer(backbone=backbone,cluster=kmeans,**kwargs)
+        elif kwargs['cluster_name'].lower() == 'gcn':
+            return RddTransformer(backbone=backbone,cluster=GCN(in_dim=768,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
+        elif kwargs['cluster_name'].lower() == 'spectral':
+            return RddTransformer(backbone=backbone,cluster=spectral_clustering,**kwargs)
+        else:
+            return RddTransformer(backbone=backbone,cluster=None,**kwargs)
+    else:
+        return RddTransformer(backbone=backbone,cluster=None,**kwargs)
