@@ -15,7 +15,7 @@ import logging
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
-
+from timm.data.transforms import str_to_interp_mode
 
 #Cacha 功能没有实现，现在只能在队列中随机shuffle
 
@@ -229,19 +229,19 @@ def build_transform(is_train,config):
                 return [transform_weak,transform_no_aug]
             else:
                 raise NotImplementedError
-        # transform = create_transform(
-        #                         input_size=config.DATA.IMG_SIZE,
-        #                         is_training=True,
-        #                         no_aug = config.AUG.NO_AUG,
-        #                         color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
-        #                         auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
-        #                         re_prob=config.AUG.REPROB,
-        #                         re_mode=config.AUG.REMODE,
-        #                         re_count=config.AUG.RECOUNT,
-        #                         interpolation=config.DATA.INTERPOLATION)
+        transform = create_transform(
+                                input_size=config.DATA.IMG_SIZE,
+                                is_training=True,
+                                no_aug = config.AUG.NO_AUG,
+                                color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                                auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
+                                re_prob=config.AUG.REPROB,
+                                re_mode=config.AUG.REMODE,
+                                re_count=config.AUG.RECOUNT,
+                                interpolation=config.DATA.INTERPOLATION)
         transform = A.Compose([
-                            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
-                            A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
+                            #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
+                            #A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
                             ToTensorV2(),
                             ])
         return transform
@@ -256,8 +256,7 @@ def build_transform(is_train,config):
             A.ShiftScaleRotate(rotate_limit=15.0, p=0.7)
         ])
         t2 = A.Compose([
-            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
-            A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
+            #A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
             ToTensorV2(),
         ])
         transform = create_transform(
@@ -451,6 +450,7 @@ class MulitiViewImageDataset(data.Dataset):
             else:
                 raise e
         self._consecutive_errors = 0
+        img = transforms.Resize(size=(224,224),interpolation=str_to_interp_mode('bicubic'))(img=img)
         if self.transform is not None:
             if self.is_multi_view is not None:
                 for idx,transform in enumerate(self.transform):
@@ -472,6 +472,7 @@ class MulitiViewImageDataset(data.Dataset):
                     imgs = self.transform(image=np.asarray(img))['image']
                 except:
                     imgs = self.transform(img=img)
+        imgs = transforms.Normalize(mean=IMAGENET_DEFAULT_MEAN,std=IMAGENET_DEFAULT_STD)(imgs.float())
         if target is None:
             target = -1
         elif self.target_transform is not None:

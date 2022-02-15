@@ -36,12 +36,12 @@ class RddTransformer(nn.Module):
         num_classes = kwargs.pop('num_classes')
         self.instance_feature_extractor=backbone
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.head_instance = nn.Linear(dim, kwargs['ins_num_classes'])  #实例分类器为二分类器，主要用于判断实例是否为病害 0正常 1病害
+        #self.head_instance = nn.Linear(dim, kwargs['ins_num_classes'])  #实例分类器为二分类器，主要用于判断实例是否为病害 0正常 1病害
         self.head = nn.Sequential(
             nn.Linear(dim,num_classes) if num_classes > 0 else nn.Identity()
         )
         self.soft_max = nn.Softmax(-1)
-        initialize_weights(self.head_instance)
+        #initialize_weights(self.head_instance)
         initialize_weights(self.head)
 
     def get_cluster_feat_f(self,clusters_feat,cluster_num):
@@ -233,10 +233,10 @@ class RddTransformer(nn.Module):
         #         print(clusters_feat[i][m].size())
         #         print(clusters_idcs[i][m])
         # B C N* D
-        
+
         # step 3 classify
         # instance classify
-        logits_inst = self.head_instance(inst_feature.view(-1,D))
+        logits_inst = self.instance_feature_extractor.head_instance(inst_feature.view(-1,D))
         logits_inst = logits_inst.view(B,N,-1)
         score_inst = self.soft_max(logits_inst)
         # bag classify

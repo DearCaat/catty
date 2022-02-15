@@ -143,8 +143,11 @@ def getDataByStick(data,stick):
                     diff = 9999
                     del _stick[j]    
 
-def get_sigmod_num(start=0,curr_step=0,all_step=0,end=0.999):
-    thr_min_conf = start + (round((1 / (1 + math.exp(-10*(curr_step / all_step)) - 0.5) * 2),3)) * (end-start)
+def get_sigmod_num(start=0,curr_step=0,all_step=0,end=0.999,alph=10):
+    '''
+    alph  平缓系数,数字越小则曲线越平缓
+    '''
+    thr_min_conf = start + (round((1 / (1+math.exp(-alph*(curr_step / all_step)))-0.5 )*2,3)) * (end-start)
     return thr_min_conf
 class ModelEmaV3(torch.nn.Module):
     """ Model Exponential Moving Average V2

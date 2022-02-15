@@ -126,7 +126,6 @@ def main(config):
         std['head_instance.weight'] = std['head.weight']
         std['head_instance.bias'] = std['head.bias']
         model_teacher.instance_feature_extractor.load_state_dict(std, strict=True)
-        
     elif config.THUMB_MODE:
          model_teacher = None
     else:
@@ -488,7 +487,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         min_nor_thr = out_tmp_sort[[i for i in range(b)],np.floor(p*thr_list[t_cpu])] # [b 1]
                         min_nor_thr = min_nor_thr.unsqueeze(-1).repeat((1,p))        # [b p]
                     else:
-                        min_nor_thr = torch.ones(size=(b,p))
+                        min_nor_thr = torch.zeros(size=(b,p))
                     min_nor_thr = min_nor_thr.cuda(non_blocking=True)
 
                     _,label_pl = torch.max(output_pl,dim=2)
@@ -497,7 +496,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     #获得正常包索引和病害包索引
                     #bs_index_nor = targets_pl==pl_nor_cls_index
                     #bs_index_dis = bs_index_nor==False
-                    ps_mask_nor = (ins_t - pl_nor_cls_index == 0)
+                    ps_mask_nor = ins_t == pl_nor_cls_index
                     ps_mask_dis = ps_mask_nor==False
 
                     #将所有实例设为正常
@@ -514,16 +513,15 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod':
                         # thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
                         # thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
-                        thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH),config.TRAIN.EPOCHS)
-                        thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH),config.TRAIN.EPOCHS)
+                        thr_min_conf = get_sigmod_num(0.9,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH)
+                        thr_min_dis_conf = get_sigmod_num(0.5,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH)
                     #把网络判断为不是正常的部分实例置为包病害标签
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         #判断为相应病害的实例置为包标签
                         #mask_ins =  (label_tmp - ins_t  == 0)
                         # 将病害包里判断为不是正常的实例都置为包标签，thr_list的值，保证了该类中至少有百分之n个病害实例
-                        # 对于病害包里的实例，采用两种阈值，相对阈值和绝对阈值，并且这两个阈值都是自适应的。一个病害包中的实例，如果它的正常概率小于绝对正常阈值并且病害概率大于绝对病害阈值，或者它的病害概率大于相对病害阈值，就认为它为病害
-                        mask_ins = ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf))& (output_bag_label > thr_min_dis_conf)  )  | (output_bag_label - min_nor_thr >  0))
-
+                        # 对于病害包里的实例，采用两种阈值，相对阈值和绝对阈值，并且这两个阈值都是自适应的。一个病害包中的实例，如果它的正常概率小于绝对正常阈值并且病害概率大于绝对病害阈值，或者它的病害概率大于相对病害阈值，就认为它为病害 & (output_bag_label > thr_min_dis_conf) 
+                        mask_ins = ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf)) )  | (output_bag_label > min_nor_thr))
                         # 只要相对阈值
                         #mask_ins = ps_mask_dis & ( output_bag_label - min_nor_thr >  0)
 
@@ -535,18 +533,18 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         if config.RDD_TRANS.FILTER_SAMPLES:
                         # 选取部分置信度比较高的实例参与loss计算
                         # 对于病害包来说，所有病害实例都用，只有teacher判定为正常的实例，并且其正常概率大于绝对病害阈值才纳用。对于正常包来说，其正常概率大于绝对病害阈值才纳用   
-                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
+                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf  ))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
                         else:
                         #全部都用
-                            mask_ins = (label_pl - label_pl == 0)
+                            mask_ins = label_pl == label_pl
                     else:
-                        
+                        mask_ins = ps_mask_dis & (output_bag_label > min_nor_thr)
+                        label_pl[mask_ins] = ins_t[mask_ins]
                         #全部都用
-                        #mask_ins = (label_tmp - label_tmp == 0)
+                        mask_ins = label_pl == label_pl
                         #只要正常图片 (output_bag_label - 0.9 > 0)
-                        mask_ins = ps_mask_nor 
-
-                        #label_pl[bs_index_dis] = ins_t[bs_index_dis]
+                        #mask_ins = ps_mask_nor 
+                        
 
                     #统计病害实例
                     dis_count = torch.count_nonzero(label_pl - pl_nor_cls_index,dim=1) 
@@ -842,12 +840,12 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     
                     else:
                         # 如果包中没有任一实例满足，则认为其为负样本包，取所有图块中得分最大的图块的置信度
-                        # _,index = torch.max(max_score[i],dim=-1)
-                        # max_index.append(index)
+                        _,index = torch.max(max_score[i],dim=-1)
                         # 取所有图块中正常类得分最大的图块的置信度
-                        score_tmp = max_score[i,mask_max_nor[i]]
-                        _,max_inx_tmp = torch.max(output_soft[i,:,config.DATA.NOR_CLS_INDEX],dim=-1)
-                        max_index.append(max_inx_tmp)
+                        # score_tmp = max_score[i,mask_max_nor[i]]
+                        # _,index = torch.max(output_soft[i,:,config.DATA.NOR_CLS_INDEX],dim=-1)
+
+                        max_index.append(index)
 
                 output_soft = output_soft[[i for i in range(b)],max_index,:]
                 output = output[[i for i in range(b)],max_index,:]
