@@ -118,15 +118,17 @@ def main(config):
         
     logger.info(f"Creating model:{config.MODEL.NAME}/{config.MODEL.BACKBONE}")
     model = build_model(config)
-    if config.RDD_TRANS.TEACHER_INIT:
+    if config.RDD_TRANS.TEACHER_INIT and config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE:
         model_teacher = build_model(config)
         model_teacher.cuda()
-        cpt = torch.load('/home/tangwenhao/output/swin/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
+        cpt = torch.load('/home/tangwenhao/output/swin/model/swin_small_patch4_window7_224_ema_best_model.pth', map_location='cpu')
         std = cpt['state_dict']
         std['head_instance.weight'] = std['head.weight']
         std['head_instance.bias'] = std['head.bias']
         model_teacher.instance_feature_extractor.load_state_dict(std, strict=True)
         
+    elif config.THUMB_MODE:
+         model_teacher = None
     else:
         model_teacher = model
         
@@ -235,15 +237,12 @@ def main(config):
             np.savez(_save_path,pred=pred,label=label)
 
             return
-    teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[])
+    if model_teacher is not None:
+        teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[])
+    else:
+        teacher_ema = None
     model_ema = None
-    if config.MODEL_EMA:
-        # cpt = torch.load('/home/tangwenhao/rdd/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
-        # std = cpt['state_dict']
-        # std['head_instance.weight'] = std['head.weight']
-        # std['head_instance.bias'] = std['head.bias']
-        # model.load_state_dict(std)
-        
+    if config.MODEL_EMA:    
         model_ema = ModelEmaV3(model, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None)
 
     # setup exponential moving average of model weights, SWA could be used here too
@@ -420,7 +419,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     start = time.time()
     end = time.time()
     last_idx = len(data_loader) - 1
-    persudo_inst = config.RDD_TRANS.PERSUDO_LEARNING
+    persudo_inst = config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE
 
     for idx, (samples, targets) in enumerate(data_loader):
         last_batch = idx == last_idx
@@ -437,7 +436,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
             targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
         
         # timm dataloader prefetcher will do this
-        if mixup_fn is not None and not config.DATA.TIMM:
+        if mixup_fn is not None and ((not config.DATA.TIMM_PREFETCHER and config.DATA.TIMM) or not config.DATA.TIMM):
             samples, targets = mixup_fn(samples, targets)
 
         p = 1
@@ -503,18 +502,27 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
                     #将所有实例设为正常
                     label_pl[:,:] = pl_nor_cls_index 
-                    # 包中的绝对病害阈值
+
+                    # 包中的绝对阈值
+                    if config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'fix':
+                        thr_min_conf = config.RDD_TRANS.THR_ABS_NOR
+                        thr_min_dis_conf = config.RDD_TRANS.THR_ABS_DIS
+                    elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'linear':
+                        thr_min_conf = 0.9
+                        thr_min_dis_conf = 0.9
                     # sigmod函数来保证前期增加速率远远高于后期，优于线性增长
-                    thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
-                    thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+                    elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod':
+                        # thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+                        # thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+                        thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH),config.TRAIN.EPOCHS)
+                        thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH),config.TRAIN.EPOCHS)
                     #把网络判断为不是正常的部分实例置为包病害标签
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         #判断为相应病害的实例置为包标签
                         #mask_ins =  (label_tmp - ins_t  == 0)
                         # 将病害包里判断为不是正常的实例都置为包标签，thr_list的值，保证了该类中至少有百分之n个病害实例
                         # 对于病害包里的实例，采用两种阈值，相对阈值和绝对阈值，并且这两个阈值都是自适应的。一个病害包中的实例，如果它的正常概率小于绝对正常阈值并且病害概率大于绝对病害阈值，或者它的病害概率大于相对病害阈值，就认为它为病害
-                        #  & (output_bag_label > thr_min_dis_conf)
-                        mask_ins = ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf))  )  | (output_bag_label - min_nor_thr >  0))
+                        mask_ins = ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf))& (output_bag_label > thr_min_dis_conf)  )  | (output_bag_label - min_nor_thr >  0))
 
                         # 只要相对阈值
                         #mask_ins = ps_mask_dis & ( output_bag_label - min_nor_thr >  0)
@@ -524,13 +532,15 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
                         label_pl[mask_ins] = ins_t[mask_ins]
 
+                        if config.RDD_TRANS.FILTER_SAMPLES:
                         # 选取部分置信度比较高的实例参与loss计算
                         # 对于病害包来说，所有病害实例都用，只有teacher判定为正常的实例，并且其正常概率大于绝对病害阈值才纳用。对于正常包来说，其正常概率大于绝对病害阈值才纳用   
-                        #mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
-                        
+                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
+                        else:
                         #全部都用
-                        mask_ins = (label_pl - label_pl == 0)
+                            mask_ins = (label_pl - label_pl == 0)
                     else:
+                        
                         #全部都用
                         #mask_ins = (label_tmp - label_tmp == 0)
                         #只要正常图片 (output_bag_label - 0.9 > 0)
@@ -578,10 +588,13 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         loss_pl = loss_teacher(o_inst,label_pl)
                     else:
                         loss_pl = 0
-
+                else:
+                    loss_pl = 0
+                
                 cluster_num_meter.update(sum(cluster_num) / b,b)
                 classify_loss = criterion(output, targets)
-                loss = loss_pl
+
+                loss = loss_pl + config.RDD_TRANS.CLASSIFY_LOSS * classify_loss
 
         
         if not config.DISTRIBUTED:
@@ -694,7 +707,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     if persudo_inst and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
         for i in range(len(thr_list)):
             dis_ratio_tmp= np.sort(np.array(dis_ratio_list[i]))
-            thr_list[i] = 0.75 * thr_list[i] + 0.25 * dis_ratio_tmp[math.floor(len(dis_ratio_tmp) * 0.01)]
+            thr_list[i] = config.RDD_TRANS.THR_REL_EMA_DECAY * thr_list[i] + (1-config.RDD_TRANS.THR_REL_EMA_DECAY) * dis_ratio_tmp[math.floor(len(dis_ratio_tmp) * config.RDD_TRANS.THR_REL_UPDATE_RATIO)]
 
     epoch_time = time.time() - start
     for i in range(len(dis_rec)):
@@ -806,13 +819,13 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             with amp_autocast():
                 output = model(images)
             if isinstance(output, (tuple, list)):
-                index = 0 if config.THUMB_MODE or config.RDD_TRANS.NOT_INST_TEST else 1
+                index = 0 if config.THUMB_MODE or config.RDD_TRANS.NOT_INST_TEST or not config.RDD_TRANS.PERSUDO_LEARNING else 1
                 cluster_num = output[-1]
                 output = output[index]
 
             output_soft = torch.nn.functional.softmax(output,dim=-1)
 
-            if not config.THUMB_MODE and not config.RDD_TRANS.NOT_INST_TEST:
+            if not config.THUMB_MODE and not config.RDD_TRANS.NOT_INST_TEST and config.RDD_TRANS.PERSUDO_LEARNING:
                 #使用max-pool来测试
                 b,p,cls = output.shape
                 max_score,max_index_cls = torch.max(output_soft,dim=-1)  # B P
@@ -833,8 +846,8 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                         # max_index.append(index)
                         # 取所有图块中正常类得分最大的图块的置信度
                         score_tmp = max_score[i,mask_max_nor[i]]
-                        _,max_inx_tmp = torch.max(score_tmp,dim=-1)
-                        max_index.append(torch.nonzero(mask_max_nor[i])[max_inx_tmp,0].tolist())
+                        _,max_inx_tmp = torch.max(output_soft[i,:,config.DATA.NOR_CLS_INDEX],dim=-1)
+                        max_index.append(max_inx_tmp)
 
                 output_soft = output_soft[[i for i in range(b)],max_index,:]
                 output = output[[i for i in range(b)],max_index,:]
@@ -996,6 +1009,6 @@ if __name__ == '__main__':
         logger.info(f"Full config saved to {path}")
 
     # print config
-    #logger.info(config.dump())
+    logger.info(config.dump())
 
     main(config)

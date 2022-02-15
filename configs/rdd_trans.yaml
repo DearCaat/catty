@@ -25,4 +25,15 @@ RDD_TRANS:
   # use baseline model to init the teacher
   TEACHER_INIT : true
   INIT_STAGE_EPOCH: 0
-  TEST_THR: 0.995
+  TEST_THR: 0.9
+  FILTER_SAMPLES: false
+  CLASSIFY_LOSS: 1
+  # update it per iter
+  THR_REL_EMA_DECAY: 0.75
+  # 取最小的百分之几比例来更新，相对阈值是一种保证前提，保证一个包里面最少都要有这么多病害实例
+  THR_REL_UPDATE_RATIO: 0.01
+  # fix linear sigmod
+  THR_ABS_UPDATE_NAME: fix
+
+  THR_ABS_DIS: 0.9
+  THR_ABS_NOR: 0.9

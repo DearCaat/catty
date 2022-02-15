@@ -100,7 +100,7 @@ _C.MODEL.NUM_PATCHES=17
 # -----------------------------------------------------------------------------
 _C.TRAIN = CN()
 _C.TRAIN.START_EPOCH = 0
-_C.TRAIN.EPOCHS = 30
+_C.TRAIN.EPOCHS = 20
 _C.TRAIN.WARMUP_EPOCHS = 3
 _C.TRAIN.WEIGHT_DECAY = 0
 _C.TRAIN.BASE_LR = 1e-4

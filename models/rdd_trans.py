@@ -233,9 +233,9 @@ class RddTransformer(nn.Module):
         #         print(clusters_feat[i][m].size())
         #         print(clusters_idcs[i][m])
         # B C N* D
+        
         # step 3 classify
         # instance classify
-        
         logits_inst = self.head_instance(inst_feature.view(-1,D))
         logits_inst = logits_inst.view(B,N,-1)
         score_inst = self.soft_max(logits_inst)

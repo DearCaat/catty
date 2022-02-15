@@ -229,17 +229,21 @@ def build_transform(is_train,config):
                 return [transform_weak,transform_no_aug]
             else:
                 raise NotImplementedError
-        
-        transform = create_transform(
-                                input_size=config.DATA.IMG_SIZE,
-                                is_training=True,
-                                no_aug = config.AUG.NO_AUG,
-                                color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
-                                auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
-                                re_prob=config.AUG.REPROB,
-                                re_mode=config.AUG.REMODE,
-                                re_count=config.AUG.RECOUNT,
-                                interpolation=config.DATA.INTERPOLATION)
+        # transform = create_transform(
+        #                         input_size=config.DATA.IMG_SIZE,
+        #                         is_training=True,
+        #                         no_aug = config.AUG.NO_AUG,
+        #                         color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+        #                         auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
+        #                         re_prob=config.AUG.REPROB,
+        #                         re_mode=config.AUG.REMODE,
+        #                         re_count=config.AUG.RECOUNT,
+        #                         interpolation=config.DATA.INTERPOLATION)
+        transform = A.Compose([
+                            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
+                            A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
+                            ToTensorV2(),
+                            ])
         return transform
 
     else:
@@ -254,8 +258,18 @@ def build_transform(is_train,config):
         t2 = A.Compose([
             A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
             A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
-            ToTensorV2()
+            ToTensorV2(),
         ])
+        transform = create_transform(
+                        input_size=config.DATA.IMG_SIZE,
+                        is_training=False,
+                        no_aug = config.AUG.NO_AUG,
+                        color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                        auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
+                        re_prob=config.AUG.REPROB,
+                        re_mode=config.AUG.REMODE,
+                        re_count=config.AUG.RECOUNT,
+                        interpolation=config.DATA.INTERPOLATION)
         #return [transform_1,transform_2]
         return t2
 
@@ -290,8 +304,8 @@ def build_loader(is_train,config):
             dataset_train, dataset_val, loader_train, loader_val =pytorch_dataloader(is_train=True,config=config)
             return dataset_train, dataset_val, loader_train, loader_val,mixup_fn
         else:
-            dataset_val,loader_test = pytorch_dataloader(is_train=False,config=config)
-            return dataset_val,loader_test
+            dataset_test,loader_test = pytorch_dataloader(is_train=False,config=config)
+            return dataset_test,loader_test
 #采用timm库，作了小小改动，支持多gpu，支持多线程，支持shuffle，不支持cache
 def tfds_dataset(is_train,config):
     if is_train:
@@ -379,16 +393,13 @@ def pytorch_dataloader(is_train,config):
         if config.DATA.TFRECORD_MODE:
             dataset_train, dataset_val = tfds_dataset(True,config)
         else:
-            #占位，考虑文件夹数据集
-            #暂时不考虑训练
-            #dataset_val = create_dataset(name=config.DATA.DATASET,root=config.DATA.DATA_PATH,thumb=config.THUMB_MODE)
             transform_train = build_transform(is_train=True,config=config)
             transform_val = build_transform(is_train=False,config=config)
             dataset_train = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform_train,is_multi_view=config.AUG.MULTI_VIEW)
             dataset_val = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.VAL_SPLIT),transform=transform_val)
 
-        loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,drop_last=config.DATA.DROP_LAST,persistent_workers=True)
-        loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
+        loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,drop_last=config.DATA.DROP_LAST,persistent_workers=True,shuffle=True)
+        loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=config.DATA.VAL_BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
         
         
         return dataset_train, dataset_val, loader_train, loader_val
@@ -403,7 +414,7 @@ def pytorch_dataloader(is_train,config):
             # 之前做WSPLIN其它数据库测试用
             #dataset_test = PatchImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,transform=transform_test,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,eval=True,class_to_idx={'diseased':1,'normal':0},thumb=config.THUMB_MODE)
             dataset_test = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TEST_SPLIT),transform=transform_test)
-        loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
+        loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=config.DATA.VAL_BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
         return dataset_test,loader_test
 
 # 适用于常见的多数据增强的方法，暂时考虑两个视角
@@ -457,7 +468,10 @@ class MulitiViewImageDataset(data.Dataset):
                             imgs = torch.cat((imgs,transform(image=np.asarray(img))['image'].unsqueeze(0)))
             else:
                 # default albumentations
-                imgs = self.transform(image=np.asarray(img))['image'] 
+                try:
+                    imgs = self.transform(image=np.asarray(img))['image']
+                except:
+                    imgs = self.transform(img=img)
         if target is None:
             target = -1
         elif self.target_transform is not None:
