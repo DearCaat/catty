@@ -507,21 +507,30 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         thr_min_conf = config.RDD_TRANS.THR_ABS_NOR
                         thr_min_dis_conf = config.RDD_TRANS.THR_ABS_DIS
                     elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'linear':
-                        thr_min_conf = 0.9
-                        thr_min_dis_conf = 0.9
+                        thr_min_conf = 0.9 + (epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) / (config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) *0.099
+                        thr_min_dis_conf = 0.5 + (epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) / (config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) *0.499
                     # sigmod函数来保证前期增加速率远远高于后期，优于线性增长
-                    elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod':
-                        # thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
-                        # thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
-                        thr_min_conf = get_sigmod_num(0.9,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH)
-                        thr_min_dis_conf = get_sigmod_num(0.5,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH)
+                    elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_iter':
+                        thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+                        thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+                    elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_epoch':
+                        thr_min_conf = get_sigmod_num(0.9,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.99)
+                        thr_min_dis_conf = get_sigmod_num(0.5,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.99)
                     #把网络判断为不是正常的部分实例置为包病害标签
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         #判断为相应病害的实例置为包标签
                         #mask_ins =  (label_tmp - ins_t  == 0)
                         # 将病害包里判断为不是正常的实例都置为包标签，thr_list的值，保证了该类中至少有百分之n个病害实例
-                        # 对于病害包里的实例，采用两种阈值，相对阈值和绝对阈值，并且这两个阈值都是自适应的。一个病害包中的实例，如果它的正常概率小于绝对正常阈值并且病害概率大于绝对病害阈值，或者它的病害概率大于相对病害阈值，就认为它为病害 & (output_bag_label > thr_min_dis_conf) 
-                        mask_ins = ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf)) )  | (output_bag_label > min_nor_thr))
+                        # 对于病害包里的实例，采用两种阈值，相对阈值和绝对阈值，并且这两个阈值都是自适应的。一个病害包中的实例，如果它的正常概率小于绝对正常阈值并且病害概率大于绝对病害阈值，或者它的病害概率大于相对病害阈值，就认为它为病害 & (output_bag_label > thr_min_dis_conf)
+
+                        if config.RDD_TRANS.THR_ABS_DIS_:
+                            mask_ins_abs = output_bag_label >= thr_min_dis_conf
+                        if config.RDD_TRANS.THR_ABS_NOR_:
+                            mask_ins_abs = output_pl[:,:,pl_nor_cls_index] <= (1-thr_min_conf)
+                        if config.RDD_TRANS.THR_REL_:
+                            mask_ins = ps_mask_dis & (mask_ins_abs | (output_bag_label >= min_nor_thr))
+                        else:
+                            mask_ins = ps_mask_dis & mask_ins_abs
                         # 只要相对阈值
                         #mask_ins = ps_mask_dis & ( output_bag_label - min_nor_thr >  0)
 
@@ -533,7 +542,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         if config.RDD_TRANS.FILTER_SAMPLES:
                         # 选取部分置信度比较高的实例参与loss计算
                         # 对于病害包来说，所有病害实例都用，只有teacher判定为正常的实例，并且其正常概率大于绝对病害阈值才纳用。对于正常包来说，其正常概率大于绝对病害阈值才纳用   
-                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf  ))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
+                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] >= thr_min_conf  ))) | ((output_pl[:,:,pl_nor_cls_index] >= thr_min_conf) & ps_mask_nor)
                         else:
                         #全部都用
                             mask_ins = label_pl == label_pl
@@ -840,9 +849,11 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     
                     else:
                         # 如果包中没有任一实例满足，则认为其为负样本包，取所有图块中得分最大的图块的置信度
-                        _,index = torch.max(max_score[i],dim=-1)
+                        if config.RDD_TRANS.TEST_MAX_POOL:
+                            _,index = torch.max(max_score[i],dim=-1)
+                        else:
                         # 取所有图块中正常类得分最大的图块的置信度
-                        # score_tmp = max_score[i,mask_max_nor[i]]
+                            score_tmp = max_score[i,mask_max_nor[i]]
                         # _,index = torch.max(output_soft[i,:,config.DATA.NOR_CLS_INDEX],dim=-1)
 
                         max_index.append(index)

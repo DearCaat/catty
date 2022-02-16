@@ -207,19 +207,27 @@ def build_transform(is_train,config):
                                 re_mode=config.AUG.REMODE,
                                 re_count=config.AUG.RECOUNT,
                                 interpolation=config.DATA.INTERPOLATION)
+            transform_strong = A.Compose([
+                                A.RandomBrightnessContrast(p=0.7),
+                                A.HorizontalFlip(p=0.7),
+                                A.VerticalFlip(p=0.7),
+                                A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                                A.OneOf([
+                                    A.Emboss(p=1),
+                                    A.Sharpen(p=1),
+                                    A.Blur(p=1)
+                                        ], p=0.7)
+                                ])
             transform_weak = A.Compose([
-                                A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
                                 A.RandomBrightnessContrast(p=0.5),
                                 A.HorizontalFlip(p=0.5),
                                 A.VerticalFlip(p=0.5),
                                 A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
-                                A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
-                                ToTensorV2()
                                 ])
             transform_no_aug = A.Compose([
-                                A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
-                                A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
-                                ToTensorV2()
+                                # A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
+                                # A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
+                                # ToTensorV2()
                                 ])
             if config.AUG.MULTI_VIEW == 'strong_weak':
                 return [transform_strong,transform_weak]
@@ -239,11 +247,19 @@ def build_transform(is_train,config):
                                 re_mode=config.AUG.REMODE,
                                 re_count=config.AUG.RECOUNT,
                                 interpolation=config.DATA.INTERPOLATION)
+        transform = transforms.Compose([
+            # transforms.Resize(config.DATA.IMG_SIZE, interpolation=str_to_interp_mode(config.DATA.INTERPOLATION)),
+            # transforms.ToTensor(),
+            # transforms.Normalize(
+            #          mean=torch.tensor(config.AUG.NORM[0]),
+            #          std=torch.tensor(config.AUG.NORM[1]))
+
+        ])
         transform = A.Compose([
-                            #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
-                            #A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
-                            ToTensorV2(),
-                            ])
+                                A.RandomBrightnessContrast(p=0.5),
+                                A.HorizontalFlip(p=0.5),
+                                A.VerticalFlip(p=0.5),
+                                A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),])
         return transform
 
     else:
@@ -257,18 +273,26 @@ def build_transform(is_train,config):
         ])
         t2 = A.Compose([
             #A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
-            ToTensorV2(),
+            #ToTensorV2(),
         ])
-        transform = create_transform(
-                        input_size=config.DATA.IMG_SIZE,
-                        is_training=False,
-                        no_aug = config.AUG.NO_AUG,
-                        color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
-                        auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
-                        re_prob=config.AUG.REPROB,
-                        re_mode=config.AUG.REMODE,
-                        re_count=config.AUG.RECOUNT,
-                        interpolation=config.DATA.INTERPOLATION)
+        # transform = create_transform(
+        #                 input_size=config.DATA.IMG_SIZE,
+        #                 is_training=False,
+        #                 no_aug = config.AUG.NO_AUG,
+        #                 color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+        #                 auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
+        #                 re_prob=config.AUG.REPROB,
+        #                 re_mode=config.AUG.REMODE,
+        #                 re_count=config.AUG.RECOUNT,
+        #                 interpolation=config.DATA.INTERPOLATION)
+        # transform = transforms.Compose([
+        #     transforms.Resize(config.DATA.IMG_SIZE, interpolation=str_to_interp_mode(config.DATA.INTERPOLATION)),
+        #     transforms.ToTensor(),
+        #     transforms.Normalize(
+        #              mean=torch.tensor(config.AUG.NORM[0]),
+        #              std=torch.tensor(config.AUG.NORM[1]))
+
+        # ])
         #return [transform_1,transform_2]
         return t2
 
@@ -472,7 +496,8 @@ class MulitiViewImageDataset(data.Dataset):
                     imgs = self.transform(image=np.asarray(img))['image']
                 except:
                     imgs = self.transform(img=img)
-        imgs = transforms.Normalize(mean=IMAGENET_DEFAULT_MEAN,std=IMAGENET_DEFAULT_STD)(imgs.float())
+        imgs = transforms.ToTensor()(img)
+        imgs = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(imgs)
         if target is None:
             target = -1
         elif self.target_transform is not None:
