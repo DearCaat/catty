@@ -479,7 +479,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     with torch.no_grad():
                         _,pl_inst,cluster_num_ema = teacher_ema.module(samples_teacher)
                         # 参见DINO论文中解决坍塌问题采用的center和sharpen策略
-                        # center原文直接将一个batch中所有样本做了一个C，这里该怎么需要探讨，起码应该为每个类别做一个。原文是一篇自监督文章，所以是没办法获得类别信息的
+                        # center原文直接将一个batch中所有样本做了一个C，这里该怎么需要探讨，起码应该为每个类别做一个。原文是一篇自监督文章，所以是没办法获得类别信息的，这里可能要根据伪标签来做center，不然与整个方法思路相违背
                         if config.RDD_TRANS.CENTER is not None:
                             pl_inst_tmp = pl_inst.clone()
                             pl_inst += center_inst
@@ -888,11 +888,12 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             elif config.RDD_TRANS.INST_TEST and not config.RDD_TRANS.BAG_TEST:
                 output = output_ins
                 output_soft = output_soft_ins
+                del output_ins,output_soft_ins
             # 如果两种测试都用，则相加再除二
             elif config.RDD_TRANS.INST_TEST and config.RDD_TRANS.BAG_TEST:
                 output = (output_ins + output) / 2
                 output_soft = (output_soft + output_soft_ins) / 2
-            del output_ins,output_soft_ins
+                del output_ins,output_soft_ins
 
             if config.BINARYTRAIN_MODE:
                 loss = criterion(output, targets_bin)
