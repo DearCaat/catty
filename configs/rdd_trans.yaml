@@ -42,3 +42,7 @@ RDD_TRANS:
   THR_ABS_DIS_: true
   THR_ABS_NOR_: true
   THR_REL_: true
+
+  CENTER: null
+  SHARPEN_TEACHER: null
+  SHARPEN_STUDENT: null

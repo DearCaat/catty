@@ -459,7 +459,11 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     samples_student,samples_teacher = samples,samples
 
                 del samples
-                output,o_inst,_,cluster_num = model(samples_student)
+                output,o_inst,cluster_num = model(samples_student)
+                
+                if config.RDD_TRANS.SHARPEN_STUDENT:
+                    o_inst /= config.RDD_TRANS.SHARPEN_STUDENT
+
                 torch.cuda.empty_cache()
                 # 设定正常图片在类别中的索引
                 pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
@@ -472,7 +476,18 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     targets_pl = targets_bin
                 if persudo_inst: 
                     with torch.no_grad():
-                        _,pl_inst,output_pl,cluster_num_ema = teacher_ema.module(samples_teacher)
+                        _,pl_inst,cluster_num_ema = teacher_ema.module(samples_teacher)
+                        # 参见DINO论文中解决坍塌问题采用的center和sharpen策略
+                        # center原文直接将一个batch中所有样本做了一个C，这里该怎么需要探讨，起码应该为每个类别做一个。原文是一篇自监督文章，所以是没办法获得类别信息的
+                        if config.RDD_TRANS.CENTER is not None:
+                            pl_inst_tmp = pl_inst.clone()
+                            pl_inst += center_inst
+                            center_inst = config.RDD_TRANS.CENTER * center_inst + (1-config.RDD_TRANS.CENTER_DECAY)*pl_inst_tmp.view(-1,config.RDD_TRANS.INST_NUM_CLASS).mean_(dim=0)
+                        # 原文这里是对student和teacher都做了，用了两个不同tmp参数
+                        if config.RDD_TRANS.SHARPEN_TEACHER is not None:
+                            pl_inst /= config.RDD_TRANS.SHARPEN_TEACHER
+
+                        output_pl = torch.nn.functional.softmax(pl_inst,dim=-1)
                         torch.cuda.empty_cache()
                     b,p,cls = pl_inst.shape
                     t_cpu = targets_pl.cpu()
@@ -830,7 +845,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                 if config.RDD_TRANS.PERSUDO_LEARNING:
                     output_ins = output[1]
                     cluster_num = output[-1]
-                    output_soft_ins = output[2]
+                    output_soft_ins = torch.nn.functional.softmax(output_ins,dim=-1)
                     output = output[0]
                 else:
                     index = 0 if config.THUMB_MODE else 1

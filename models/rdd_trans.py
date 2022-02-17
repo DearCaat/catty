@@ -238,7 +238,7 @@ class RddTransformer(nn.Module):
         # instance classify
         logits_inst = self.instance_feature_extractor.head_instance(inst_feature.view(-1,D))
         logits_inst = logits_inst.view(B,N,-1)
-        score_inst = self.soft_max(logits_inst)
+        #score_inst = self.soft_max(logits_inst)
         # bag classify
         if self.cluster_model is not None:
             logits_bag,clusters_num = self.cluster_classifier(clusters_feat,None,clusters_idcs,thr=self.thr,cluster_num = cluster_num,clusters_mask=clusters_mask)
@@ -249,12 +249,13 @@ class RddTransformer(nn.Module):
         #     np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
 
         if self.training:
-            return logits_bag, logits_inst, score_inst,clusters_num
+            #return logits_bag, logits_inst, score_inst,clusters_num
+            return logits_bag, logits_inst,clusters_num
             #return logits_bag, None, None,clusters_num
         else:
             # bag classify
             #return logits_bag, None, None,clusters_num
-            return logits_bag, logits_inst, score_inst,clusters_num
+            return logits_bag, logits_inst,clusters_num
 
 @register_model
 def rdd_trans_swin_small_patch4_window7_224(pretrained=False, **kwargs):
