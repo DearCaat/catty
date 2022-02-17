@@ -24,7 +24,7 @@ RDD_TRANS:
   PERSUDO_LEARNING: true
   TEACHER_LOSS : null
   # use baseline model to init the teacher
-  TEACHER_INIT : true
+  TEACHER_INIT : null
   INIT_STAGE_EPOCH: 0
   TEST_THR: 0.9
   FILTER_SAMPLES: true

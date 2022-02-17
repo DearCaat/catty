@@ -118,10 +118,10 @@ def main(config):
         
     logger.info(f"Creating model:{config.MODEL.NAME}/{config.MODEL.BACKBONE}")
     model = build_model(config)
-    if config.RDD_TRANS.TEACHER_INIT and config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE:
+    if config.RDD_TRANS.TEACHER_INIT is not None and config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE:
         model_teacher = build_model(config)
         model_teacher.cuda()
-        cpt = torch.load('/home/tangwenhao/output/swin/model/swin_small_patch4_window7_224_ema_best_model.pth', map_location='cpu')
+        cpt = torch.load(config.RDD_TRANS.TEACHER_INIT, map_location='cpu')
         std = cpt['state_dict']
         std['head_instance.weight'] = std['head.weight']
         std['head_instance.bias'] = std['head.bias']
@@ -860,7 +860,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                             _,index = torch.max(max_score[i],dim=-1)
                         else:
                         # 取所有图块中正常类得分最大的图块的置信度
-                            _,index = torch.max(output_soft[i,:,config.DATA.NOR_CLS_INDEX],dim=-1)
+                            _,index = torch.max(output_soft_ins[i,:,config.DATA.NOR_CLS_INDEX],dim=-1)
                         max_index.append(index)
 
                 output_ins = output_ins[[i for i in range(b)],max_index,:]
