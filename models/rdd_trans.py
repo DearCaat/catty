@@ -111,9 +111,13 @@ class RddTransformer(nn.Module):
         feats_tmp = self.head(feats_tmp)
         scores = self.soft_max(feats_tmp)
         scores = 1 - scores[:,self.nor_index]
+
+        try:
+            scores = scores.view(B,cluster_num)
+        except:
+            cluster_num = None
         #簇数量固定时，尽量不使用循环
         if cluster_num is not None:
-            scores = scores.view(B,cluster_num)
             mask_max = scores.clone()
             mask_max[:,:] = 0
             max_clu_index = torch.argmax(scores,dim=1).view(B,1)
