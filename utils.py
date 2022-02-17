@@ -23,6 +23,7 @@ def load_best_model(config,model,logger,is_ema=False):
         best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_best_model.pth')
     logger.info(f"==============> Loading the best model....................")
     checkpoint = torch.load(best_path, map_location='cpu')
+    logger.info(f"==============> Epoch {checkpoint['epoch']}....................")
     msg = model.load_state_dict(checkpoint['state_dict'], strict=False)
     logger.info(msg)
     if config.APEX_AMP and checkpoint['config'].APEX_AMP:
