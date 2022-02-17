@@ -419,6 +419,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     end = time.time()
     last_idx = len(data_loader) - 1
     persudo_inst = config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE
+    center_inst = torch.zeros(size=(config.RDD_TRANS.INST_NUM_CLASS,config.RDD_TRANS.INST_NUM_CLASS))
 
     for idx, (samples, targets) in enumerate(data_loader):
         last_batch = idx == last_idx
@@ -530,7 +531,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
                     elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_epoch':
                         thr_min_conf = get_sigmod_num(0.9,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.99)
-                        thr_min_dis_conf = get_sigmod_num(0.5,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.7,alph=5)
+                        thr_min_dis_conf = get_sigmod_num(0,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.5,alph=5)
                         thr_min_nor_conf = get_sigmod_num(0.5,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.95,alph=5)
                     #把网络判断为不是正常的部分实例置为包病害标签
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
