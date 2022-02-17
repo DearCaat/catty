@@ -515,7 +515,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
                     elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_epoch':
                         thr_min_conf = get_sigmod_num(0.9,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.99)
-                        thr_min_dis_conf = get_sigmod_num(0.5,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.99)
+                        thr_min_dis_conf = get_sigmod_num(0.5,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.7,alph=5)
+                        thr_min_nor_conf = get_sigmod_num(0.5,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.95,alph=5)
                     #把网络判断为不是正常的部分实例置为包病害标签
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         #判断为相应病害的实例置为包标签
@@ -523,10 +524,10 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         # 将病害包里判断为不是正常的实例都置为包标签，thr_list的值，保证了该类中至少有百分之n个病害实例
                         # 对于病害包里的实例，采用两种阈值，相对阈值和绝对阈值，并且这两个阈值都是自适应的。一个病害包中的实例，如果它的正常概率小于绝对正常阈值并且病害概率大于绝对病害阈值，或者它的病害概率大于相对病害阈值，就认为它为病害 & (output_bag_label > thr_min_dis_conf)
 
-                        if config.RDD_TRANS.THR_ABS_DIS_:
-                            mask_ins_abs = output_bag_label >= thr_min_dis_conf
                         if config.RDD_TRANS.THR_ABS_NOR_:
                             mask_ins_abs = output_pl[:,:,pl_nor_cls_index] <= (1-thr_min_conf)
+                        if config.RDD_TRANS.THR_ABS_DIS_:
+                            mask_ins_abs = mask_ins_abs & (output_bag_label >= thr_min_dis_conf)
                         if config.RDD_TRANS.THR_REL_:
                             mask_ins = ps_mask_dis & (mask_ins_abs | (output_bag_label >= min_nor_thr))
                         else:
@@ -541,8 +542,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
                         if config.RDD_TRANS.FILTER_SAMPLES:
                         # 选取部分置信度比较高的实例参与loss计算
-                        # 对于病害包来说，所有病害实例都用，只有teacher判定为正常的实例，并且其正常概率大于绝对病害阈值才纳用。对于正常包来说，其正常概率大于绝对病害阈值才纳用   
-                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] >= thr_min_conf  ))) | ((output_pl[:,:,pl_nor_cls_index] >= thr_min_conf) & ps_mask_nor)
+                        # 对于病害包来说，所有病害实例都用，只有teacher判定为正常的实例，并且其正常概率大于绝对病害阈值才纳用。对于正常包来说，其正常概率大于绝对病害阈值才纳用   & (output_pl[:,:,pl_nor_cls_index] >= thr_min_dis_conf  )
+                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) )) | ((output_pl[:,:,pl_nor_cls_index] >= thr_min_nor_conf) & ps_mask_nor)
                         else:
                         #全部都用
                             mask_ins = label_pl == label_pl
@@ -826,16 +827,22 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             with amp_autocast():
                 output = model(images)
             if isinstance(output, (tuple, list)):
-                index = 0 if config.THUMB_MODE or config.RDD_TRANS.NOT_INST_TEST or not config.RDD_TRANS.PERSUDO_LEARNING else 1
-                cluster_num = output[-1]
-                output = output[index]
+                if config.RDD_TRANS.PERSUDO_LEARNING:
+                    output_ins = output[1]
+                    output_soft_ins = output[2]
+                    output = output[0]
+                    
+                else:
+                    index = 0 if config.THUMB_MODE else 1
+                    cluster_num = output[-1]
+                    output = output[index]
 
             output_soft = torch.nn.functional.softmax(output,dim=-1)
 
-            if not config.THUMB_MODE and not config.RDD_TRANS.NOT_INST_TEST and config.RDD_TRANS.PERSUDO_LEARNING:
+            if not config.THUMB_MODE and config.RDD_TRANS.INST_TEST and config.RDD_TRANS.PERSUDO_LEARNING:
                 #使用max-pool来测试
-                b,p,cls = output.shape
-                max_score,max_index_cls = torch.max(output_soft,dim=-1)  # B P
+                b,p,cls = output_ins.shape
+                max_score,max_index_cls = torch.max(output_soft_ins,dim=-1)  # B P
                 # 实例中最大的病害类别置信度大于阈值 
                 mask = (max_score - config.RDD_TRANS.TEST_THR > 0) & (max_index_cls - config.DATA.NOR_CLS_INDEX != 0)
                 mask_max_nor = max_index_cls == config.DATA.NOR_CLS_INDEX
@@ -853,14 +860,24 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                             _,index = torch.max(max_score[i],dim=-1)
                         else:
                         # 取所有图块中正常类得分最大的图块的置信度
-                            score_tmp = max_score[i,mask_max_nor[i]]
-                        # _,index = torch.max(output_soft[i,:,config.DATA.NOR_CLS_INDEX],dim=-1)
-
+                            _,index = torch.max(output_soft[i,:,config.DATA.NOR_CLS_INDEX],dim=-1)
                         max_index.append(index)
 
-                output_soft = output_soft[[i for i in range(b)],max_index,:]
-                output = output[[i for i in range(b)],max_index,:]
+                output_ins = output_ins[[i for i in range(b)],max_index,:]
+                output_soft_ins = output_soft_ins[[i for i in range(b)],max_index,:]
+
                 del max_score,mask
+
+            if config.RDD_TRANS.BAG_TEST and not config.RDD_TRANS.INST_TEST:
+                output = output
+            elif config.RDD_TRANS.INST_TEST and not config.RDD_TRANS.BAG_TEST:
+                output = output_ins
+                output_soft = output_soft_ins
+            # 如果两种测试都用，则相加再除二
+            elif config.RDD_TRANS.INST_TEST and config.RDD_TRANS.BAG_TEST:
+                output = (output_ins + output) / 2
+                output_soft = (output_soft + output_soft_ins) / 2
+            del output_ins,output_soft_ins
 
             if config.BINARYTRAIN_MODE:
                 loss = criterion(output, targets_bin)

@@ -223,11 +223,12 @@ def build_transform(is_train,config):
                                 A.HorizontalFlip(p=0.5),
                                 A.VerticalFlip(p=0.5),
                                 A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                                #ToTensorV2()
                                 ])
+            # A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
+            # A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
             transform_no_aug = A.Compose([
-                                # A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
-                                # A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
-                                # ToTensorV2()
+                                #ToTensorV2()
                                 ])
             if config.AUG.MULTI_VIEW == 'strong_weak':
                 return [transform_strong,transform_weak]
@@ -255,11 +256,7 @@ def build_transform(is_train,config):
             #          std=torch.tensor(config.AUG.NORM[1]))
 
         ])
-        transform = A.Compose([
-                                A.RandomBrightnessContrast(p=0.5),
-                                A.HorizontalFlip(p=0.5),
-                                A.VerticalFlip(p=0.5),
-                                A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),])
+        transform = A.Compose([])
         return transform
 
     else:
@@ -478,26 +475,33 @@ class MulitiViewImageDataset(data.Dataset):
         if self.transform is not None:
             if self.is_multi_view is not None:
                 for idx,transform in enumerate(self.transform):
-                    try:
-                        # pytorch transforms
-                        if idx == 0:
-                            imgs = transform(img=img).unsqueeze(0)
-                        else:
-                            imgs = torch.cat((imgs,transform(img=img).unsqueeze(0)))
-                    except:
-                        # albumentations
-                        if idx == 0:
-                            imgs = transform(image=np.asarray(img))['image'].unsqueeze(0)
-                        else:
-                            imgs = torch.cat((imgs,transform(image=np.asarray(img))['image'].unsqueeze(0)))
+                    # try:
+                    #     # pytorch transforms
+                    #     if idx == 0:
+                    #         imgs = transform(img=img).unsqueeze(0)
+                    #     else:
+                    #         imgs = torch.cat((imgs,transform(img=img).unsqueeze(0)))
+                    # except:
+                    # albumentations
+                    if idx == 0:
+                        img_tmp = transform(image=np.asarray(img))['image']
+                        img_tmp = transforms.ToTensor()(img_tmp)
+                        img_tmp = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(img_tmp)
+                        imgs = img_tmp.unsqueeze(0)
+                    else:
+                        img_tmp = transform(image=np.asarray(img))['image']
+                        img_tmp = transforms.ToTensor()(img_tmp)
+                        img_tmp = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(img_tmp)
+                        imgs = torch.cat((imgs,img_tmp.unsqueeze(0)))
             else:
                 # default albumentations
                 try:
                     imgs = self.transform(image=np.asarray(img))['image']
+                    imgs = transforms.ToTensor()(imgs)
+                    imgs = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(imgs)
                 except:
                     imgs = self.transform(img=img)
-        imgs = transforms.ToTensor()(img)
-        imgs = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(imgs)
+        
         if target is None:
             target = -1
         elif self.target_transform is not None:

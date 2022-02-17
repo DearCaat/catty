@@ -55,8 +55,8 @@ _C.DATA.TEST_SPLIT = 'test'
 # epoch repeat multiplier (number of times to repeat dataset epoch per train epoch).
 _C.DATA.EPOCH_REPEATS = 0
 # Default timm thumb image loader
-_C.DATA.TIMM = True
-_C.DATA.TIMM_PREFETCHER = True
+_C.DATA.TIMM = False
+_C.DATA.TIMM_PREFETCHER = False
 # pytorch dataloader
 _C.DATA.DROP_LAST = False
 

@@ -19,25 +19,26 @@ RDD_TRANS:
   EMA_FORCE_CPU: false
   INST_NUM_CLASS: 8
   NOR_THR: 0.05
-  NOT_INST_TEST: false
+  INST_TEST: true
+  BAG_TEST: false
   PERSUDO_LEARNING: true
   TEACHER_LOSS : null
   # use baseline model to init the teacher
   TEACHER_INIT : true
-  INIT_STAGE_EPOCH: 2
+  INIT_STAGE_EPOCH: 0
   TEST_THR: 0.9
-  FILTER_SAMPLES: false
+  FILTER_SAMPLES: true
   CLASSIFY_LOSS: .0
   # update it per iter
   THR_REL_EMA_DECAY: 0.75
   # 取最小的百分之几比例来更新，相对阈值是一种保证前提，保证一个包里面最少都要有这么多病害实例
   THR_REL_UPDATE_RATIO: 0.01
   # fix linear sigmod_iter sigmod_epoch
-  THR_ABS_UPDATE_NAME: fix
+  THR_ABS_UPDATE_NAME: sigmod_epoch
   TEST_MAX_POOL: false
   THR_ABS_DIS: 0.9
   THR_ABS_NOR: 0.9
 
-  THR_ABS_DIS_: false
+  THR_ABS_DIS_: true
   THR_ABS_NOR_: true
-  THR_REL_: false
+  THR_REL_: true
