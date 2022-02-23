@@ -8,6 +8,15 @@ MODEL:
   NAME: swin_base_patch4_window12_384_in22k
 TRAIN:
   EPOCHS: 50
+  WARMUP_EPOCHS: 1
   WEIGHT_DECAY: 0.0005
   BASE_LR: 0.0005
+  WARMUP_LR: 1e-9
+  MIN_LR: 1e-12
+  OPTIMIZER:
+    NAME: SGD
+AUG:
+  NO_AUG: false
+TEST:
+  CROP: 0.752
 THUMB_MODE: true
