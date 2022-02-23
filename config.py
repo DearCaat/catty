@@ -86,7 +86,7 @@ _C.MODEL.RESUME = ''
 _C.MODEL.NUM_CLASSES = 8
 # Dropout rate     effi-b3 0.3`
 _C.MODEL.DROP_RATE = 0
-# Drop path rate   effi-b3 0.2  swin_s 0.3
+# Drop path rate   effi-b3 0.2  swin_s 0.3 swin_b_p4w12 0.5
 _C.MODEL.DROP_PATH_RATE = 0.3
 # Label Smoothing
 #_C.MODEL.LABEL_SMOOTHING = 0.1
@@ -165,7 +165,7 @@ _C.AUG.VFLIP = 0.
 # Color jitter factor   0.4
 _C.AUG.COLOR_JITTER = 0  
 # Use AutoAugment policy. "v0" or "original"
-_C.AUG.AUTO_AUGMENT = 'rand-m9-n2-mstd0.5'
+_C.AUG.AUTO_AUGMENT = 'rand-m3-n2-mstd0.5'
 # Random erase prob
 _C.AUG.REPROB = 0   #0.25
 # Random erase mode
@@ -200,7 +200,7 @@ _C.AUG.MULTI_VIEW = None
 # -----------------------------------------------------------------------------
 _C.TEST = CN()
 # Whether to use center crop when testing
-_C.TEST.CROP = 1
+_C.TEST.CROP = 1.
 
 # -----------------------------------------------------------------------------
 # Misc
