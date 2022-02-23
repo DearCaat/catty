@@ -531,7 +531,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
                     elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_epoch':
                         thr_min_conf = get_sigmod_num(0.9,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.99)
-                        thr_min_dis_conf = get_sigmod_num(0.3,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.8,alph=10)
+                        thr_min_dis_conf = get_sigmod_num(0.5,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.8,alph=10)
                         thr_min_nor_conf = get_sigmod_num(0.5,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=0.95,alph=5)
                     #把网络判断为不是正常的部分实例置为包病害标签
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
@@ -559,7 +559,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         if config.RDD_TRANS.FILTER_SAMPLES:
                         # 选取部分置信度比较高的实例参与loss计算
                         # 对于病害包来说，所有病害实例都用，只有teacher判定为正常的实例，并且其正常概率大于绝对病害阈值才纳用。对于正常包来说，其正常概率大于绝对病害阈值才纳用   & (output_pl[:,:,pl_nor_cls_index] >= 0.5)
-                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index)  )) | ((output_pl[:,:,pl_nor_cls_index] >= thr_min_nor_conf) & ps_mask_nor)
+                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] >= 0.3)  )) | ((output_pl[:,:,pl_nor_cls_index] >= thr_min_nor_conf) & ps_mask_nor)
                         else:
                         #全部都用
                             mask_ins = label_pl == label_pl
