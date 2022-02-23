@@ -327,7 +327,7 @@ def get_config(args):
     # Return a clone so that the defaults will not be altered
     # This is for the "local variable" use pattern
     config = _C.clone()
-    if not args=='':
+    if not args=='' and args is not None:
         update_config(config, args)
 
     return config
