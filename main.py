@@ -849,7 +849,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     output_soft_ins = torch.nn.functional.softmax(output_ins,dim=-1)
                     output = output[0]
                 else:
-                    index = 0 if config.THUMB_MODE else 1
+                    index = 0 
                     output = output[index]
                     cluster_num = output[-1]
             output_soft = torch.nn.functional.softmax(output,dim=-1)
