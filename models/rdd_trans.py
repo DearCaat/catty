@@ -289,12 +289,12 @@ def rdd_trans_swin_base_patch4_window12_384(pretrained=False, **kwargs):
     backbone = _create_swin_transformer('swin_base_patch4_window12_384_in22k', pretrained=pretrained, **model_kwargs)
     if 'cluster_name' in kwargs:
         if kwargs['cluster_name'].lower() == 'kmeans':
-            return RddTransformer(backbone=backbone,cluster=kmeans,**kwargs)
+            return RddTransformer(backbone=backbone,cluster=kmeans,dim=1024,**kwargs)
         elif kwargs['cluster_name'].lower() == 'gcn':
-            return RddTransformer(backbone=backbone,cluster=GCN(in_dim=768,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
+            return RddTransformer(backbone=backbone,cluster=GCN(in_dim=1024,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),dim=1024,**kwargs)
         elif kwargs['cluster_name'].lower() == 'spectral':
-            return RddTransformer(backbone=backbone,cluster=spectral_clustering,**kwargs)
+            return RddTransformer(backbone=backbone,cluster=spectral_clustering,dim=1024,**kwargs)
         else:
-            return RddTransformer(backbone=backbone,cluster=None,**kwargs)
+            return RddTransformer(backbone=backbone,cluster=None,dim=1024,**kwargs)
     else:
-        return RddTransformer(backbone=backbone,cluster=None,**kwargs)
+        return RddTransformer(backbone=backbone,cluster=None,dim=1024,**kwargs)
