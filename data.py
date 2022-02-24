@@ -208,7 +208,7 @@ def build_transform(is_train,config):
                                 re_count=config.AUG.RECOUNT,
                                 interpolation=config.DATA.INTERPOLATION)
             transform_strong = A.Compose([
-                                A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                                #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
                                 A.RandomBrightnessContrast(p=0.7),
                                 A.HorizontalFlip(p=0.7),
                                 A.VerticalFlip(p=0.7),
@@ -220,7 +220,7 @@ def build_transform(is_train,config):
                                         ], p=0.7)
                                 ])
             transform_weak = A.Compose([
-                                A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                                #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
                                 A.RandomBrightnessContrast(p=0.5),
                                 A.HorizontalFlip(p=0.5),
                                 A.VerticalFlip(p=0.5),
@@ -277,7 +277,7 @@ def build_transform(is_train,config):
                     ])
         else:
             t2 = A.Compose([
-            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+            #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
         ])
         # transform = create_transform(
         #                 input_size=config.DATA.IMG_SIZE,
@@ -422,8 +422,8 @@ def pytorch_dataloader(is_train,config):
         else:
             transform_train = build_transform(is_train=True,config=config)
             transform_val = build_transform(is_train=False,config=config)
-            dataset_train = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform_train,is_multi_view=config.AUG.MULTI_VIEW)
-            dataset_val = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.VAL_SPLIT),transform=transform_val)
+            dataset_train = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform_train,is_multi_view=config.AUG.MULTI_VIEW,size=config.DATA.IMG_SIZE)
+            dataset_val = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.VAL_SPLIT),transform=transform_val,size=config.DATA.IMG_SIZE)
 
         loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,drop_last=config.DATA.DROP_LAST,persistent_workers=True,shuffle=True)
         loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=config.DATA.VAL_BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
@@ -440,7 +440,7 @@ def pytorch_dataloader(is_train,config):
             transform_test = build_transform(is_train=False,config=config)
             # 之前做WSPLIN其它数据库测试用
             #dataset_test = PatchImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,transform=transform_test,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,eval=True,class_to_idx={'diseased':1,'normal':0},thumb=config.THUMB_MODE)
-            dataset_test = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TEST_SPLIT),transform=transform_test)
+            dataset_test = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TEST_SPLIT),transform=transform_test,size=config.DATA.IMG_SIZE)
         loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=config.DATA.VAL_BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
         return dataset_test,loader_test
 
@@ -455,7 +455,8 @@ class MulitiViewImageDataset(data.Dataset):
             load_bytes=False,
             transform=None,
             target_transform=None,
-            is_multi_view=None
+            is_multi_view=None,
+            size=None
     ):
         if parser is None or isinstance(parser, str):
             parser = create_parser(parser or '', root=root, class_map=class_map)
@@ -465,6 +466,7 @@ class MulitiViewImageDataset(data.Dataset):
         self.target_transform = target_transform 
         self._consecutive_errors = 0
         self.is_multi_view = is_multi_view
+        self.size = size
 
     def __getitem__(self, index):
         img, target = self.parser[index]
@@ -478,7 +480,7 @@ class MulitiViewImageDataset(data.Dataset):
             else:
                 raise e
         self._consecutive_errors = 0
-        #img = transforms.Resize(size=(224,224),interpolation=str_to_interp_mode('bilinear'))(img=img)
+        img = transforms.Resize(size=self.size,interpolation=str_to_interp_mode('bicubic'))(img=img)
         if self.transform is not None:
             if self.is_multi_view is not None:
                 for idx,transform in enumerate(self.transform):
