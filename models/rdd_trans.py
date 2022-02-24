@@ -128,7 +128,7 @@ class RddTransformer(nn.Module):
             mask_max = mask_max.scatter_(1,max_clu_index,1) == 1
             # 在测试阶段，如果最高病害置信度小于一定值，那我认为它是正常包，使用置信度最低的一个簇
             if not self.training and self.nor_index >= 0:
-                mask_min = scores.clone()
+                mask_min = scores.clone() 
                 mask_min[:,:] = 0
                 min_clu_index = torch.argmin(scores,dim=1).view(B,1)
                 mask_min = mask_min.scatter_(1,min_clu_index,1) == 1

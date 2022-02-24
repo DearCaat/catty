@@ -851,8 +851,8 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     output = output[0]
                 else:
                     index = 0 
-                    output = output[index]
                     cluster_num = output[-1]
+                    output = output[index]
             output_soft = torch.nn.functional.softmax(output,dim=-1)
 
             if not config.THUMB_MODE and config.RDD_TRANS.INST_TEST and config.RDD_TRANS.PERSUDO_LEARNING:
