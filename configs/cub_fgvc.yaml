@@ -7,7 +7,7 @@ DATA:
 MODEL: 
   NUM_CLASSES: 200
   NAME: swin_base_patch4_window12_384_in22k
-  DROP_PATH_RATE: .1
+  DROP_PATH_RATE: .3
 TRAIN:
   EPOCHS: 50
   WARMUP_EPOCHS: 1
