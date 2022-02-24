@@ -27,5 +27,6 @@ THUMB_MODE: false
 
 RDD_TRANS:
   CLUSTER:
+    NAME: spectral
     NUM_CLUSTER: 2
   PERSUDO_LEARNING: false 
