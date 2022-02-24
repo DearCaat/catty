@@ -21,4 +21,6 @@ AUG:
   NO_AUG: false
 TEST:
   CROP: 0.752
+  BEST_METRIC: top1
 THUMB_MODE: true
+

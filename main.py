@@ -1,3 +1,4 @@
+from msilib.schema import Error
 import os
 from networkx.algorithms import cluster
 
@@ -313,7 +314,14 @@ def main(config):
         # save the ema checkpoint
         if model_ema is not None or teacher_ema is not None:
             f1_ema = eval_metrics_ema['macro_f1']
-            is_best_ema = f1_ema > max_f1_ema
+            if config.TEST.BEST_METRIC.lower() == 'auc':
+                is_best_ema = (auc_ema > best_auc_ema) and epoch>0
+            elif config.TEST.BEST_METRIC.lower() == 'top1':
+                is_best_ema = (acc1_ema > max_accuracy_ema) and epoch>0
+            elif config.TEST.BEST_METRIC.lower() == 'f1':
+                is_best_ema = (f1_ema > max_f1_ema) and epoch>0
+            else:
+                raise Error
             max_accuracy_ema = max(max_accuracy_ema, acc1_ema) if epoch > 0 else 0
             best_auc_ema = max(best_auc_ema,auc_ema) if epoch > 0 else 0
             max_f1_ema = max(max_f1_ema,f1_ema)
@@ -321,7 +329,16 @@ def main(config):
                 save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,None,is_ema=True)
 
         f1 = eval_metrics['macro_f1']
-        is_best = (auc > best_auc if config.BINARYTRAIN_MODE else f1 > max_f1) and epoch>0
+
+        if config.TEST.BEST_METRIC.lower() == 'auc':
+            is_best = (auc > best_auc) and epoch>0
+        elif config.TEST.BEST_METRIC.lower() == 'top1':
+            is_best = (acc1 > max_accuracy) and epoch>0
+        elif config.TEST.BEST_METRIC.lower() == 'f1':
+            is_best = (f1 > max_f1) and epoch>0
+        else:
+            raise Error
+            
         max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
         best_auc = max(best_auc,auc) if epoch > 0 else 0
         max_f1 = max(max_f1,f1)

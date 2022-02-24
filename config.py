@@ -201,6 +201,8 @@ _C.AUG.MULTI_VIEW = None
 _C.TEST = CN()
 # Whether to use center crop when testing
 _C.TEST.CROP = 1.
+# top1 f1 auc
+_C.TEST.BEST_METRIC = 'top1'
 
 # -----------------------------------------------------------------------------
 # Misc
