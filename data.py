@@ -249,14 +249,13 @@ def build_transform(is_train,config):
                                 re_count=config.AUG.RECOUNT,
                                 interpolation=config.DATA.INTERPOLATION)
         transform = transforms.Compose([
-            # transforms.Resize(config.DATA.IMG_SIZE, interpolation=str_to_interp_mode(config.DATA.INTERPOLATION)),
-            # transforms.ToTensor(),
-            # transforms.Normalize(
-            #          mean=torch.tensor(config.AUG.NORM[0]),
-            #          std=torch.tensor(config.AUG.NORM[1]))
-
-        ])
-        transform = A.Compose([])
+                        transforms.Resize((510, 510), Image.BILINEAR),
+                        transforms.RandomCrop(config.DATA.IMG_SIZE),
+                        transforms.RandomHorizontalFlip(),
+                        transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 5))], p=0.1),
+                        transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.1),
+                ])
+        #transform = A.Compose([])
         return transform
 
     else:
@@ -268,10 +267,10 @@ def build_transform(is_train,config):
             A.VerticalFlip(p=0.5),
             A.ShiftScaleRotate(rotate_limit=15.0, p=0.7)
         ])
-        t2 = A.Compose([
-            #A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
-            #ToTensorV2(),
-        ])
+        t2 = transforms.Compose([
+                        transforms.Resize((510, 510), Image.BILINEAR),
+                        transforms.CenterCrop(config.DATA.IMG_SIZE),
+                ])
         # transform = create_transform(
         #                 input_size=config.DATA.IMG_SIZE,
         #                 is_training=False,
@@ -471,7 +470,7 @@ class MulitiViewImageDataset(data.Dataset):
             else:
                 raise e
         self._consecutive_errors = 0
-        img = transforms.Resize(size=(224,224),interpolation=str_to_interp_mode('bicubic'))(img=img)
+        #img = transforms.Resize(size=(224,224),interpolation=str_to_interp_mode('bilinear'))(img=img)
         if self.transform is not None:
             if self.is_multi_view is not None:
                 for idx,transform in enumerate(self.transform):
@@ -497,10 +496,10 @@ class MulitiViewImageDataset(data.Dataset):
                 # default albumentations
                 try:
                     imgs = self.transform(image=np.asarray(img))['image']
-                    imgs = transforms.ToTensor()(imgs)
-                    imgs = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(imgs)
                 except:
                     imgs = self.transform(img=img)
+                imgs = transforms.ToTensor()(imgs)
+                imgs = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(imgs)
         
         if target is None:
             target = -1
