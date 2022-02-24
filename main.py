@@ -126,10 +126,11 @@ def main(config):
         std['head_instance.weight'] = std['head.weight']
         std['head_instance.bias'] = std['head.bias']
         model_teacher.instance_feature_extractor.load_state_dict(std, strict=True)
-    elif config.THUMB_MODE:
-         model_teacher = None
-    else:
+    elif config.RDD_TRANS.PERSUDO_LEARNING and not config.RDD_TRANS.TEACHER_INIT:
         model_teacher = model
+
+    else:
+         model_teacher = None
         
     #if not config.THUMB_MODE:
         # model_teacher = build_model(config)

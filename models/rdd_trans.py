@@ -110,7 +110,11 @@ class RddTransformer(nn.Module):
         feats_tmp = feats_tmp.view(-1,D)
         feats_tmp = self.head(feats_tmp)
         scores = self.soft_max(feats_tmp)
-        scores = 1 - scores[:,self.nor_index]
+        # 认为没有判别性的图块整个类别得分是平坦的，而有判定性的图块，得分呈现凸出状
+        if self.nor_index < 0:
+            scores,_ = torch.max(scores,dim=-1)
+        else:
+            scores = 1 - scores[:,self.nor_index]
 
         try:
             scores = scores.view(B,cluster_num)
@@ -123,7 +127,7 @@ class RddTransformer(nn.Module):
             max_clu_index = torch.argmax(scores,dim=1).view(B,1)
             mask_max = mask_max.scatter_(1,max_clu_index,1) == 1
             # 在测试阶段，如果最高病害置信度小于一定值，那我认为它是正常包，使用置信度最低的一个簇
-            if not self.training:
+            if not self.training and self.nor_index >= 0:
                 mask_min = scores.clone()
                 mask_min[:,:] = 0
                 min_clu_index = torch.argmin(scores,dim=1).view(B,1)
@@ -137,7 +141,7 @@ class RddTransformer(nn.Module):
             for b in range(B):
                 max_clu_index = torch.argmax(scores[j:j+clusters_num[b]])
                 # 在测试阶段，如果最高病害置信度小于一定值，那我认为它是正常包，使用置信度最低的一个簇
-                if not self.training and scores[j+max_clu_index] < thr:
+                if not self.training and scores[j+max_clu_index] < thr and self.nor_index >= 0:
                     max_clu_index = torch.argmin(scores[j:j+clusters_num[b]])
                 if b == 0:
                     feats = feats_tmp[j:j+clusters_num[b]][max_clu_index]
