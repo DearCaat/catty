@@ -281,7 +281,7 @@ def rdd_trans_swin_small_patch4_window7_224(pretrained=False, **kwargs):
         return RddTransformer(backbone=backbone,cluster=None,**kwargs)
 
 @register_model
-def rdd_trans_swin_base_patch4_window12_384(pretrained=False, **kwargs):
+def rdd_trans_swin_base_patch4_window12_384_in22k(pretrained=False, **kwargs):
     """ Swin-S @ 224x224, trained ImageNet-1k
     """
     model_kwargs = dict(
