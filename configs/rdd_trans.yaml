@@ -20,7 +20,7 @@ RDD_TRANS:
   INST_NUM_CLASS: 8
   NOR_THR: 0.05
   INST_TEST: true
-  BAG_TEST: false
+  BAG_TEST: true
   PERSUDO_LEARNING: true
   TEACHER_LOSS : null
   # use baseline model to init the teacher

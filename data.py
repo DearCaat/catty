@@ -270,7 +270,7 @@ def build_transform(is_train,config):
             A.VerticalFlip(p=0.5),
             A.ShiftScaleRotate(rotate_limit=15.0, p=0.7)
         ])
-        if config.TEST.CROP is not None and config.TEST.CROP != 0:
+        if config.TEST.CROP is not None and config.TEST.CROP != 1 and config.TEST.CROP != 0:
             t2 = transforms.Compose([
                             transforms.Resize((510, 510), Image.BILINEAR),
                             transforms.CenterCrop(config.DATA.IMG_SIZE),
