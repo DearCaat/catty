@@ -34,7 +34,7 @@ _C.DATA.GRAY = True
 # Input image size (h,w)  cqu_bpdd (900,1200) cfd(300,450)
 _C.DATA.IMG_SIZE = (224,224)
 # Interpolation to resize image (random, bilinear, bicubic)
-_C.DATA.INTERPOLATION = 'bicubic'
+_C.DATA.INTERPOLATION = 'bilinear'
 # Use zipped dataset instead of folder dataset
 # could be overwritten by command line argument
 _C.DATA.TFRECORD_MODE = False
