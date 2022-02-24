@@ -208,6 +208,7 @@ def build_transform(is_train,config):
                                 re_count=config.AUG.RECOUNT,
                                 interpolation=config.DATA.INTERPOLATION)
             transform_strong = A.Compose([
+                                A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
                                 A.RandomBrightnessContrast(p=0.7),
                                 A.HorizontalFlip(p=0.7),
                                 A.VerticalFlip(p=0.7),
@@ -219,6 +220,7 @@ def build_transform(is_train,config):
                                         ], p=0.7)
                                 ])
             transform_weak = A.Compose([
+                                A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
                                 A.RandomBrightnessContrast(p=0.5),
                                 A.HorizontalFlip(p=0.5),
                                 A.VerticalFlip(p=0.5),
@@ -228,6 +230,7 @@ def build_transform(is_train,config):
             # A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
             # A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
             transform_no_aug = A.Compose([
+                                A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
                                 #ToTensorV2()
                                 ])
             if config.AUG.MULTI_VIEW == 'strong_weak':
@@ -267,10 +270,15 @@ def build_transform(is_train,config):
             A.VerticalFlip(p=0.5),
             A.ShiftScaleRotate(rotate_limit=15.0, p=0.7)
         ])
-        t2 = transforms.Compose([
-                        transforms.Resize((510, 510), Image.BILINEAR),
-                        transforms.CenterCrop(config.DATA.IMG_SIZE),
-                ])
+        if config.TEST.CROP is not None and config.TEST.CROP != 0:
+            t2 = transforms.Compose([
+                            transforms.Resize((510, 510), Image.BILINEAR),
+                            transforms.CenterCrop(config.DATA.IMG_SIZE),
+                    ])
+        else:
+            t2 = A.Compose([
+            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+        ])
         # transform = create_transform(
         #                 input_size=config.DATA.IMG_SIZE,
         #                 is_training=False,

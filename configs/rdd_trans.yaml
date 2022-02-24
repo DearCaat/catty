@@ -28,7 +28,7 @@ RDD_TRANS:
   INIT_STAGE_EPOCH: 0
   TEST_THR: 0.9
   FILTER_SAMPLES: true
-  CLASSIFY_LOSS: .0
+  CLASSIFY_LOSS: 1.
   # update it per iter
   THR_REL_EMA_DECAY: 0.75
   # 取最小的百分之几比例来更新，相对阈值是一种保证前提，保证一个包里面最少都要有这么多病害实例
