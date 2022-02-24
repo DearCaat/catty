@@ -1,4 +1,3 @@
-from msilib.schema import Error
 import os
 from networkx.algorithms import cluster
 
@@ -321,7 +320,7 @@ def main(config):
             elif config.TEST.BEST_METRIC.lower() == 'f1':
                 is_best_ema = (f1_ema > max_f1_ema) and epoch>0
             else:
-                raise Error
+                raise AttributeError
             max_accuracy_ema = max(max_accuracy_ema, acc1_ema) if epoch > 0 else 0
             best_auc_ema = max(best_auc_ema,auc_ema) if epoch > 0 else 0
             max_f1_ema = max(max_f1_ema,f1_ema)
@@ -337,8 +336,8 @@ def main(config):
         elif config.TEST.BEST_METRIC.lower() == 'f1':
             is_best = (f1 > max_f1) and epoch>0
         else:
-            raise Error
-            
+            raise AttributeError
+
         max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
         best_auc = max(best_auc,auc) if epoch > 0 else 0
         max_f1 = max(max_f1,f1)
