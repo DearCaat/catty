@@ -255,7 +255,7 @@ def build_transform(is_train,config):
                         transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 5))], p=0.1),
                         transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.1),
                 ])
-        transform = A.Compose([])
+        #transform = A.Compose([])
         return transform
 
     else:
