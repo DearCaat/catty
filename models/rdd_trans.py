@@ -199,18 +199,19 @@ class RddTransformer(nn.Module):
         # step 2, cluster 
         if type(self.cluster_model) == GCN:
             # if using gcn to cluster, firstly create the graph
-            #feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
-            adj = self.graph.get_KNN_adj(feat=inst_feature)
+            feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
+            #adj = self.graph.get_KNN_adj(feat=inst_feature)
 
             #print(adj.size())
             torch.cuda.empty_cache()
             # gcn cluster  edges, scores
-            #pred = self.cluster_model(feat, adj, h1_mask)
-            #print(pred.size())
+            pred = self.cluster_model(feat, adj, h1_mask)
+            print(pred.size())
             #pred = self.soft_max(pred)
             #del feat, adj, h1_mask
             torch.cuda.empty_cache()
-            clusters_feat,clusters_idcs = gcn_cluster(None,adj, inst_feature,self.clustre_thr) # C*N*D
+            #clusters_feat,clusters_idcs = gcn_cluster(None,adj, inst_feature,self.clustre_thr) # C*N*D
+            clusters_feat,clusters_idcs = gcn_cluster(None,adj, inst_feature,self.clustre_thr)
             
         elif self.cluster_model == spectral_clustering:
             # spectral_cluster

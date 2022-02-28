@@ -436,6 +436,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     end = time.time()
     last_idx = len(data_loader) - 1
     persudo_inst = config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE
+    gcn = config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE and config.RDD_TRANS.CLUSTER.NAME == 'gcn'
     center_inst = torch.zeros(size=(config.RDD_TRANS.INST_NUM_CLASS,config.RDD_TRANS.INST_NUM_CLASS))
 
     for idx, (samples, targets) in enumerate(data_loader):
@@ -630,6 +631,13 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     else:
                         loss_pl = 0
                 else:
+                    loss_pl = 0
+                
+                if gcn:
+                    output_tea = teacher_ema.module(samples_teacher)
+                    loss_pl = 0
+                else:
+                    #loss_gcn = 0
                     loss_pl = 0
                 
                 cluster_num_meter.update(sum(cluster_num) / b,b)

@@ -27,6 +27,8 @@ THUMB_MODE: false
 
 RDD_TRANS:
   CLUSTER:
-    NAME: spectral
+    NAME: gcn
     NUM_CLUSTER: 2
-  PERSUDO_LEARNING: false 
+    IPS_ACTIVE_CONNECTION: 2
+    IPS_K_AT_HOP: [ 5, 0 ]
+  PERSUDO_LEARNING: true 
