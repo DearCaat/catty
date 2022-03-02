@@ -269,53 +269,34 @@ def build_transform(is_train,config):
                                 re_mode=config.AUG.REMODE,
                                 re_count=config.AUG.RECOUNT,
                                 interpolation=config.DATA.INTERPOLATION)
-        transform = transforms.Compose([
-                        transforms.Resize((510, 510), Image.BILINEAR),
-                        transforms.RandomCrop(config.DATA.IMG_SIZE),
-                        transforms.RandomHorizontalFlip(),
-                        transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 5))], p=0.1),
-                        transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.1),
-                ])
+        # transform = transforms.Compose([
+        #                 transforms.Resize((510, 510), Image.BILINEAR),
+        #                 transforms.RandomCrop(config.DATA.IMG_SIZE),
+        #                 transforms.RandomHorizontalFlip(),
+        #                 transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 5))], p=0.1),
+        #                 transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.1),
+        #         ])
         #transform = A.Compose([])
         return transform
 
     else:
-        t1 = []
-        t2 = []
-        t1 = A.Compose([
-            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            A.ShiftScaleRotate(rotate_limit=15.0, p=0.7)
-        ])
-        if config.TEST.CROP is not None and config.TEST.CROP != 1 and config.TEST.CROP != 0:
-            t2 = transforms.Compose([
-                            transforms.Resize((510, 510), Image.BILINEAR),
-                            transforms.CenterCrop(config.DATA.IMG_SIZE),
-                    ])
+        if config.AUG.TIMM_TRANS:
+            t2 = create_transform(
+                            input_size=config.DATA.IMG_SIZE,
+                            is_training=False,
+                            no_aug = config.AUG.NO_AUG,
+                            interpolation=config.DATA.INTERPOLATION,
+                            crop_pct=config.TEST.CROP)
         else:
-            t2 = A.Compose([
-            #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
-        ])
-        # transform = create_transform(
-        #                 input_size=config.DATA.IMG_SIZE,
-        #                 is_training=False,
-        #                 no_aug = config.AUG.NO_AUG,
-        #                 color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
-        #                 auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
-        #                 re_prob=config.AUG.REPROB,
-        #                 re_mode=config.AUG.REMODE,
-        #                 re_count=config.AUG.RECOUNT,
-        #                 interpolation=config.DATA.INTERPOLATION)
-        # transform = transforms.Compose([
-        #     transforms.Resize(config.DATA.IMG_SIZE, interpolation=str_to_interp_mode(config.DATA.INTERPOLATION)),
-        #     transforms.ToTensor(),
-        #     transforms.Normalize(
-        #              mean=torch.tensor(config.AUG.NORM[0]),
-        #              std=torch.tensor(config.AUG.NORM[1]))
-
-        # ])
-        #return [transform_1,transform_2]
+            if config.TEST.CROP is not None and config.TEST.CROP != 1 and config.TEST.CROP != 0:
+                t2 = transforms.Compose([
+                                transforms.Resize((510, 510), Image.BILINEAR),
+                                transforms.CenterCrop(config.DATA.IMG_SIZE),
+                        ])
+            else:
+                t2 = A.Compose([
+                #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+            ])
         return t2
 
 def build_loader(is_train,config):
