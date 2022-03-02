@@ -150,6 +150,8 @@ _C.TRAIN.LOSS.LAMBDA_L1 = 1e-3
 # Augmentation settings
 # -----------------------------------------------------------------------------
 _C.AUG = CN()
+# 在dataloader 不使用 timm的情况下，是否使用timm的transform，主要好处是可以使用randaugment
+_C.AUG.TIMM_TRANS = False
 # Norm mean and std, default is [IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD], but old wsplin model use [(0.455,0.455,0.455),(0.225,0.225,0.225)]  effi-b3 use [(0.5,0.5,0.5),(0.5,0.5,0.5)]
 _C.AUG.NORM = [IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD]
 # Disable all training augmentation, override other train aug args
@@ -237,6 +239,7 @@ _C.LOCAL_RANK = 0
 _C.DISTRIBUTED = False
 _C.WORLD_SIZE = 0
 _C.MODEL_EMA = False
+_C.EMA_FORCE_CPU = False
 _C.TRAIN_MODE = 't_e'
 
 

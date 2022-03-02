@@ -22,6 +22,7 @@ RDD_TRANS:
   INST_TEST: true
   BAG_TEST: true
   PERSUDO_LEARNING: true
+  PERSUDO_LABEL: true
   TEACHER_LOSS : null
   # use baseline model to init the teacher
   TEACHER_INIT : null

@@ -20,19 +20,28 @@ import networkx as nx
 import torch.multiprocessing as mp
 from .similarity import similarity_matrix
 
-def gcn_cluster(edge_col_indices,scores,feat,thr=0.75):
-    #B,N,K1 = edge_col_indices.shape
-    #if scores
-    #crow_indices = torch.tensor([K1*i for i in range(N+1)]).contiguous().cuda()
-    B,N,_ = scores.shape
+def gcn_cluster(edge_col_indices,scores,feat,thr=0.5,is_cuda=True):
+    B,N,K1 = edge_col_indices.shape
+    crow_indices = torch.tensor([K1*i for i in range(N+1)]).contiguous()
+    if is_cuda:
+        crow_indices = crow_indices.cuda(non_blocking=True)
+    
+    # _mask = scores[:,:,:,1]>thr
+    # _mask_invert = _mask==False
+    # scores[_mask] = 1
+    # scores[_mask_invert] = 1
+    # B,N,_,_ = scores.shape
     cluster_feat = [[] for i in range (B)]
     cluster_idcs = [[] for i in range (B)]
     for b in range(B):
-        # csr = torch.sparse_csr_tensor(crow_indices,edge_col_indices[b,:,:].flatten().contiguous(),scores[b,:,:,0].flatten().contiguous(),size=(N,N))
-        # A = csr.to_dense()
-        # A[A>thr] = 1
+        csr = torch.sparse_csr_tensor(crow_indices,edge_col_indices[b,:,:].flatten().contiguous(),scores[b,:,:,0].flatten().contiguous(),size=(N,N),requires_grad=False)
+        A = csr.to_dense()
+        A[A>thr] = 1
 
-        A_nx = nx.from_numpy_matrix(scores[b].detach().cpu().numpy())
+        #if scores shape == [B,N,N,2]
+        #A_nx = nx.from_numpy_matrix(scores[b].detach().cpu().numpy())
+
+        A_nx = nx.from_numpy_matrix(A.cpu().numpy())
         for c in nx.connected_components(A_nx):
             c = list(c)
             cluster_feat[b].append(feat[b][c])
@@ -125,10 +134,13 @@ class GCN(nn.Module):
                             nn.Linear(out_dim, out_dim),
                             nn.PReLU(out_dim),
                             nn.Linear(out_dim, 2))
-    
-    def forward(self, x, A, one_hop_idcs, train=True):
+
+        initialize_weights(self.classifier)
+
+    def forward(self, x, A, one_hop_mask, train=True):
         # data normalization l2 -> bn
         B,N,I,D = x.shape    # batch_size instance_size nodes_IPS dim
+        # 原论文自己注释掉了L2 norm
         #xnorm = x.norm(2,2,keepdim=True) + 1e-8
         #xnorm = xnorm.expand_as(x)
         #x = x.div(xnorm)
@@ -136,14 +148,15 @@ class GCN(nn.Module):
         x = x.view(-1, D)
         x = self.bn0(x)
         x = x.view(B,N,I,D)
-
+        # GCN是通过邻接矩阵表示的特征之间的关系来增强特征，这里最后通过增强后特征做了边预测
+        # 这里是以每个IPS为单位进行增强，输入是 B N k1,k2 D，输出是 B N k1 2，原论文这里只保留了中心点与k1个顶点之间边的预测信息 
         x = self.conv1(x,A)
         x = self.conv2(x,A)
         x = self.conv3(x,A)
         x = self.conv4(x,A)
 
         dim_out = x.size(-1)
-        x = x[one_hop_idcs].view(B,N,self.k1,dim_out)
+        x = x[one_hop_mask].view(B,N,self.k1,dim_out)
         x = x.view(-1,dim_out)
         x = self.classifier(x).view(B,N,self.k1,2)
             
@@ -157,7 +170,7 @@ class KnnGraph(object):
         self.distance = distance
     def get_KNN(self,feats,distance='cosine'):
         if distance == 'cosine':
-            _similarity_matrix=similarity_matrix(feats,feats,'cosine')  # B*N*N
+            _similarity_matrix=similarity_matrix(feats,feats,'cosine',True)  # B*N*N
             knn_graph = torch.argsort(_similarity_matrix, axis=2,descending=True)  # B*N*N
         elif distance == 'euclidean':
             _similarity_matrix=similarity_matrix(feats,feats,'euclidean')
@@ -212,17 +225,24 @@ class KnnGraph(object):
                 mask_one_hop_idcs[i,m,:num_nodes] = torch.isin(uni_tmp,hops_2[i,m,1:,0])
                 A_[i,m,:num_nodes,:num_nodes] = a_tmp      
                 feat[i,m,:num_nodes] = feats[i,uni_tmp]
-    def __call__(self, feats):
+    def __call__(self, feats,is_cuda=True):
         B,N,D=feats.shape
-        
+        # N和最大节点数谁小用谁，原论文这里N远大于最大节点数, max_nodes这个东西在原论文中为了避免N过大，导致矩阵过于稀疏采取的一种策略，这里Batch的实现没办法使用这个参数，在N小的时候也没必要，N过大可以都使用稀疏矩阵
+        #max_num_nodes = self.k_at_hop[0] * (self.k_at_hop[1] + 1) + 1
+
         # ## 1. get the KNN graph
         knn_graph = self.get_KNN(feats,self.distance)
         #knn_graph = knn_graph[:,:, :self.k_at_hop[0] + 1]
 
         # 添加第一跳
         hops_1 = knn_graph[:,:,:self.k_at_hop[0] + 1]      # B N [1 K1] 这里的1是center point 的索引
-        #hops_2 = hops_1.unsqueeze(-1).repeat(1,1,1,self.k_at_hop[1]+1).clone()  #B N [1 K1] [1 K2]
-        #hops = hops_1                  # 只有第一跳
+        # 添加第二跳
+        if len(self.k_at_hop) > 1:
+            hops_2 = hops_1.unsqueeze(-1).repeat(1,1,1,self.k_at_hop[1]+1).clone()  #B N [1 K1] [1 K2]
+            hops = hops_2
+            hops = hops.flatten(-2,-1)
+        else:
+            hops = hops_1
         
 
         # 构建唯一顶点矩阵 构建邻接矩阵 因为每一个lps的顶点数目都不相同，因此需要使用for 循环
@@ -233,25 +253,45 @@ class KnnGraph(object):
         # A_ = feat.clone()[:,:,:,:max_num_nodes]
         # mask_one_hop_idcs = torch.zeros(B,N,max_num_nodes) == 1
 
-        # 构建邻接矩阵和特征矩阵，单跳的纯矩阵实现
-        mask = knn_graph.clone()         #B N N
-        mask[:,:,:] = 0
-        mask = mask.scatter_(2,knn_graph[:,:,1:self.active_connection+1],1) == True
-        a = knn_graph[:,:,1:self.active_connection+1].unsqueeze(1).repeat(1,N,1,1)
-        a = a[mask].view(B,N,self.active_connection,self.active_connection)
-        b = knn_graph[:,:,1:self.active_connection+1].unsqueeze(-1).repeat(1,1,1,self.active_connection)
-        c = (b * N) + a
+        # 构建邻接矩阵和特征矩阵，纯矩阵实现 202220228修改，之前版本可以看 notebook
+        # 根据跳数构建候选顶点的mask
+        mask_candidate = torch.zeros(B,N,N)
+        if is_cuda:
+            mask_candidate = mask_candidate.cuda(non_blocking=True)
+        mask_candidate = mask_candidate.scatter_(2,hops,1) == True
 
-        feat_ = feats.clone().unsqueeze_(1).repeat(1,N,1,1)     # B N N D
-        A_ = feat_.clone()[:,:,:,:N].reshape(B,N,-1)          # B N N*N
+        # 根据mask构建邻接矩阵
+        A_ = mask_candidate.clone()
         A_[:,:,:] = 0
-        A_ = A_.scatter_(-1,c.flatten(-2,-1),1).view(B,N,N,N)
-        # sparse matrix for feat
-        idx = torch.cat((torch.arange(0,B).unsqueeze_(-1).repeat(1,N*self.active_connection).flatten().unsqueeze_(0),torch.arange(0,N).unsqueeze_(-1).unsqueeze_(0).repeat(B,1,self.active_connection).flatten().unsqueeze_(0), knn_graph[:,:,1:self.active_connection+1].flatten().unsqueeze_(0).cpu())).cuda(non_blocking=True)
-        feat= torch.sparse_coo_tensor(idx,feat_[mask],(B,N,N,D)).cuda(non_blocking=True) # B N N D
+        A_ = A_.scatter_(2,knn_graph[:,:,1:self.active_connection+1],1) == True #每个顶点的激活集合
+        A_ = A_.unsqueeze_(1).repeat(1,N,1,1)  #升维，对每个顶点来说，都要构建IPS图
+        # 该mask用于判断在激活点集合中的顶点是否在所属IPS中
+        _mask = mask_candidate.unsqueeze(1).repeat(1,N,1,1)
+        # 该mask用于将不是IPS内的顶点全部屏蔽掉，如果是IPS内的顶点，& True后，值不变，但非IPS内的顶点， & False后，值永远为False
+        mask_2 = _mask.clone()
+        mask_2[:,:,:,:] = 0 ==1
+        mask_2[mask_candidate] = True
+        # 这里是每个IPS应该和主顶点建边的顶点信息，这样的实现不会自身与自身建边，因为activa_group那里，排除了自己
+        A_ = (A_ & _mask & mask_2).float()
+        # 因为是无向图，解决对称问题
+        i, j = torch.triu_indices(N,N)
+        A_.transpose(-2,-1)[:,:,i,j] += A_[:,:,i,j]
+        A_[:,:,i,j] += A_.transpose(-2,-1)[:,:,i,j]
+        A_[A_!=0]=1
+        
+        # 根据mask构建特征矩阵
+        # 先用cpu处理，再用稀疏矩阵保存在gpu中
+        feat_ = feats.cpu().clone().unsqueeze_(1).repeat(1,N,1,1)
+        feat = feat_.clone()
+        feat[:,:,:,:] = 0
+        feat[mask_candidate.cpu()] = feat_[mask_candidate.cpu()]
+        #feat = feat.to_sparse()   # B max_nodes max_nodes D
+        if is_cuda:
+            feat = feat.cuda(non_blocking=True)
 
-        mask_one_hop_idcs = mask
-        #mask_one_hop_idcs = mask_one_hop_idcs.scatter_(2,knn_graph[:,:,1:self.active_connection+1],1) == True
+        mask_one_hop_idcs = mask_candidate.clone()
+        mask_one_hop_idcs[:] = 0
+        mask_one_hop_idcs = mask_one_hop_idcs.scatter_(2,knn_graph[:,:,1:self.k_at_hop[0] + 1],1) == True
 
         # 效率问题不考虑第二跳
         # 添加第二跳

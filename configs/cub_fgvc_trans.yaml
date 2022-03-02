@@ -1,9 +1,9 @@
 DATA:
   VAL_SPLIT: test
-  TIMM: true
+  TIMM: false
   IMG_SIZE: (384,384)
-  BATCH_SIZE: 8
-  VAL_BATCH_SIZE: 48
+  BATCH_SIZE: 2
+  VAL_BATCH_SIZE: 6
   NOR_CLS_INDEX: -1
 MODEL: 
   NUM_CLASSES: 200
@@ -20,6 +20,8 @@ TRAIN:
     NAME: SGD
 AUG:
   NO_AUG: false
+  TIMM_TRANS: true
+  MULTI_VIEW: strong_none
 TEST:
   CROP: 0.752
   BEST_METRIC: top1
@@ -29,6 +31,9 @@ RDD_TRANS:
   CLUSTER:
     NAME: gcn
     NUM_CLUSTER: 2
-    IPS_ACTIVE_CONNECTION: 2
-    IPS_K_AT_HOP: [ 5, 0 ]
-  PERSUDO_LEARNING: true 
+    IPS_ACTIVE_CONNECTION: 4
+    IPS_K_AT_HOP: [ 20, 5 ]
+    THR: 0.5
+  PERSUDO_LEARNING: true
+  PERSUDO_LABEL: false
+  EMA_FORCE_CPU: false

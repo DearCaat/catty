@@ -29,13 +29,18 @@ def load_best_model(config,model,logger,is_ema=False):
     if config.APEX_AMP and checkpoint['config'].APEX_AMP:
         amp.initialize(model, opt_level='O1')
 
-def load_checkpoint(config, model, optimizer, lr_scheduler, logger):
+def load_checkpoint(config, model, optimizer, lr_scheduler, logger,is_ema=False):
     logger.info(f"==============> Resuming form {config.MODEL.RESUME}....................")
     if config.MODEL.RESUME.startswith('https'):
         checkpoint = torch.hub.load_state_dict_from_url(
             config.MODEL.RESUME, map_location='cpu', check_hash=True)
     else:
         checkpoint = torch.load(config.MODEL.RESUME, map_location='cpu')
+    if is_ema:
+        if 'ema' in checkpoint:
+            msg = model.load_state_dict(checkpoint['ema'], strict=False)
+            logger.info(msg)
+            return 0
     # 是否只读取模型
     if 'state_dict' in checkpoint:
         msg = model.load_state_dict(checkpoint['state_dict'], strict=False)
