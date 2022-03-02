@@ -1011,7 +1011,7 @@ if __name__ == '__main__':
     
     if config.LOG_WANDB:
         if has_wandb:
-            wandb.init(project=config.EXP_NAME, config=config)
+            wandb.init(project=config.EXP_NAME, config=config,entity="dearcat")
         else: 
             logger.warning("You've requested to log metrics to wandb but package not found. "
                             "Metrics not being logged to wandb, try `pip install wandb`")
