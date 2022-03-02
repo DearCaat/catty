@@ -126,7 +126,7 @@ def main(config):
         std['head_instance.weight'] = std['head.weight']
         std['head_instance.bias'] = std['head.bias']
         model_teacher.instance_feature_extractor.load_state_dict(std, strict=True)
-    elif config.RDD_TRANS.PERSUDO_LEARNING and not config.RDD_TRANS.TEACHER_INIT:
+    elif config.RDD_TRANS.PERSUDO_LEARNING and not config.RDD_TRANS.TEACHER_INIT and not config.THUMB_MODE:
         model_teacher = model
 
     else:
@@ -239,12 +239,15 @@ def main(config):
             return
     if model_teacher is not None:
         teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[])
+        if config.MODEL.RESUME:
+            load_checkpoint(config, teacher_ema.module, optimizer, lr_scheduler, logger)
     else:
         teacher_ema = None
     model_ema = None
     if config.MODEL_EMA:    
-        model_ema = ModelEmaV3(model, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None)
-
+        model_ema = ModelEmaV3(model, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.EMA_FORCE_CPU else None)
+        if config.MODEL.RESUME:
+            load_checkpoint(config, model_ema.module, optimizer, lr_scheduler, logger)
     # setup exponential moving average of model weights, SWA could be used here too
     '''model_ema = None
     if args.model_ema:
