@@ -239,6 +239,7 @@ _C.LOCAL_RANK = 0
 _C.DISTRIBUTED = False
 _C.WORLD_SIZE = 0
 _C.MODEL_EMA = False
+_C.EMA_FORCE_CPU = False
 _C.TRAIN_MODE = 't_e'
 
 
