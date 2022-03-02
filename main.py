@@ -413,7 +413,9 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     loss_teacher = None
 
     if not config.THUMB_MODE:
-        loss_teacher = torch.nn.CrossEntropyLoss()
+        loss_teacher = SoftTargetCrossEntropy()
+        #loss_teacher = torch.nn.CrossEntropyLoss()
+        #if not config.RDD_TRANS.EMA_FORCE_CPU:
         loss_teacher.cuda()
 
     optimizer.zero_grad()
@@ -435,8 +437,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     start = time.time()
     end = time.time()
     last_idx = len(data_loader) - 1
-    persudo_inst = config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE
-    gcn = config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE and config.RDD_TRANS.CLUSTER.NAME == 'gcn'
+    persudo_inst = config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE and config.RDD_TRANS.PERSUDO_LABEL
+    gcn = config.RDD_TRANS.PERSUDO_LEARNING and config.RDD_TRANS.CLUSTER.NAME == 'gcn' and not config.THUMB_MODE
     center_inst = torch.zeros(size=(config.RDD_TRANS.INST_NUM_CLASS,config.RDD_TRANS.INST_NUM_CLASS))
 
     for idx, (samples, targets) in enumerate(data_loader):
@@ -476,9 +478,13 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     [samples_student,samples_teacher] = samples.transpose(0, 1)
                 else:
                     samples_student,samples_teacher = samples,samples
-
+                if config.RDD_TRANS.EMA_FORCE_CPU:
+                    samples_teacher = samples_teacher.cpu()
                 del samples
-                output,o_inst,cluster_num = model(samples_student)
+                if gcn:
+                    output,o_inst,stu_edge,cluster_num = model(samples_student)
+                else:
+                    output,o_inst,cluster_num = model(samples_student)
                 
                 if config.RDD_TRANS.SHARPEN_STUDENT:
                     o_inst /= config.RDD_TRANS.SHARPEN_STUDENT
@@ -635,15 +641,19 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 
                 if gcn:
                     output_tea = teacher_ema.module(samples_teacher)
-                    loss_pl = 0
+                    tea_edge = output_tea[-2]
+                    if config.RDD_TRANS.EMA_FORCE_CPU:
+                        loss_pl = loss_teacher(stu_edge,tea_edge.cuda())
+                    else:
+                        loss_pl = loss_teacher(stu_edge,tea_edge)
                 else:
-                    #loss_gcn = 0
-                    loss_pl = 0
+                    loss_gcn = 0
+                    #loss_pl = 0
                 
                 cluster_num_meter.update(sum(cluster_num) / b,b)
                 classify_loss = criterion(output, targets)
 
-                loss = loss_pl + config.RDD_TRANS.CLASSIFY_LOSS * classify_loss
+                loss =  config.RDD_TRANS.CLASSIFY_LOSS * classify_loss + loss_pl
 
         
         if not config.DISTRIBUTED:
@@ -736,7 +746,18 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         if last_batch or idx % config.PRINT_FREQ == 0:
             if config.DISTRIBUTED:
                 reduced_loss = reduce_tensor(loss.data)
-                loss_meter.update(reduced_loss.item(), input.size(0))
+                loss_meter.update(reduced_loss.item(), targets.size(0))
+
+                if loss_teacher is not None and o_inst.size(0)>0:
+                    loss_teacher_meter.update(reduce_tensor(loss_pl.data), targets.size(0))
+                else:
+                    loss_teacher_meter.update(0, targets.size(0))
+
+                if persudo_inst:
+                    dis_ins_meter.update(dis_ins / (targets.size(0) * p),targets.size(0))
+                else:
+                    dis_ins_meter.update(0 / (targets.size(0) * p),targets.size(0))
+
             lr = optimizer.param_groups[0]['lr']
             memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
             etas = batch_time.avg * (num_steps - idx)
@@ -1031,10 +1052,10 @@ if __name__ == '__main__':
     elif config.APEX_AMP or config.NATIVE_AMP:
         logger.warning("Neither APEX or native Torch AMP is available, using float32. "
                         "Install NVIDA apex or upgrade to PyTorch 1.6") 
+    # if 'WORLD_SIZE' in os.environ:
+    #     config.DISTRIBUTED = int(os.environ['WORLD_SIZE']) > 1
     config.freeze()
 
-    if 'WORLD_SIZE' in os.environ:
-        config.DISTRIBUTED = int(os.environ['WORLD_SIZE']) > 1
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     world_size = 1
     rank = 0  # global rank

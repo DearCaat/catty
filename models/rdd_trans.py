@@ -199,20 +199,20 @@ class RddTransformer(nn.Module):
         # step 2, cluster 
         if type(self.cluster_model) == GCN:
             # if using gcn to cluster, firstly create the graph
-            feat, adj, h1_mask,h1_indi = self.graph(inst_feature)
+            feat, adj, h1_mask,h1_indi = self.graph(inst_feature,inst_feature.is_cuda)
+            
             #adj = self.graph.get_KNN_adj(feat=inst_feature)
-
             #print(adj.size())
             torch.cuda.empty_cache()
             # gcn cluster  edges, scores
-            pred = self.cluster_model(feat, adj, h1_mask)
-            print(pred.size())
-            #pred = self.soft_max(pred)
-            #del feat, adj, h1_mask
+            logits_edge = self.cluster_model(feat, adj, h1_mask)
+            pred = self.soft_max(logits_edge)
+            del feat, adj, h1_mask
             torch.cuda.empty_cache()
             #clusters_feat,clusters_idcs = gcn_cluster(None,adj, inst_feature,self.clustre_thr) # C*N*D
-            clusters_feat,clusters_idcs = gcn_cluster(None,adj, inst_feature,self.clustre_thr)
-            
+            clusters_feat,clusters_idcs = gcn_cluster(h1_indi,pred, inst_feature,self.clustre_thr,inst_feature.is_cuda)
+            cluster_num = None
+            clusters_mask = None
         elif self.cluster_model == spectral_clustering:
             # spectral_cluster
             cluster_num = self.cluster_num
@@ -256,7 +256,8 @@ class RddTransformer(nn.Module):
         
         # except:
         #     np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
-
+        if type(self.cluster_model) == GCN:
+            return logits_bag, logits_inst,logits_edge, clusters_num
         if self.training:
             #return logits_bag, logits_inst, score_inst,clusters_num
             return logits_bag, logits_inst,clusters_num
@@ -296,7 +297,7 @@ def rdd_trans_swin_base_patch4_window12_384_in22k(pretrained=False, **kwargs):
         if kwargs['cluster_name'].lower() == 'kmeans':
             return RddTransformer(backbone=backbone,cluster=kmeans,dim=1024,**kwargs)
         elif kwargs['cluster_name'].lower() == 'gcn':
-            return RddTransformer(backbone=backbone,cluster=GCN(in_dim=1024,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),dim=1024,**kwargs)
+            return RddTransformer(backbone=backbone,cluster=GCN(in_dim=1024,out_dim=256,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),dim=1024,**kwargs)
         elif kwargs['cluster_name'].lower() == 'spectral':
             return RddTransformer(backbone=backbone,cluster=spectral_clustering,dim=1024,**kwargs)
         else:
