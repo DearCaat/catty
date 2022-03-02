@@ -1,6 +1,6 @@
 DATA:
   VAL_SPLIT: test
-  TIMM: true
+  TIMM: false
   IMG_SIZE: (384,384)
   BATCH_SIZE: 2
   VAL_BATCH_SIZE: 6
@@ -20,6 +20,8 @@ TRAIN:
     NAME: SGD
 AUG:
   NO_AUG: false
+  TIMM_TRANS: true
+  MULTI_VIEW: strong_none
 TEST:
   CROP: 0.752
   BEST_METRIC: top1

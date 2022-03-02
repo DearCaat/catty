@@ -197,42 +197,60 @@ def build_transform(is_train,config):
     if is_train:
         #first transform
         if config.AUG.MULTI_VIEW is not None:
-            transform_strong = create_transform(
-                                input_size=config.DATA.IMG_SIZE,
-                                is_training=True,
-                                no_aug = config.AUG.NO_AUG,
-                                color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
-                                auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
-                                re_prob=config.AUG.REPROB,
-                                re_mode=config.AUG.REMODE,
-                                re_count=config.AUG.RECOUNT,
-                                interpolation=config.DATA.INTERPOLATION)
-            transform_strong = A.Compose([
-                                #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
-                                A.RandomBrightnessContrast(p=0.7),
-                                A.HorizontalFlip(p=0.7),
-                                A.VerticalFlip(p=0.7),
-                                A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
-                                A.OneOf([
-                                    A.Emboss(p=1),
-                                    A.Sharpen(p=1),
-                                    A.Blur(p=1)
-                                        ], p=0.7)
-                                ])
-            transform_weak = A.Compose([
-                                #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
-                                A.RandomBrightnessContrast(p=0.5),
-                                A.HorizontalFlip(p=0.5),
-                                A.VerticalFlip(p=0.5),
-                                A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
-                                #ToTensorV2()
-                                ])
-            # A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
-            # A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
-            transform_no_aug = A.Compose([
-                                A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
-                                #ToTensorV2()
-                                ])
+            if config.AUG.TIMM_TRANS:
+
+                transform_strong = create_transform(
+                                    input_size=config.DATA.IMG_SIZE,
+                                    is_training=True,
+                                    no_aug = config.AUG.NO_AUG,
+                                    color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                                    auto_augment='rand-m7-n4-mstd0.5',
+                                    re_prob=config.AUG.REPROB,
+                                    re_mode=config.AUG.REMODE,
+                                    re_count=config.AUG.RECOUNT,
+                                    interpolation=config.DATA.INTERPOLATION)
+                transform_weak = create_transform(
+                                    input_size=config.DATA.IMG_SIZE,
+                                    is_training=True,
+                                    no_aug = config.AUG.NO_AUG,
+                                    color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                                    auto_augment='rand-m3-n2-mstd0.5',
+                                    re_prob=config.AUG.REPROB,
+                                    re_mode=config.AUG.REMODE,
+                                    re_count=config.AUG.RECOUNT,
+                                    interpolation=config.DATA.INTERPOLATION)
+                transform_no_aug = create_transform(
+                                    input_size=config.DATA.IMG_SIZE,
+                                    is_training=True,
+                                    no_aug = True,
+                                    interpolation=config.DATA.INTERPOLATION)
+            else:
+                transform_strong = A.Compose([
+                                    #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                                    A.RandomBrightnessContrast(p=0.7),
+                                    A.HorizontalFlip(p=0.7),
+                                    A.VerticalFlip(p=0.7),
+                                    A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                                    A.OneOf([
+                                        A.Emboss(p=1),
+                                        A.Sharpen(p=1),
+                                        A.Blur(p=1)
+                                            ], p=0.7)
+                                    ])
+                transform_weak = A.Compose([
+                                    #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                                    A.RandomBrightnessContrast(p=0.5),
+                                    A.HorizontalFlip(p=0.5),
+                                    A.VerticalFlip(p=0.5),
+                                    A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                                    #ToTensorV2()
+                                    ])
+                # A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
+                # A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
+                transform_no_aug = A.Compose([
+                                    A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                                    #ToTensorV2()
+                                    ])
             if config.AUG.MULTI_VIEW == 'strong_weak':
                 return [transform_strong,transform_weak]
             elif config.AUG.MULTI_VIEW == 'strong_none':
@@ -422,10 +440,13 @@ def pytorch_dataloader(is_train,config):
         else:
             transform_train = build_transform(is_train=True,config=config)
             transform_val = build_transform(is_train=False,config=config)
-            dataset_train = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform_train,is_multi_view=config.AUG.MULTI_VIEW,size=config.DATA.IMG_SIZE)
-            dataset_val = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.VAL_SPLIT),transform=transform_val,size=config.DATA.IMG_SIZE)
-
-        loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,drop_last=config.DATA.DROP_LAST,persistent_workers=True,shuffle=True)
+            dataset_train = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform_train,is_multi_view=config.AUG.MULTI_VIEW,size=config.DATA.IMG_SIZE,timm_trans=config.AUG.TIMM_TRANS)
+            dataset_val = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.VAL_SPLIT),transform=transform_val,size=config.DATA.IMG_SIZE,timm_trans=config.AUG.TIMM_TRANS)
+        if config.DISTRIBUTED:
+            sampler=torch.utils.data.distributed.DistributedSampler(dataset_train)
+            loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,drop_last=config.DATA.DROP_LAST,persistent_workers=True,sampler=sampler)
+        else:
+            loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,drop_last=config.DATA.DROP_LAST,persistent_workers=True,shuffle=True)
         loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=config.DATA.VAL_BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
         
         
@@ -440,7 +461,7 @@ def pytorch_dataloader(is_train,config):
             transform_test = build_transform(is_train=False,config=config)
             # 之前做WSPLIN其它数据库测试用
             #dataset_test = PatchImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,transform=transform_test,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,eval=True,class_to_idx={'diseased':1,'normal':0},thumb=config.THUMB_MODE)
-            dataset_test = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TEST_SPLIT),transform=transform_test,size=config.DATA.IMG_SIZE)
+            dataset_test = MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TEST_SPLIT),transform=transform_test,size=config.DATA.IMG_SIZE,timm_trans=config.AUG.TIMM_TRANS)
         loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=config.DATA.VAL_BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,persistent_workers=True)
         return dataset_test,loader_test
 
@@ -456,7 +477,8 @@ class MulitiViewImageDataset(data.Dataset):
             transform=None,
             target_transform=None,
             is_multi_view=None,
-            size=None
+            size=None,
+            timm_trans=False,
     ):
         if parser is None or isinstance(parser, str):
             parser = create_parser(parser or '', root=root, class_map=class_map)
@@ -467,6 +489,7 @@ class MulitiViewImageDataset(data.Dataset):
         self._consecutive_errors = 0
         self.is_multi_view = is_multi_view
         self.size = size
+        self.timm_trans = timm_trans
 
     def __getitem__(self, index):
         img, target = self.parser[index]
@@ -480,10 +503,16 @@ class MulitiViewImageDataset(data.Dataset):
             else:
                 raise e
         self._consecutive_errors = 0
-        img = transforms.Resize(size=self.size,interpolation=str_to_interp_mode('bicubic'))(img=img)
+        if not self.timm_trans:
+            img = transforms.Resize(size=self.size,interpolation=str_to_interp_mode('bicubic'))(img=img)
         if self.transform is not None:
             if self.is_multi_view is not None:
                 for idx,transform in enumerate(self.transform):
+                    if self.timm_trans:
+                        if idx == 0:
+                            imgs = transform(img=img).unsqueeze(0)
+                        else:
+                            imgs = torch.cat((imgs,transform(img=img).unsqueeze(0)))
                     # try:
                     #     # pytorch transforms
                     #     if idx == 0:
@@ -491,17 +520,18 @@ class MulitiViewImageDataset(data.Dataset):
                     #     else:
                     #         imgs = torch.cat((imgs,transform(img=img).unsqueeze(0)))
                     # except:
-                    # albumentations
-                    if idx == 0:
-                        img_tmp = transform(image=np.asarray(img))['image']
-                        img_tmp = transforms.ToTensor()(img_tmp)
-                        img_tmp = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(img_tmp)
-                        imgs = img_tmp.unsqueeze(0)
                     else:
-                        img_tmp = transform(image=np.asarray(img))['image']
-                        img_tmp = transforms.ToTensor()(img_tmp)
-                        img_tmp = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(img_tmp)
-                        imgs = torch.cat((imgs,img_tmp.unsqueeze(0)))
+                    # albumentations
+                        if idx == 0:
+                            img_tmp = transform(image=np.asarray(img))['image']
+                            img_tmp = transforms.ToTensor()(img_tmp)
+                            img_tmp = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(img_tmp)
+                            imgs = img_tmp.unsqueeze(0)
+                        else:
+                            img_tmp = transform(image=np.asarray(img))['image']
+                            img_tmp = transforms.ToTensor()(img_tmp)
+                            img_tmp = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(img_tmp)
+                            imgs = torch.cat((imgs,img_tmp.unsqueeze(0)))
             else:
                 # default albumentations
                 try:

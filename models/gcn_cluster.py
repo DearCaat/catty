@@ -137,7 +137,7 @@ class GCN(nn.Module):
 
         initialize_weights(self.classifier)
 
-    def forward(self, x, A, one_hop_idcs, train=True):
+    def forward(self, x, A, one_hop_mask, train=True):
         # data normalization l2 -> bn
         B,N,I,D = x.shape    # batch_size instance_size nodes_IPS dim
         # 原论文自己注释掉了L2 norm
@@ -156,7 +156,7 @@ class GCN(nn.Module):
         x = self.conv4(x,A)
 
         dim_out = x.size(-1)
-        x = x[one_hop_idcs].view(B,N,self.k1,dim_out)
+        x = x[one_hop_mask].view(B,N,self.k1,dim_out)
         x = x.view(-1,dim_out)
         x = self.classifier(x).view(B,N,self.k1,2)
             
