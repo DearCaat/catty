@@ -22,6 +22,7 @@ class RddTransformer(nn.Module):
             self.clustre_thr = kwargs['cluster_thr']
         elif cluster == kmeans:
             self.cluster_num = kwargs['num_cluster']
+            self.persistent_center = kwargs['persistent_center']
             self.register_parameter('cluster_centers',nn.Parameter(torch.zeros(size=(self.cluster_num,dim)),requires_grad=False))
         
         elif cluster == spectral_clustering:
@@ -160,9 +161,12 @@ class RddTransformer(nn.Module):
             for b in range(B):
                 if self.training:
                     # 这里更改原始实现里最后返回部分，原始实现中这里最后强制返回cpu向量，我去掉了这一部分
-                    clu_labels,self.get_parameter('cluster_centers').data = self.cluster_model(X=inst_feature[b],num_clusters=self.cluster_num,device=torch.cuda.current_device(),cluster_centers = self.get_parameter('cluster_centers').data if self.get_parameter('cluster_centers').data.any() != 0 else [],tqdm_flag=False,distance=self.cluster_distance)
+                    clu_labels,self.get_parameter('cluster_centers').data = self.cluster_model(X=inst_feature[b],num_clusters=self.cluster_num,device=torch.cuda.current_device(),cluster_centers = self.get_parameter('cluster_centers').data if self.get_parameter('cluster_centers').data.any() != 0 and self.persistent_center else [],tqdm_flag=False,distance=self.cluster_distance)
                 else:
-                    clu_labels = kmeans_predict(X=inst_feature[b],device=torch.cuda.current_device(),cluster_centers = self.get_parameter('cluster_centers').data,tqdm_flag=False,distance=self.cluster_distance)
+                    if self.persistent_center:
+                        clu_labels = kmeans_predict(X=inst_feature[b],device=torch.cuda.current_device(),cluster_centers = self.get_parameter('cluster_centers').data,tqdm_flag=False,distance=self.cluster_distance)
+                    else:
+                        clu_labels,_ = self.cluster_model(X=inst_feature[b],num_clusters=self.cluster_num,device=torch.cuda.current_device(),tqdm_flag=False,distance=self.cluster_distance)
                 clu_labels = torch.unsqueeze(clu_labels,dim=0)
                 if b == 0:
                         clusters_idcs = clu_labels.clone()
