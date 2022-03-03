@@ -27,7 +27,7 @@ from utils import ModelEmaV3, get_sigmod_num
 from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
 from logger import create_logger
-from utils import load_best_model, load_checkpoint, save_checkpoint, get_grad_norm,  reduce_tensor,l1_regularizer,getDataByStick
+from utils import load_best_model, load_checkpoint, save_checkpoint, get_grad_norm,  reduce_tensor,l1_regularizer,getDataByStick,SoftTargetCrossEntropy_v2
 from sklearn.metrics import roc_auc_score,precision_recall_curve,f1_score
 from contextlib import suppress
 try:
@@ -416,7 +416,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     loss_teacher = None
 
     if not config.THUMB_MODE:
-        loss_teacher = SoftTargetCrossEntropy()
+        loss_teacher = SoftTargetCrossEntropy_v2()
         #loss_teacher = torch.nn.CrossEntropyLoss()
         #if not config.RDD_TRANS.EMA_FORCE_CPU:
         loss_teacher.cuda()
@@ -480,10 +480,11 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 if config.AUG.MULTI_VIEW is not None:
                     [samples_student,samples_teacher] = samples.transpose(0, 1)
                 else:
-                    samples_student,samples_teacher = samples,samples
+                    samples_student,samples_teacher = samples.clone(),samples.clone()
                 if config.RDD_TRANS.EMA_FORCE_CPU:
                     samples_teacher = samples_teacher.cpu()
                 del samples
+                torch.cuda.empty_cache()
                 if gcn:
                     output,o_inst,stu_edge,cluster_num = model(samples_student)
                 else:
@@ -643,8 +644,15 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     loss_pl = 0
                 
                 if gcn:
-                    output_tea = teacher_ema.module(samples_teacher)
+                    with torch.no_grad():
+                        output_tea = teacher_ema.module(samples_teacher)
                     tea_edge = output_tea[-2]
+                    tps_stu = 1 if config.RDD_TRANS.SHARPEN_STUDENT is None else config.RDD_TRANS.SHARPEN_STUDENT
+                    tps_tea = 1 if config.RDD_TRANS.SHARPEN_TEACHER is None else config.RDD_TRANS.SHARPEN_TEACHER
+
+                    tea_edge /= tps_tea
+                    stu_edge /= tps_stu
+
                     if config.RDD_TRANS.EMA_FORCE_CPU:
                         loss_pl = loss_teacher(stu_edge,tea_edge.cuda())
                     else:
