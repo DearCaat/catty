@@ -280,14 +280,19 @@ class KnnGraph(object):
         A_[A_!=0]=1
         
         # 根据mask构建特征矩阵
-        # 先用cpu处理，再用稀疏矩阵保存在gpu中
-        feat_ = feats.cpu().clone().unsqueeze_(1).repeat(1,N,1,1)
+        # 先用cpu处理，再用稀疏矩阵保存在gpu中，这种高维张量在cpu上非常耗时间，对比gpu上，会提升一倍的运行时间，而且如果不用稀疏张量的话，最大显存占用是相同的
+        # feat_ = feats.cpu().clone().unsqueeze_(1).repeat(1,N,1,1)
+        # feat = feat_.clone()
+        # feat[:,:,:,:] = 0
+        # feat[mask_candidate.cpu()] = feat_[mask_candidate.cpu()]
+        # feat = feat.to_sparse()   # B max_nodes max_nodes D
+        # if is_cuda:
+        #     feat = feat.cuda(non_blocking=True)
+
+        feat_ = feats.clone().unsqueeze_(1).repeat(1,N,1,1)
         feat = feat_.clone()
         feat[:,:,:,:] = 0
-        feat[mask_candidate.cpu()] = feat_[mask_candidate.cpu()]
-        #feat = feat.to_sparse()   # B max_nodes max_nodes D
-        if is_cuda:
-            feat = feat.cuda(non_blocking=True)
+        feat[mask_candidate] = feat_[mask_candidate] # B max_nodes max_nodes D
 
         mask_one_hop_idcs = mask_candidate.clone()
         mask_one_hop_idcs[:] = 0
@@ -346,7 +351,8 @@ class KnnGraph(object):
         del D
 
         # 正则化特征，IPS特征减去中心点特征
-        feat = (-feats.unsqueeze(1).repeat(1,N,1,1)).add(feat)
+        #feat = (-feats.unsqueeze(1).repeat(1,N,1,1)).add(feat)
+        feat.sub_(feat_)
         #feat.sub_(feats.unsqueeze(-2))
 
         return feat,A_,mask_one_hop_idcs,hops_1[:,:,1:]

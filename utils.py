@@ -4,6 +4,8 @@ import torch.distributed as dist
 import shutil
 from copy import deepcopy
 import math
+import torch.nn.functional as F
+import torch.nn as nn
 
 try:
     # noinspection PyUnresolvedReferences
@@ -207,3 +209,21 @@ class ModelEmaV3(torch.nn.Module):
 
     def set(self, model):
         self._update(model, update_fn=lambda e, m: m)
+
+def log_loss(tea,stu,config):
+    tps_stu = 1 if config.RDD_TRANS.SHARPEN_STUDENT is None else config.RDD_TRANS.SHARPEN_STUDENT
+    tps_tea = 1 if config.RDD_TRANS.SHARPEN_TEACHER is None else config.RDD_TRANS.SHARPEN_TEACHER
+    tea = tea.detach()
+    stu =  stu / tps_stu
+    tea = torch.nn.functional.softmax(tea / tps_tea,dim=-1)
+    return -(tea*F.log_softmax(stu,dim=-1).sum(dim=-1).mean())
+
+# 相较于timm的版本，我在这里对target也做softmax
+class SoftTargetCrossEntropy_v2(nn.Module):
+
+    def __init__(self):
+        super(SoftTargetCrossEntropy_v2, self).__init__()
+
+    def forward(self, x: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        loss = torch.sum(-F.softmax(target,dim=-1) * F.log_softmax(x, dim=-1), dim=-1)
+        return loss.mean()
