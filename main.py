@@ -348,7 +348,7 @@ def main(config):
         max_f1 = max(max_f1,f1)
 
         update_summary(
-                    epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
+                    epoch, train_metrics, eval_metrics, eval_metrics_ema,os.path.join(config.OUTPUT, 'summary.csv'),
                     write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
 
         if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
@@ -358,6 +358,14 @@ def main(config):
                 f'Max f1: {max_f1:.2f}%\t'
                 f'Max ema_f1: {max_f1_ema:.2f}%\t'
                 f'Best AUC: {best_auc:.2f}%')
+    if config.LOG_WANDB and has_wandb:
+        _summary = OrderedDict([('best_top1',max_accuracy),
+                                ('best_f1',max_f1),
+                                ('best_auc',best_auc),
+                                ('best_ema_top1',max_accuracy_ema),
+                                ('best_ema_f1',max_f1_ema),
+                                ('best_ema_auc',best_auc_ema)])
+        wandb.log(_summary)
     # except:
     #     print(torch.cuda.memory_stats())
     total_time = time.time() - start_time
