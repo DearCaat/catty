@@ -486,7 +486,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 del samples
                 torch.cuda.empty_cache()
                 if gcn:
-                    output,o_inst,stu_edge,cluster_num = model(samples_student)
+                    output,o_inst,stu_edge,h1_mask_stu,cluster_num = model(samples_student)
                 else:
                     output,o_inst,cluster_num = model(samples_student)
                 
@@ -645,8 +645,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 
                 if gcn:
                     with torch.no_grad():
-                        output_tea = teacher_ema.module(samples_teacher)
-                    tea_edge = output_tea[-2]
+                        output_tea = teacher_ema.module(samples_teacher,is_teacher=True,h1_mask_stu=h1_mask_stu)
+                    tea_edge = output_tea
                     tps_stu = 1 if config.RDD_TRANS.SHARPEN_STUDENT is None else config.RDD_TRANS.SHARPEN_STUDENT
                     tps_tea = 1 if config.RDD_TRANS.SHARPEN_TEACHER is None else config.RDD_TRANS.SHARPEN_TEACHER
 

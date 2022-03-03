@@ -196,7 +196,7 @@ class RddTransformer(nn.Module):
         return clusters_idcs,clusters_mask
 
 
-    def forward(self,x,is_teacher=False,h1_mask_tea=None):
+    def forward(self,x,is_teacher=False,h1_mask_stu=None):
         # step 1, get the instance feat by backbone Network
         avg_bag_feature, inst_feature=self.instance_feature_extractor.forward_features(x) #B*N*D
         B,N,D = inst_feature.shape
@@ -209,9 +209,12 @@ class RddTransformer(nn.Module):
             #print(adj.size())
             torch.cuda.empty_cache()
             # gcn cluster  edges, scores
-            logits_edge = self.cluster_model(feat, adj, h1_mask)
+            
             if is_teacher:
+                logits_edge = self.cluster_model(feat, adj, h1_mask_stu)
                 return logits_edge
+            else:
+                logits_edge = self.cluster_model(feat, adj, h1_mask)
             pred = self.soft_max(logits_edge)
             del feat, adj
             torch.cuda.empty_cache()
@@ -263,7 +266,7 @@ class RddTransformer(nn.Module):
         # except:
         #     np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
         if type(self.cluster_model) == GCN:
-            return logits_bag, logits_inst,logits_edge, clusters_num
+            return logits_bag, logits_inst,logits_edge,h1_mask, clusters_num
         if self.training:
             #return logits_bag, logits_inst, score_inst,clusters_num
             return logits_bag, logits_inst,clusters_num
