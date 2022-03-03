@@ -883,7 +883,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
         for idx, (images, targets) in enumerate(data_loader):
             last_batch = idx == last_idx
             # timm dataloader prefetcher will do this
-            if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
+            if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER and next(model.parameters()).is_cuda:
                 images = images.cuda(non_blocking=True)
                 targets = targets.cuda(non_blocking=True)
 

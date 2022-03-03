@@ -1,6 +1,7 @@
 RDD_TRANS:
   CLUSTER:
     CLUSTER_DISTANCE: cosine
+    PERSISTENT_CENTER: true
     INIT: k-means++
     IPS_ACTIVE_CONNECTION: 2
     IPS_K_AT_HOP: [ 2, 0 ]
