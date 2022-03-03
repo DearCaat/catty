@@ -519,8 +519,9 @@ class MulitiViewImageDataset(data.Dataset):
                     imgs = self.transform(image=np.asarray(img))['image']
                 except:
                     imgs = self.transform(img=img)
-                imgs = transforms.ToTensor()(imgs)
-                imgs = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(imgs)
+                if not self.timm_trans:
+                    imgs = transforms.ToTensor()(imgs)
+                    imgs = transforms.Normalize(mean=torch.tensor(IMAGENET_DEFAULT_MEAN),std=torch.tensor(IMAGENET_DEFAULT_STD))(imgs)
         
         if target is None:
             target = -1

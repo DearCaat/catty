@@ -673,16 +673,17 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         
         if not config.DISTRIBUTED:
             loss_meter.update(loss.item(), targets.size(0))
+            
+            if loss_teacher is not None:
+                    loss_teacher_meter.update(loss_pl.item(), targets.size(0))
+            else:
+                loss_teacher_meter.update(0, targets.size(0))
 
             if persudo_inst:
                 dis_ins_meter.update(dis_ins / (targets.size(0) * p),targets.size(0))
-                if loss_teacher is not None and o_inst.size(0)>0:
-                    loss_teacher_meter.update(loss_pl.item(), targets.size(0))
-                else:
-                    loss_teacher_meter.update(0, targets.size(0))
             else:
                 dis_ins_meter.update(0 / (targets.size(0) * p),targets.size(0))
-                loss_teacher_meter.update(0, targets.size(0))
+
        # with torch.autograd.detect_anomaly():
         if config.TRAIN.ACCUMULATION_STEPS > 1:
             #loss = criterion(outputs, targets)
@@ -763,7 +764,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 reduced_loss = reduce_tensor(loss.data)
                 loss_meter.update(reduced_loss.item(), targets.size(0))
 
-                if loss_teacher is not None and o_inst.size(0)>0:
+                if loss_teacher is not None:
                     loss_teacher_meter.update(reduce_tensor(loss_pl.data), targets.size(0))
                 else:
                     loss_teacher_meter.update(0, targets.size(0))
