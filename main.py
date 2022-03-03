@@ -308,7 +308,9 @@ def main(config):
         if teacher_ema is not None:
             acc1_ema, acc5_ema,loss_ema,auc_ema,eval_metrics_ema = validate(config, data_loader_val, teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion)
         elif model_ema is not None:
-            acc1_ema, acc5_ema,loss_ema,auc_ema,eval_metrics_ema = validate(config, data_loader_val, model_ema.module,amp_autocast=amp_autocast,criterion=criterion)
+            acc1_ema, acc5_ema,loss_ema,auc_ema,eval_metrics_ema = validate(config, data_loader_val, model_ema.module.cuda(),amp_autocast=amp_autocast,criterion=criterion)
+            if config.EMA_FORCE_CPU:
+                model_ema.module.to('cpu')
         logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
         for i in range(len(thr_list)):
             logger.info(f"Thr:  {thr_list[i]:.2f}")
@@ -389,7 +391,9 @@ def main(config):
         #ema
         if model_ema is not None or teacher_ema is not None:
             load_best_model(config, model_ema.module if model_ema is not None else teacher_ema.module, logger,is_ema=True)
+            
             acc1_ema, acc5_ema,loss_ema,auc_ema,pred,label,eval_metrics_ema = validate(config, data_loader_test, model_ema.module if model_ema is not None else teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion,save_pre=True)
+            
             logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1_ema:.2f}% {auc_ema:.2f}%")
             _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_ema_'+config.DATA.DATASET.split('/')[-1])+'.npz'
             np.savez(_save_path,pred=pred,label=label)
@@ -415,7 +419,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     torch.cuda.empty_cache()
     loss_teacher = None
 
-    if not config.THUMB_MODE:
+    if not config.THUMB_MODE and teacher_ema is not None:
         loss_teacher = SoftTargetCrossEntropy_v2()
         #loss_teacher = torch.nn.CrossEntropyLoss()
         #if not config.RDD_TRANS.EMA_FORCE_CPU:
