@@ -1,5 +1,5 @@
 
-python3 main.py --data-path=/mnt/d/wsl/data/CUB/data/ --output=/mnt/f/wsl/output/ --title=cub_swin_small --cfg=./configs/cub_fgvc_small.yaml
+# python3 main.py --data-path=/mnt/d/wsl/data/CUB/data/ --output=/mnt/f/wsl/output/ --title=cub_swin_small --cfg=./configs/cub_fgvc_small.yaml
 
 python3 main.py --data-path=/mnt/d/wsl/data/CUB/data/ --output=/mnt/f/wsl/output/ --title=cub_swin_small --cfg=./configs/cub_fgvc_small.yaml --opts DATA.INTERPOLATION bicubic
 

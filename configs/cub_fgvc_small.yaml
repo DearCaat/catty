@@ -28,3 +28,4 @@ THUMB_MODE: true
 MODEL_EMA: true
 EMA_FORCE_CPU: true
 LOG_WANDB: true
+TRAIN_MODE: train
