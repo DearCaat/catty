@@ -834,7 +834,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     if hasattr(optimizer, 'sync_lookahead'):
         optimizer.sync_lookahead()
     torch.cuda.empty_cache()
-    return loss,OrderedDict([('loss', loss_meter.avg)])
+    return loss,OrderedDict([('loss', loss_meter.avg),('tea_loss',loss_teacher_meter.avg)])
 
 def predict(config, data_loader, model,amp_autocast=suppress, log_suffix=''):
     model.eval()
