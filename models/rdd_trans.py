@@ -196,7 +196,7 @@ class RddTransformer(nn.Module):
         return clusters_idcs,clusters_mask
 
 
-    def forward(self,x,is_teacher=False,h1_mask_stu=None):
+    def forward(self,x,is_teacher=False):
         # step 1, get the instance feat by backbone Network
         avg_bag_feature, inst_feature=self.instance_feature_extractor.forward_features(x) #B*N*D
         B,N,D = inst_feature.shape
@@ -211,8 +211,8 @@ class RddTransformer(nn.Module):
             # gcn cluster  edges, scores
             
             if is_teacher:
-                logits_edge = self.cluster_model(feat, adj, h1_mask_stu)
-                return logits_edge
+                logits_edge = self.cluster_model(feat, adj, h1_mask)
+                return logits_edge,h1_mask
             else:
                 logits_edge = self.cluster_model(feat, adj, h1_mask)
             pred = self.soft_max(logits_edge)
