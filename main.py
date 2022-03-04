@@ -346,9 +346,9 @@ def main(config):
         max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
         best_auc = max(best_auc,auc) if epoch > 0 else 0
         max_f1 = max(max_f1,f1)
-
+        
         update_summary(
-                    epoch, train_metrics, eval_metrics, eval_metrics_ema,os.path.join(config.OUTPUT, 'summary.csv'),
+                    epoch, train_metrics, eval_metrics,os.path.join(config.OUTPUT, 'summary.csv'),
                     write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
 
         if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
