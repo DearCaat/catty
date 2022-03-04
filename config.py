@@ -238,8 +238,11 @@ _C.LOG_WANDB = False
 _C.LOCAL_RANK = 0
 _C.DISTRIBUTED = False
 _C.WORLD_SIZE = 0
+
 _C.MODEL_EMA = False
 _C.EMA_FORCE_CPU = False
+_C.EMA_DECAY = 0.9997
+
 _C.TRAIN_MODE = 't_e'
 
 
@@ -270,7 +273,15 @@ def update_config(config, args):
 
     config.defrost()
     if args.opts:
-        config.merge_from_list(args.opts)
+        _opts = []
+        # 将 ['key=value']转换成['key','value']
+        if '=' in args.opts[0]:
+            for opt in args.opts:
+                k,v = opt.split('=')
+                _opts += [k,v]
+        else:
+            _opts = args.opts
+        config.merge_from_list(_opts)
 
     # merge from specific arguments
     if args.batch_size:

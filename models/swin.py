@@ -527,7 +527,7 @@ class SwinTransformer(nn.Module):
         f = self.avgpool(x.transpose(1, 2))  # B C 1
         f = torch.flatten(f, 1)
         return f,x
-
+    
     def forward(self, x):
         x,_ = self.forward_features(x)
         x = self.head(x)

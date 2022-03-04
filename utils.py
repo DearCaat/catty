@@ -6,6 +6,7 @@ from copy import deepcopy
 import math
 import torch.nn.functional as F
 import torch.nn as nn
+from timm.utils.clip_grad import dispatch_clip_grad
 
 try:
     # noinspection PyUnresolvedReferences
@@ -227,3 +228,37 @@ class SoftTargetCrossEntropy_v2(nn.Module):
     def forward(self, x: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         loss = torch.sum(-F.softmax(target,dim=-1) * F.log_softmax(x, dim=-1), dim=-1)
         return loss.mean()
+
+# 相较于timm的版本，我想要实现gradient accumulation，需要把梯度计算和更新参数步骤分开
+class NativeScaler_V2:
+    state_dict_key = "amp_scaler"
+
+    def __init__(self):
+        self._scaler = torch.cuda.amp.GradScaler()
+
+    def __call__(self, loss, optimizer=None, clip_grad=None, clip_mode='norm', parameters=None, create_graph=False,acc_gradient=False):
+        self._scaler.scale(loss).backward(create_graph=create_graph)
+        if not acc_gradient:
+            if clip_grad is not None:
+                assert parameters is not None
+                self._scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
+                dispatch_clip_grad(parameters, clip_grad, mode=clip_mode)
+            self._scaler.step(optimizer)
+            self._scaler.update()
+
+    def opt_step(self,optimizer,clip_grad=None, clip_mode='norm', parameters=None):
+        if clip_grad is not None:
+            assert parameters is not None
+            self._scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
+            dispatch_clip_grad(parameters, clip_grad, mode=clip_mode)
+            self._scaler.step(optimizer)
+            self._scaler.update()
+        else:
+            self._scaler.step(optimizer)
+            self._scaler.update()
+
+    def state_dict(self):
+        return self._scaler.state_dict()
+
+    def load_state_dict(self, state_dict):
+        self._scaler.load_state_dict(state_dict)

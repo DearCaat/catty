@@ -27,7 +27,8 @@ from utils import ModelEmaV3, get_sigmod_num
 from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
 from logger import create_logger
-from utils import load_best_model, load_checkpoint, save_checkpoint, get_grad_norm,  reduce_tensor,l1_regularizer,getDataByStick,SoftTargetCrossEntropy_v2
+from utils import *
+
 from sklearn.metrics import roc_auc_score,precision_recall_curve,f1_score
 from contextlib import suppress
 try:
@@ -64,7 +65,7 @@ def parse_option():
         "--opts",
         help="Modify config options by adding 'KEY VALUE' pairs. ",
         default=None,
-        nargs='+',
+        nargs=argparse.REMAINDER,
     )
 
     # easy config modification
@@ -166,7 +167,8 @@ def main(config):
             logger.info('Using NVIDIA APEX AMP. Training in mixed precision.')
     elif use_amp == 'native':
         amp_autocast = torch.cuda.amp.autocast
-        loss_scaler = NativeScaler()
+        # 相较于timm版本，将梯度计算和参数更新分开，用于gradient accumulation
+        loss_scaler = NativeScaler_V2()
         if config.LOCAL_RANK == 0:
             logger.info('Using native Torch AMP. Training in mixed precision.')
     else:
@@ -245,7 +247,7 @@ def main(config):
         teacher_ema = None
     model_ema = None
     if config.MODEL_EMA:    
-        model_ema = ModelEmaV3(model, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.EMA_FORCE_CPU else None)
+        model_ema = ModelEmaV3(model, decay=config.EMA_DECAY, device='cpu' if config.EMA_FORCE_CPU else None)
         if config.MODEL.RESUME:
             load_checkpoint(config, model_ema.module, optimizer, lr_scheduler, logger)
     # setup exponential moving average of model weights, SWA could be used here too
@@ -706,10 +708,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
             loss = loss / config.TRAIN.ACCUMULATION_STEPS
             if loss_scaler is not None:
                 loss_scaler(
-                    loss, optimizer,
-                    clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
-                    parameters=model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
-                    create_graph=second_order)
+                    loss,create_graph=second_order,acc_gradient=True)
             else:
                 loss.backward(create_graph=second_order)
                 if config.TRAIN.CLIP_GRAD > 0:
@@ -717,13 +716,26 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
                         value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
             if (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0:
-                optimizer.step()
+                if loss_scaler is not None:
+                    loss_scaler.opt_step(optimizer,clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
+                    parameters=model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0))
+                else:
+                    optimizer.step()
                 optimizer.zero_grad()
+                if model_ema is not None:
+                    if not config.THUMB_MODE:
+                        cluster_ema_num_meter.update(sum(cluster_num_ema),b)
+                    if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup' or config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
+                        #teacher_ema.decay_diff = (epoch * num_steps + idx) / (config.TRAIN.EPOCHS * num_steps)
+                        model_ema.decay = 0
+                    if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
+                        model_ema.decay = config.RDD_TRANS.EMA_DECAY if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH else model_ema.decay
+                    model_ema.update(model)
                 if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
                     lr_scheduler.step(epoch * num_steps + idx)
                 else:
                     lr_scheduler.step_update(epoch * num_steps + idx)
-        else:
+        else: 
             #loss = criterion(outputs, targets)
             optimizer.zero_grad()
             if loss_scaler is not None:

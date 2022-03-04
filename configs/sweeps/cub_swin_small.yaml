@@ -1,0 +1,86 @@
+
+# 
+command:
+  - ${env}
+  - python3
+  - ${program}
+  - "--data-path"
+  - "/mnt/d/wsl/data/CUB/data/"
+  - "--output"
+  - "/mnt/g/wsl/output/"
+  - "--title"
+  - "cub_swin_small"
+  - "--cfg"
+  - "./configs/cub_fgvc_small.yaml"
+  - "--opts"
+  - ${args_no_hyphens}
+
+program: main.py
+method: bayes
+metric:
+  goal: maximize
+  name: best_top1
+parameters:
+  TRAIN.ACCUMULATION_STEPS:
+    values:
+      - 0
+      - 2
+      - 4
+    distribution: categorical
+
+  TRAIN.WARMUP_EPOCHS:
+    max: 4
+    min: 1
+    distribution: int_uniform
+
+  TRAIN.WEIGHT_DECAY:
+    values:
+      - '0.0'
+      - 0.005
+      - 0.0005
+      - 0.00005
+      - 0.000005
+    distribution: categorical
+
+  TRAIN.OPTIMIZER.NAME:
+    values:
+      - adamw
+      - sgd
+      - lookahead_adamw
+    distribution: categorical
+
+  TRAIN.CLIP_GRAD:
+    values:
+      - '10.0'
+      - '5.0'
+      - '0.0'
+    distribution: categorical
+
+  TRAIN.BASE_LR:
+    values:
+      - 0.0001
+      - 0.00005
+      - 0.00001
+      - 0.000005
+    distribution: categorical
+
+  AUG.AUTO_AUGMENT:
+    values:
+      - rand-m3-n2-mstd0.5
+      - rand-m4-n2-mstd0.5
+      - rand-m4-n3-mstd0.5
+    distribution: categorical
+
+  EMA_DECAY:
+    values:
+      - 0.9997
+      - 0.9996
+      - 0.9995
+      - 0.9994
+    distribution: categorical
+
+  AUG.REPROB:
+    values:
+      - '0.0'
+      - 0.25
+    distribution: categorical
