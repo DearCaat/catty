@@ -331,7 +331,8 @@ def main(config):
             max_f1_ema = max(max_f1_ema,f1_ema)
             if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
                 save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,None,is_ema=True)
-
+        else:
+            eval_metrics_ema = None
         f1 = eval_metrics['macro_f1']
 
         if config.TEST.BEST_METRIC.lower() == 'auc':
