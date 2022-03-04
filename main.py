@@ -348,6 +348,8 @@ def main(config):
         best_auc = max(best_auc,auc) if epoch > 0 else 0
         max_f1 = max(max_f1,f1)
         
+        if eval_metrics_ema is not None:
+            eval_metrics.update(eval_metrics_ema)
         update_summary(
                     epoch, train_metrics, eval_metrics,os.path.join(config.OUTPUT, 'summary.csv'),
                     write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
