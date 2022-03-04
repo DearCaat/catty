@@ -109,7 +109,7 @@ _C.TRAIN.WARMUP_LR = 5e-7
 _C.TRAIN.MIN_LR = 5e-7
 # Clip gradient norm                                     
 #_C.TRAIN.CLIP_GRAD = 5.0
-_C.TRAIN.CLIP_GRAD = 0
+_C.TRAIN.CLIP_GRAD = 0.
 # Gradient clipping mode. One of ("norm", "value", "agc")                                                                                   
 _C.TRAIN.CLIP_MODE = 'norm'
 # Auto resume from latest checkpoint
@@ -165,11 +165,11 @@ _C.AUG.HFLIP = 0.5
 # Vertical flip training aug probability
 _C.AUG.VFLIP = 0.
 # Color jitter factor   0.4
-_C.AUG.COLOR_JITTER = 0  
+_C.AUG.COLOR_JITTER = 0.  
 # Use AutoAugment policy. "v0" or "original"
 _C.AUG.AUTO_AUGMENT = 'rand-m3-n2-mstd0.5'
 # Random erase prob
-_C.AUG.REPROB = 0   #0.25
+_C.AUG.REPROB = 0.   #0.25
 # Random erase mode
 _C.AUG.REMODE = 'pixel'
 # Random erase count
