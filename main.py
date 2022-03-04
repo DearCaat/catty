@@ -658,18 +658,23 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 
                 if gcn:
                     with torch.no_grad():
-                        output_tea = teacher_ema.module(samples_teacher,is_teacher=True,h1_mask_stu=h1_mask_stu)
-                    tea_edge = output_tea
+                        tea_edge,h1_mask_tea = teacher_ema.module(samples_teacher,is_teacher=True)
+                        if config.RDD_TRANS.EMA_FORCE_CPU:
+                            tea_edge.cuda(non_blocking=True)
+                    # 建立一个更大的向量，学生和老师只要有一方没有对齐另一方都会计算loss，因为梯度回溯问题，这里没有用clone，而是创建了两个向量
+                    tea_logist_edge = torch.zeros(size=(tea_edge.size(0),o_inst.size(1),o_inst.size(1),tea_edge.size(-1))).cuda(non_blocking=True).half()
+                    stu_logist_edge = torch.zeros(size=(tea_edge.size(0),o_inst.size(1),o_inst.size(1),tea_edge.size(-1))).cuda(non_blocking=True).half()
+
+                    tea_logist_edge[h1_mask_tea] = tea_edge.flatten(end_dim=-2)
+                    stu_logist_edge[h1_mask_stu] = stu_edge.flatten(end_dim=-2)
+
                     tps_stu = 1 if config.RDD_TRANS.SHARPEN_STUDENT is None else config.RDD_TRANS.SHARPEN_STUDENT
                     tps_tea = 1 if config.RDD_TRANS.SHARPEN_TEACHER is None else config.RDD_TRANS.SHARPEN_TEACHER
 
-                    tea_edge /= tps_tea
-                    stu_edge /= tps_stu
+                    tea_logist_edge /= tps_tea
+                    stu_logist_edge /= tps_stu
 
-                    if config.RDD_TRANS.EMA_FORCE_CPU:
-                        loss_pl = loss_teacher(stu_edge,tea_edge.cuda())
-                    else:
-                        loss_pl = loss_teacher(stu_edge,tea_edge)
+                    loss_pl = loss_teacher(stu_logist_edge,tea_logist_edge)
                 else:
                     loss_gcn = 0
                     #loss_pl = 0

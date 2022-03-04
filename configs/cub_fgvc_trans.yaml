@@ -32,7 +32,7 @@ RDD_TRANS:
     NAME: gcn
     NUM_CLUSTER: 2
     IPS_ACTIVE_CONNECTION: 4
-    IPS_K_AT_HOP: [ 20, 5 ]
+    IPS_K_AT_HOP: [ 10, 3 ]
     THR: 0.5
   PERSUDO_LEARNING: true
   PERSUDO_LABEL: false
