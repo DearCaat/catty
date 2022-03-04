@@ -10,7 +10,7 @@ MODEL:
   NAME: swin_base_patch4_window12_384_in22k
   DROP_PATH_RATE: .3
 TRAIN:
-  EPOCHS: 40
+  EPOCHS: 50
   WARMUP_EPOCHS: 2
   WEIGHT_DECAY: 0.0
   BASE_LR: 0.0005

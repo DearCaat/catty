@@ -269,7 +269,11 @@ def update_config(config, args):
     _update_config_from_file(config, pth)
 
     if args.cfg:
-        _update_config_from_file(config, args.cfg)
+        if type(args.cfg) in (tuple,list):
+            for _cfg in args.cfg:
+                _update_config_from_file(config, _cfg)
+        else:
+            _update_config_from_file(config, args.cfg)
 
     config.defrost()
     if args.opts:
