@@ -687,8 +687,11 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     #loss_pl = 0
                 
                 cluster_num_meter.update(sum(cluster_num) / b,b)
-                classify_loss = criterion(output, targets)
-
+                
+                if config.BINARYTRAIN_MODE:
+                    classify_loss = criterion(output, targets_bin)
+                else:
+                    classify_loss = criterion(output, targets)
                 loss =  config.RDD_TRANS.CLASSIFY_LOSS * classify_loss + loss_pl
 
         

@@ -1,14 +1,17 @@
 TEST:
-  BEST_METRIC: f1
+  BEST_METRIC: auc
   CROP: 0.
 
 MODEL:
   NAME: rdd_trans_swin_small_patch4_window7_224
-
+DATA:
+  NUM_CLASSES: 2
+  NOR_CLS_INDEX: 0
 AUG:
   MULTI_VIEW: strong_none
 
 THUMB_MODE: false
+BINARYTRAIN_MODE: true
   
 RDD_TRANS:
   CLUSTER:
@@ -30,7 +33,7 @@ RDD_TRANS:
   EMA_DECAY_SCHEDULER: null
   EMA_DECAY_SCHEDULER_FLAT_RATIO: 0.01
   EMA_FORCE_CPU: false
-  INST_NUM_CLASS: 8
+  INST_NUM_CLASS: 2
   NOR_THR: 0.05
   INST_TEST: true
   BAG_TEST: true
