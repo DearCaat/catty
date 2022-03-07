@@ -24,7 +24,8 @@ RDD_TRANS:
     NAME: gcn
     NUM_CLUSTER: 2
     IPS_ACTIVE_CONNECTION: 4
-    IPS_K_AT_HOP: [ 3, 2 ]
+    IPS_K_AT_HOP: [ 3, 2 ]   # 224 , 49 , [3,2]
+                             # 384, 144, []
     THR: 0.5
   PERSUDO_LEARNING: true
   PERSUDO_LABEL: false
