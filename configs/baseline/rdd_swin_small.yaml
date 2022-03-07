@@ -17,7 +17,7 @@ AUG:
 
 TEST:
   CROP: 0.
-  BEST_METRIC: f1
+  BEST_METRIC: auc     #binary
   
 THUMB_MODE: true
 MODEL_EMA: true
