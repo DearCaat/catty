@@ -34,13 +34,14 @@ def gcn_cluster(edge_col_indices,scores,feat,thr=0.5,is_cuda=True):
     cluster_feat = [[] for i in range (B)]
     cluster_idcs = [[] for i in range (B)]
     for b in range(B):
-        csr = torch.sparse_csr_tensor(crow_indices,edge_col_indices[b,:,:].flatten().contiguous(),scores[b,:,:,0].flatten().contiguous(),size=(N,N),requires_grad=False)
+        csr = torch.sparse_csr_tensor(crow_indices,edge_col_indices[b,:,:].flatten().contiguous(),scores[b,:,:,1].flatten().contiguous(),size=(N,N),requires_grad=False)
         A = csr.to_dense()
         A[A>thr] = 1
+        A[A<=thr] = 0
 
         #if scores shape == [B,N,N,2]
         #A_nx = nx.from_numpy_matrix(scores[b].detach().cpu().numpy())
-
+        #print(A)
         A_nx = nx.from_numpy_matrix(A.cpu().numpy())
         for c in nx.connected_components(A_nx):
             c = list(c)

@@ -127,6 +127,7 @@ def main(config):
         std['head_instance.weight'] = std['head.weight']
         std['head_instance.bias'] = std['head.bias']
         model_teacher.instance_feature_extractor.load_state_dict(std, strict=True)
+        logger.info(f"Teacher model inited")
     elif config.RDD_TRANS.PERSUDO_LEARNING and not config.RDD_TRANS.TEACHER_INIT and not config.THUMB_MODE:
         model_teacher = model
 
@@ -677,7 +678,9 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
                     tea_logist_edge /= tps_tea
                     stu_logist_edge /= tps_stu
-
+                    #print(tea_logist_edge)
+                   # print(F.softmax(tea_logist_edge,dim=-1))
+                    #print(F.softmax(stu_logist_edge,dim=-1))
                     loss_pl = loss_teacher(stu_logist_edge,tea_logist_edge)
                 else:
                     loss_gcn = 0
