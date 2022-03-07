@@ -1,3 +1,10 @@
+TEST:
+  BEST_METRIC: f1
+  CROP: 0.
+
+AUG:
+  MULTI_VIEW: strong_none
+  
 RDD_TRANS:
   CLUSTER:
     CLUSTER_DISTANCE: cosine

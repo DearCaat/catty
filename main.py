@@ -433,8 +433,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     loss_teacher = None
 
     if not config.THUMB_MODE and teacher_ema is not None:
-        loss_teacher = SoftTargetCrossEntropy_v2()
-        #loss_teacher = torch.nn.CrossEntropyLoss()
+        #loss_teacher = SoftTargetCrossEntropy_v2()
+        loss_teacher = torch.nn.CrossEntropyLoss()
         #if not config.RDD_TRANS.EMA_FORCE_CPU:
         loss_teacher.cuda()
 

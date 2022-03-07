@@ -259,16 +259,30 @@ def build_transform(is_train,config):
                 return [transform_weak,transform_no_aug]
             else:
                 raise NotImplementedError
-        transform = create_transform(
-                                input_size=config.DATA.IMG_SIZE,
-                                is_training=True,
-                                no_aug = config.AUG.NO_AUG,
-                                color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
-                                auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
-                                re_prob=config.AUG.REPROB,
-                                re_mode=config.AUG.REMODE,
-                                re_count=config.AUG.RECOUNT,
-                                interpolation=config.DATA.INTERPOLATION)
+        if config.AUG.TIMM_TRANS:
+            transform = create_transform(
+                                    input_size=config.DATA.IMG_SIZE,
+                                    is_training=True,
+                                    no_aug = config.AUG.NO_AUG,
+                                    color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                                    auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
+                                    re_prob=config.AUG.REPROB,
+                                    re_mode=config.AUG.REMODE,
+                                    re_count=config.AUG.RECOUNT,
+                                    interpolation=config.DATA.INTERPOLATION)
+        else:
+            transform = A.Compose([
+                            #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                            A.RandomBrightnessContrast(p=0.7),
+                            A.HorizontalFlip(p=0.7),
+                            A.VerticalFlip(p=0.7),
+                            A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                            A.OneOf([
+                                A.Emboss(p=1),
+                                A.Sharpen(p=1),
+                                A.Blur(p=1)
+                                    ], p=0.7)
+                            ])
         # transform = transforms.Compose([
         #                 transforms.Resize((510, 510), Image.BILINEAR),
         #                 transforms.RandomCrop(config.DATA.IMG_SIZE),
