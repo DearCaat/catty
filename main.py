@@ -548,7 +548,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     else:
                         output_bag_label =  output_pl.clone()
 
-                    output_bag_label = output_bag_label[torch.functional.F.one_hot(ins_t,num_classes=torch.max(ins_t)+1) == 1].view(b,p)
+                    output_bag_label = output_bag_label[torch.functional.F.one_hot(ins_t,num_classes=config.DATA.NUM_CLASSES) == 1].view(b,p)
                     #该包中局部相对病害阈值        
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]
@@ -834,6 +834,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     if persudo_inst and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
         for i in range(len(thr_list)):
             dis_ratio_tmp= np.sort(np.array(dis_ratio_list[i]))
+            if len(dis_ratio_tmp) == 0:
+                dis_ratio_tmp = [0]
             thr_list[i] = config.RDD_TRANS.THR_REL_EMA_DECAY * thr_list[i] + (1-config.RDD_TRANS.THR_REL_EMA_DECAY) * dis_ratio_tmp[math.floor(len(dis_ratio_tmp) * config.RDD_TRANS.THR_REL_UPDATE_RATIO)]
 
     epoch_time = time.time() - start
@@ -994,11 +996,11 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     del output_ins,output_soft_ins
                 # 如果两种测试都用，则相加再除二
                 elif config.RDD_TRANS.INST_TEST and config.RDD_TRANS.BAG_TEST:
-                    output = (output_ins + output) / 2
-                    output_soft = (output_soft + output_soft_ins) / 2
+                    output = (output_ins[:,:7] + output) / 2
+                    output_soft = (output_soft + output_soft_ins[:,:7]) / 2
                     del output_ins,output_soft_ins
 
-            if config.BINARYTRAIN_MODE:
+            if config.BINARYTRAIN_MODE: 
                 loss = criterion(output, targets_bin)
             else:
                 loss = criterion(output, targets)
