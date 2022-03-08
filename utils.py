@@ -141,6 +141,7 @@ def getDataByStick(data,stick):
     j = -1
     diff = 9999
     _stick = stick.copy()
+    p_at_r = []
     for a in range(0,len(data[0])):
         if len(_stick):
             if round(data[1][a],decimal_num(_stick[j])) == _stick[j]:
@@ -148,9 +149,10 @@ def getDataByStick(data,stick):
                 if diff_tem < diff:
                     diff = diff_tem
                 if diff_tem > diff:
-                    print(data[0][a-1],data[1][a-1])
+                    p_at_r.append((data[0][a-1],data[1][a-1]))
                     diff = 9999
                     del _stick[j]    
+    return p_at_r
 
 def get_sigmod_num(start=0,curr_step=0,all_step=0,end=0.999,alph=10):
     '''
