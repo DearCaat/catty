@@ -403,6 +403,7 @@ def main(config):
         patr=getDataByStick([precision,recall],stick)
         logger.info(patr)
 
+        acc1_ema,auc_ema,eval_metrics_ema = 0,0,None
         #ema
         if model_ema is not None or teacher_ema is not None:
             load_best_model(config, model_ema.module if model_ema is not None else teacher_ema.module, logger,is_ema=True)
@@ -427,7 +428,16 @@ def main(config):
             stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
             patr=getDataByStick([precision,recall],stick)
             logger.info(patr)
-
+        
+        if config.LOG_WANDB and has_wandb:
+            _summary = OrderedDict([('test_top1',acc1),
+                                    ('test_f1',eval_metrics['micro_f1']),
+                                    ('test_auc',auc),
+                                    ('test_patr',patr[-2:]),
+                                    ('test_ema_top1',acc1_ema),
+                                    ('test_ema_f1',eval_metrics_ema['micro_f1'] if eval_metrics['micro_f1'] else 0),
+                                    ('test_ema_auc',auc_ema)])
+            wandb.log(_summary)
 
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,teacher_ema=None, thr_list=[]):
     model.train()
