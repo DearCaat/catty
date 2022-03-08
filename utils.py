@@ -1,4 +1,3 @@
-from collections import _T2
 import os
 import torch
 import torch.distributed as dist
