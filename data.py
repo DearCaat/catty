@@ -474,6 +474,7 @@ class MulitiViewImageDataset(data.Dataset):
             is_multi_view=None,
             size=None,
             timm_trans=False,
+            binary_mode=False,
     ):
         if parser is None or isinstance(parser, str):
             parser = create_parser(parser or '', root=root, class_map=class_map)

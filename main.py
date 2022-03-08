@@ -473,8 +473,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         # 当伪标签为二分类时或二分类训练时，需要二分类标签进行loss计算
         if config.BINARYTRAIN_MODE or (not config.THUMB_MODE and config.RDD_TRANS.INST_NUM_CLASS):
             targets_bin = targets.clone()
-            targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-            targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+            targets_bin[targets==6] = 0
+            targets_bin[targets!=6] = 1
         
         # timm dataloader prefetcher will do this
         if mixup_fn is not None and ((not config.DATA.TIMM_PREFETCHER and config.DATA.TIMM) or not config.DATA.TIMM):
@@ -687,7 +687,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     #loss_pl = 0
                 
                 cluster_num_meter.update(sum(cluster_num) / b,b)
-                
+
                 if config.BINARYTRAIN_MODE:
                     classify_loss = criterion(output, targets_bin)
                 else:
@@ -932,8 +932,8 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                 topk = (1,1)
             m = 0
             if 'cqu_bpdd' in config.DATA.DATASET:
-                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+                targets_bin[targets==6] = 0
+                targets_bin[targets!=6] = 1
 
             # compute output
             with amp_autocast():
