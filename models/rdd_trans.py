@@ -37,12 +37,12 @@ class RddTransformer(nn.Module):
         num_classes = kwargs.pop('num_classes')
         self.instance_feature_extractor=backbone
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        #self.head_instance = nn.Linear(dim, kwargs['ins_num_classes'])  #实例分类器为二分类器，主要用于判断实例是否为病害 0正常 1病害
+        self.head_instance = nn.Linear(dim, kwargs['ins_num_classes'])  #实例分类器为二分类器，主要用于判断实例是否为病害 0正常 1病害
         self.head = nn.Sequential(
             nn.Linear(dim,num_classes) if num_classes > 0 else nn.Identity()
         )
         self.soft_max = nn.Softmax(-1)
-        #initialize_weights(self.head_instance)
+        initialize_weights(self.head_instance)
         initialize_weights(self.head)
 
     def get_cluster_feat_f(self,clusters_feat,cluster_num):
@@ -254,7 +254,7 @@ class RddTransformer(nn.Module):
 
         # step 3 classify
         # instance classify
-        logits_inst = self.instance_feature_extractor.head_instance(inst_feature.view(-1,D))
+        logits_inst = self.head_instance(inst_feature.view(-1,D))
         logits_inst = logits_inst.view(B,N,-1)
         #score_inst = self.soft_max(logits_inst)
         # bag classify
@@ -300,7 +300,7 @@ def rdd_trans_swin_base_patch4_window12_384_in22k(pretrained=False, **kwargs):
     """ Swin-S @ 224x224, trained ImageNet-1k
     """
     model_kwargs = dict(
-        patch_size=4, window_size=12, embed_dim=128, depths=(2, 2, 18, 2), num_heads=(4, 8, 16, 32), **kwargs)
+        patch_size=4, window_size=12, embed_dim=128, depths=(2, 2, 18, 2), num_heads=(4, 8, 16, 32),**kwargs)
     backbone = _create_swin_transformer('swin_base_patch4_window12_384_in22k', pretrained=pretrained, **model_kwargs)
     if 'cluster_name' in kwargs:
         if kwargs['cluster_name'].lower() == 'kmeans':

@@ -22,7 +22,7 @@ def build_model(config):
             cluster_distance = config.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE.lower(),
             cluster_thr = config.RDD_TRANS.CLUSTER.THR,
             select_cluster_thr = config.RDD_TRANS.CLUSTER.SELECT_THR,
-            nor_index = config.DATA.NOR_CLS_INDEX,
+            nor_index = config.RDD_TRANS.CLUSTER.NOR_INDEX if config.RDD_TRANS.CLUSTER.NOR_INDEX else config.DATA.NOR_CLS_INDEX,
             cluster_rbf_distance = config.RDD_TRANS.CLUSTER.RBF_DISTANCE,
             cluster_rbf_gamma = config.RDD_TRANS.CLUSTER.RBF_GAMMA,
             cluster_n_compoents = config.RDD_TRANS.CLUSTER.N_COMPOENTS,

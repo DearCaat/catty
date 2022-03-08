@@ -124,9 +124,10 @@ def main(config):
         model_teacher.cuda()
         cpt = torch.load(config.RDD_TRANS.TEACHER_INIT, map_location='cpu')
         std = cpt['state_dict']
-        std['head_instance.weight'] = std['head.weight']
-        std['head_instance.bias'] = std['head.bias']
-        model_teacher.instance_feature_extractor.load_state_dict(std, strict=True)
+        if config.RDD_TRANS.INST_NUM_CLASS == config.DATA.NUM_CLASSES:
+            std_ins = dict([('head_instance.weight',std['head.weight']),('head_instance.bias',std['head.weight'])])
+            model_teacher.head_instance.load_state_dict(std_ins, strict=False)
+        model_teacher.instance_feature_extractor.load_state_dict(std, strict=False)
         logger.info(f"Teacher model inited")
     elif config.RDD_TRANS.PERSUDO_LEARNING and not config.RDD_TRANS.TEACHER_INIT and not config.THUMB_MODE:
         model_teacher = model
@@ -542,7 +543,12 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
 
                     dis_ins = 0
                     #包所属标签下的置信度
-                    output_bag_label = output_pl[torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1].view(b,p)
+                    if config.RDD_TRANS.INST_NUM_CLASS != config.DATA.NUM_CLASSES:
+                        output_bag_label =  output_pl[:,:,:config.DATA.NUM_CLASSES].clone()
+                    else:
+                        output_bag_label =  output_pl.clone()
+
+                    output_bag_label = output_bag_label[torch.functional.F.one_hot(ins_t,num_classes=torch.max(ins_t)+1) == 1].view(b,p)
                     #该包中局部相对病害阈值        
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]
@@ -562,7 +568,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     ps_mask_dis = ps_mask_nor==False
 
                     #将所有实例设为正常
-                    label_pl[:,:] = pl_nor_cls_index 
+                    if config.DATA.NOR_CLS_INDEX >=0:
+                        label_pl[:,:] = pl_nor_cls_index 
 
                     # 包中的绝对阈值
                     if config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'fix':

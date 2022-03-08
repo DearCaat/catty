@@ -6,7 +6,7 @@ MODEL:
   NAME: rdd_trans_swin_small_patch4_window7_224
 DATA:
   NUM_CLASSES: 7
-  NOR_CLS_INDEX: -1
+  NOR_CLS_INDEX: 7
 AUG:
   MULTI_VIEW: strong_none
 
@@ -28,11 +28,13 @@ RDD_TRANS:
     SELECT_THR: 0.9 
     SPECTRAL_AFFINITY: rbf
     THR: 0.75
+    # 分簇head的正常类别index，这里置为-1表示没有正常类别
+    NOR_INDEX: -1
   EMA_DECAY: 0.9998
   EMA_DECAY_SCHEDULER: null
   EMA_DECAY_SCHEDULER_FLAT_RATIO: 0.01
   EMA_FORCE_CPU: false
-  INST_NUM_CLASS: 7
+  INST_NUM_CLASS: 8
   NOR_THR: 0.05
   INST_TEST: true
   BAG_TEST: true
