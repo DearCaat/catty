@@ -17,49 +17,30 @@ RDD_TRANS:
   CLUSTER:
     CLUSTER_DISTANCE: cosine
     PERSISTENT_CENTER: true
-    INIT: k-means++
-    IPS_ACTIVE_CONNECTION: 2
-    IPS_K_AT_HOP: [ 2, 0 ]
     NAME: kmeans
-    NUM_CLUSTER: 3
-    NUM_INIT: 10
-    N_COMPOENTS: null
-    RBF_DISTANCE: euclidean
-    RBF_GAMMA: 0.05
+    NUM_CLUSTER: 2
     SELECT_THR: 0.9 
-    SPECTRAL_AFFINITY: rbf
-    THR: 0.75
+
   EMA_DECAY: 0.9998
-  EMA_DECAY_SCHEDULER: null
-  EMA_DECAY_SCHEDULER_FLAT_RATIO: 0.01
-  EMA_FORCE_CPU: false
   INST_NUM_CLASS: 2
-  NOR_THR: 0.05
   INST_TEST: true
   BAG_TEST: true
-  PERSUDO_LEARNING: true
-  PERSUDO_LABEL: true
-  TEACHER_LOSS : null
-  # use baseline model to init the teacher
-  TEACHER_INIT : null
-  INIT_STAGE_EPOCH: 0
   TEST_THR: 0.9
   FILTER_SAMPLES: true
-  CLASSIFY_LOSS: 1.
   # update it per iter
-  THR_REL_EMA_DECAY: 0.75
+  THR_REL_EMA_DECAY: 0.9
   # 取最小的百分之几比例来更新，相对阈值是一种保证前提，保证一个包里面最少都要有这么多病害实例
-  THR_REL_UPDATE_RATIO: 0.01
-  # fix linear sigmod_iter sigmod_epoch
-  THR_ABS_UPDATE_NAME: sigmod_epoch
-  TEST_MAX_POOL: false
-  THR_ABS_DIS: 0.9
-  THR_ABS_NOR: 0.9
+  THR_REL_UPDATE_RATIO: 0.001
+  # for update
+  THR_ABS_DIS_LOW: 0.5
+  THR_ABS_DIS_HIGH: 0.9
 
-  THR_ABS_DIS_: true
+  THR_ABS_NOR_LOW: 0.5
+  THR_ABS_NOR_HIGH: 0.8
+
+  THR_FIL_NOR_LOW: 0.5
+  THR_FIL_NOR_HIGH: 0.9
+
+  THR_ABS_DIS_: false
   THR_ABS_NOR_: true
   THR_REL_: true
-
-  CENTER: null
-  SHARPEN_TEACHER: null
-  SHARPEN_STUDENT: null
