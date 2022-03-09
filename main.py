@@ -398,12 +398,13 @@ def main(config):
             pred = 1-pred[:,6]
         else:
             pred = pred[:,1]
+        
         precision,recall,thr=precision_recall_curve(label, pred)
         stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
         patr=getDataByStick([precision,recall],stick)
         logger.info(patr)
 
-        acc1_ema,auc_ema,eval_metrics_ema = 0,0,None
+        acc1_ema,auc_ema,eval_metrics_ema,patr_ema = 0,0,None,None
         #ema
         if model_ema is not None or teacher_ema is not None:
             load_best_model(config, model_ema.module if model_ema is not None else teacher_ema.module, logger,is_ema=True)
@@ -426,17 +427,18 @@ def main(config):
                 pred = pred[:,1]
             precision,recall,thr=precision_recall_curve(label, pred)
             stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
-            patr=getDataByStick([precision,recall],stick)
-            logger.info(patr)
+            patr_ema=getDataByStick([precision,recall],stick)
+            logger.info(patr_ema)
         
         if config.LOG_WANDB and has_wandb:
             _summary = OrderedDict([('test_top1',acc1),
                                     ('test_f1',eval_metrics['micro_f1']),
                                     ('test_auc',auc),
-                                    ('test_patr',patr[-2:]),
+                                    ('test_patr90',patr[3][0] if patr else 0),
                                     ('test_ema_top1',acc1_ema),
                                     ('test_ema_f1',eval_metrics_ema['micro_f1'] if eval_metrics['micro_f1'] else 0),
-                                    ('test_ema_auc',auc_ema)])
+                                    ('test_ema_auc',auc_ema),
+                                    ('test_ema_patr90',patr_ema[3][0] if patr_ema else 0),])
             wandb.log(_summary)
 
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,teacher_ema=None, thr_list=[]):
@@ -1009,8 +1011,12 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     del output_ins,output_soft_ins
                 # 如果两种测试都用，则相加再除二
                 elif config.RDD_TRANS.INST_TEST and config.RDD_TRANS.BAG_TEST:
-                    output = (output_ins[:,:7] + output) / 2
-                    output_soft = (output_soft + output_soft_ins[:,:7]) / 2
+                    if config.RDD_TRANS.INST_NUM_CLASS != config.DATA.NUM_CLASSES:
+                        output = (output_ins[:,:7] + output) / 2
+                        output_soft = (output_soft + output_soft_ins[:,:7]) / 2
+                    else:
+                        output = (output_ins + output) / 2
+                        output_soft = (output_soft + output_soft_ins) / 2
                     del output_ins,output_soft_ins
 
             if config.BINARYTRAIN_MODE: 
