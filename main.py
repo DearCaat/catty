@@ -1007,23 +1007,24 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     output = output
                 elif config.RDD_TRANS.INST_TEST and not config.RDD_TRANS.BAG_TEST:
                     output = output_ins
-                    output_soft = output_soft_ins
                     del output_ins,output_soft_ins
                 # 如果两种测试都用，则相加再除二
                 elif config.RDD_TRANS.INST_TEST and config.RDD_TRANS.BAG_TEST:
                     if config.RDD_TRANS.INST_NUM_CLASS != config.DATA.NUM_CLASSES:
                         output = (output_ins[:,:7] + output) / 2
-                        output_soft = (output_soft + output_soft_ins[:,:7]) / 2
+                        #output_soft = (output_soft + output_soft_ins[:,:7]) / 2
                     else:
                         output = (output_ins + output) / 2
-                        output_soft = (output_soft + output_soft_ins) / 2
+                        #output_soft = (output_soft + output_soft_ins) / 2
                     del output_ins,output_soft_ins
 
             if config.BINARYTRAIN_MODE: 
                 loss = criterion(output, targets_bin)
             else:
                 loss = criterion(output, targets)
-                
+
+            output_soft = torch.nn.functional.softmax(output,dim=-1)
+
             save_pred = np.append(save_pred,output_soft.cpu().numpy())
             save_label = np.append(save_label,targets.cpu().numpy())
             
