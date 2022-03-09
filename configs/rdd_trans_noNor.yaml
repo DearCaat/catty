@@ -38,15 +38,11 @@ RDD_TRANS:
   THR_REL_EMA_DECAY: 0.75
   # 取最小的百分之几比例来更新，相对阈值是一种保证前提，保证一个包里面最少都要有这么多病害实例
   THR_REL_UPDATE_RATIO: 0.01
-<<<<<<< HEAD
-
-=======
   # fix linear sigmod_iter sigmod_epoch
   THR_ABS_UPDATE_NAME: sigmod_epoch
   THR_ABS_DIS_LOW: 0.3
   THR_ABS_DIS_HIGH: 0.8
   TEST_MAX_POOL: false
->>>>>>> 5d42049a120655594e2cdd7f64c5d6c71f0ca65c
   THR_ABS_DIS: 0.9
   THR_ABS_NOR: 0.9
 

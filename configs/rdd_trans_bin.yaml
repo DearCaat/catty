@@ -41,6 +41,8 @@ RDD_TRANS:
   THR_FIL_NOR_LOW: 0.5
   THR_FIL_NOR_HIGH: 0.9
 
+  THR_FIL_DIS: 0.8
+
   THR_ABS_DIS_: false
   THR_ABS_NOR_: true
   THR_REL_: true
