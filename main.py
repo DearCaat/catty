@@ -242,7 +242,7 @@ def main(config):
 
             return
     if model_teacher is not None:
-        teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[])
+        teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[] if config.RDD_TRANS.EMA_DIFF is None else config.RDD_TRANS.EMA_DIFF,decay_diff=config.RDD_TRANS.EMA_DECAY_DIFF)
         if config.MODEL.RESUME:
             load_checkpoint(config, teacher_ema.module, optimizer, lr_scheduler, logger)
     else:

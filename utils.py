@@ -183,13 +183,13 @@ class ModelEmaV3(torch.nn.Module):
     This class is sensitive where it is initialized in the sequence of model init,
     GPU assignment and distributed training wrappers.
     """
-    def __init__(self, model, decay=0.9999, device=None,diff_layers = [],ban_para = [],init_para=[]):
+    def __init__(self, model, decay=0.9999, decay_diff=0.9999,device=None,diff_layers = [],ban_para = [],init_para=[]):
         super(ModelEmaV3, self).__init__()
         # make a copy of the model for accumulating moving average of weights
         self.module = deepcopy(model)
         self.module.eval()
         self.decay = decay
-        self.decay_diff = decay
+        self.decay_diff = decay_diff
         self.diff_layers = diff_layers
         self.ban_para = ban_para
         self.device = device  # perform ema on different device from model if set
