@@ -4,8 +4,9 @@ TEST:
 
 MODEL:
   NAME: rdd_trans_swin_small_patch4_window7_224
-DATA:
   NUM_CLASSES: 7
+  
+DATA:
   NOR_CLS_INDEX: 7
 AUG:
   MULTI_VIEW: strong_none
@@ -44,7 +45,7 @@ RDD_TRANS:
   THR_ABS_DIS_HIGH: 0.8
   THR_ABS_NOR_LOW: 0.5
   THR_ABS_NOR_HIGH: 0.5
-  
+
   THR_FIL_DIS: 0.8
 
   TEST_MAX_POOL: false
