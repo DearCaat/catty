@@ -248,7 +248,7 @@ def build_transform(is_train,config):
                 # A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
                 # A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
                 transform_no_aug = A.Compose([
-                                    A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                                    #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
                                     #ToTensorV2()
                                     ])
             if config.AUG.MULTI_VIEW == 'strong_weak':
