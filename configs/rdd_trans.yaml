@@ -58,7 +58,7 @@ RDD_TRANS:
   TEST_MAX_POOL: false
   THR_ABS_DIS: 0.9
   THR_ABS_NOR: 0.9
-
+  THR_FIL_DIS: 0.5
   THR_ABS_DIS_: true
   THR_ABS_NOR_: true
   THR_REL_: true

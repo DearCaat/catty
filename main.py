@@ -625,7 +625,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         if config.RDD_TRANS.FILTER_SAMPLES:
                         # 选取部分置信度比较高的实例参与loss计算
                         # 对于病害包来说，所有病害实例都用，只有teacher判定为正常的实例，并且其正常概率大于绝对病害阈值才纳用。对于正常包来说，其正常概率大于绝对病害阈值才纳用   & (output_pl[:,:,pl_nor_cls_index] >= 0.5)
-                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] >= 0.8)  )) | ((output_pl[:,:,pl_nor_cls_index] >= thr_min_nor_conf) & ps_mask_nor)
+                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] >= config.RDD_TRANS.THR_FIL_DIS)  )) | ((output_pl[:,:,pl_nor_cls_index] >= thr_min_nor_conf) & ps_mask_nor)
                         else:
                         #全部都用
                             mask_ins = label_pl == label_pl
