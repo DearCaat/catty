@@ -125,7 +125,7 @@ def main(config):
         cpt = torch.load(config.RDD_TRANS.TEACHER_INIT, map_location='cpu')
         std = cpt['state_dict']
         if config.RDD_TRANS.INST_NUM_CLASS == config.MODEL.NUM_CLASSES:
-            std_ins = dict([('weight',std['head.weight']),('bias',std['head.weight'])])
+            std_ins = dict([('weight',std['head.weight']),('bias',std['head.bias'])])
             model_teacher.head_instance.load_state_dict(std_ins, strict=True)
         model_teacher.instance_feature_extractor.load_state_dict(std, strict=True)
         logger.info(f"Teacher model inited")
