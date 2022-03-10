@@ -28,7 +28,7 @@ RDD_TRANS:
   TEST_THR: 0.9
   FILTER_SAMPLES: true
   # update it per iter
-  THR_REL_EMA_DECAY: 0.9
+  THR_REL_EMA_DECAY: 0.99
   # 取最小的百分之几比例来更新，相对阈值是一种保证前提，保证一个包里面最少都要有这么多病害实例
   THR_REL_UPDATE_RATIO: 0.001
   # for update
