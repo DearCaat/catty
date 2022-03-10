@@ -119,7 +119,7 @@ def main(config):
         
     logger.info(f"Creating model:{config.MODEL.NAME}/{config.MODEL.BACKBONE}")
     model = build_model(config)
-    if config.RDD_TRANS.TEACHER_INIT is not None and config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE:
+    if config.RDD_TRANS.TEACHER_INIT is not None and (config.RDD_TRANS.PERSUDO_LABEL or config.RDD_TRANS.CLUSTER.NAME=='gcn') and not config.THUMB_MODE:
         model_teacher = build_model(config)
         model_teacher.cuda()
         cpt = torch.load(config.RDD_TRANS.TEACHER_INIT, map_location='cpu')
@@ -129,7 +129,7 @@ def main(config):
             model_teacher.head_instance.load_state_dict(std_ins, strict=True)
         model_teacher.instance_feature_extractor.load_state_dict(std, strict=False)
         logger.info(f"Teacher model inited")
-    elif config.RDD_TRANS.PERSUDO_LEARNING and not config.RDD_TRANS.TEACHER_INIT and not config.THUMB_MODE:
+    elif (config.RDD_TRANS.PERSUDO_LABEL or config.RDD_TRANS.CLUSTER.NAME=='gcn') and not config.RDD_TRANS.TEACHER_INIT and not config.THUMB_MODE:
         model_teacher = model
 
     else:
