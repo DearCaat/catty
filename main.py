@@ -432,13 +432,13 @@ def main(config):
         
         if config.LOG_WANDB and has_wandb:
             _summary = OrderedDict([('test_top1',acc1),
-                                    ('test_f1',eval_metrics['micro_f1']),
+                                    ('test_f1',eval_metrics['macro_f1']),
                                     ('test_auc',auc),
                                     ('test_patr90',patr[3][0] if patr else 0),
                                     ('test_ema_top1',acc1_ema),
-                                    ('test_ema_f1',eval_metrics_ema['micro_f1'] if eval_metrics['micro_f1'] else 0),
+                                    ('test_ema_f1',eval_metrics_ema['macro_f1'] if eval_metrics else 0),
                                     ('test_ema_auc',auc_ema),
-                                    ('test_ema_patr90',patr_ema[3][0] if patr_ema else 0),])
+                                    ('test_ema_patr90',patr_ema[-2][0] if patr_ema else 0),])
             wandb.log(_summary)
 
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,teacher_ema=None, thr_list=[]):
