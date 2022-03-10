@@ -126,8 +126,8 @@ def main(config):
         std = cpt['state_dict']
         if config.RDD_TRANS.INST_NUM_CLASS == config.MODEL.NUM_CLASSES:
             std_ins = dict([('head_instance.weight',std['head.weight']),('head_instance.bias',std['head.weight'])])
-            model_teacher.head_instance.load_state_dict(std_ins, strict=False)
-        model_teacher.instance_feature_extractor.load_state_dict(std, strict=False)
+            model_teacher.head_instance.load_state_dict(std_ins, strict=True)
+        model_teacher.instance_feature_extractor.load_state_dict(std, strict=True)
         logger.info(f"Teacher model inited")
     elif config.RDD_TRANS.PERSUDO_LEARNING and not config.RDD_TRANS.TEACHER_INIT and not config.THUMB_MODE:
         model_teacher = model
@@ -559,8 +559,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         output_bag_label =  output_pl[:,:,:config.MODEL.NUM_CLASSES].clone()
                     else:
                         output_bag_label =  output_pl.clone()
-
                     output_bag_label = output_bag_label[torch.functional.F.one_hot(ins_t,num_classes=config.MODEL.NUM_CLASSES) == 1].view(b,p)
+
                     #该包中局部相对病害阈值        
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
                         out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]
@@ -596,7 +596,9 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
                     elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_epoch':
                         thr_min_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_NOR_LOW,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=config.RDD_TRANS.THR_ABS_NOR_HIGH)
+
                         thr_min_dis_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_DIS_LOW,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=config.RDD_TRANS.THR_ABS_DIS_HIGH,alph=10)
+                        
                         thr_min_nor_conf = get_sigmod_num(config.RDD_TRANS.THR_FIL_NOR_LOW,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=config.RDD_TRANS.THR_FIL_NOR_HIGH,alph=5)
                     #把网络判断为不是正常的部分实例置为包病害标签
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
@@ -1012,10 +1014,10 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                 elif config.RDD_TRANS.INST_TEST and config.RDD_TRANS.BAG_TEST:
                     if config.RDD_TRANS.INST_NUM_CLASS != config.MODEL.NUM_CLASSES:
                         output = (output_ins[:,:7] + output) / 2
-                        #output_soft = (output_soft + output_soft_ins[:,:7]) / 2
+                        output_soft = (output_soft + output_soft_ins[:,:7]) / 2
                     else:
                         output = (output_ins + output) / 2
-                        #output_soft = (output_soft + output_soft_ins) / 2
+                        output_soft = (output_soft + output_soft_ins) / 2
                     del output_ins,output_soft_ins
 
             if config.BINARYTRAIN_MODE: 
@@ -1023,7 +1025,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             else:
                 loss = criterion(output, targets)
 
-            output_soft = torch.nn.functional.softmax(output,dim=-1)
+            #output_soft = torch.nn.functional.softmax(output,dim=-1)
 
             save_pred = np.append(save_pred,output_soft.cpu().numpy())
             save_label = np.append(save_label,targets.cpu().numpy())
