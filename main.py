@@ -125,7 +125,7 @@ def main(config):
         cpt = torch.load(config.RDD_TRANS.TEACHER_INIT, map_location='cpu')
         std = cpt['state_dict']
         if config.RDD_TRANS.INST_NUM_CLASS == config.MODEL.NUM_CLASSES:
-            std_ins = dict([('head_instance.weight',std['head.weight']),('head_instance.bias',std['head.weight'])])
+            std_ins = dict([('weight',std['head.weight']),('bias',std['head.weight'])])
             model_teacher.head_instance.load_state_dict(std_ins, strict=True)
         model_teacher.instance_feature_extractor.load_state_dict(std, strict=True)
         logger.info(f"Teacher model inited")
@@ -598,7 +598,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         thr_min_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_NOR_LOW,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=config.RDD_TRANS.THR_ABS_NOR_HIGH)
 
                         thr_min_dis_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_DIS_LOW,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=config.RDD_TRANS.THR_ABS_DIS_HIGH,alph=10)
-                        
+
                         thr_min_nor_conf = get_sigmod_num(config.RDD_TRANS.THR_FIL_NOR_LOW,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=config.RDD_TRANS.THR_FIL_NOR_HIGH,alph=5)
                     #把网络判断为不是正常的部分实例置为包病害标签
                     if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
