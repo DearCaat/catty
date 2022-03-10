@@ -142,7 +142,6 @@ class RddTransformer(nn.Module):
             mask_max = []
             for b in range(B):
                 max_clu_index = torch.argmax(scores[j:j+clusters_num[b]])
-                mask_max += [max_clu_index]
                 # 在测试阶段，如果最高病害置信度小于一定值，那我认为它是正常包，使用置信度最低的一个簇
                 if not self.training and scores[j+max_clu_index] < thr and self.nor_index >= 0:
                     max_clu_index = torch.argmin(scores[j:j+clusters_num[b]])
@@ -150,6 +149,7 @@ class RddTransformer(nn.Module):
                     feats = feats_tmp[j:j+clusters_num[b]][max_clu_index]
                 else:
                     feats = torch.cat((feats,feats_tmp[j:j+clusters_num[b]][max_clu_index]))
+                mask_max += [max_clu_index]
                 j = j+clusters_num[b]
 
         return feats.view(B,-1),clusters_num,mask_max,scores
