@@ -4,7 +4,7 @@ TEST:
 
 MODEL:
   NAME: rdd_trans_swin_small_patch4_window7_224
-
+  DROP_PATH_RATE: .3
 AUG:
   MULTI_VIEW: strong_none
 
@@ -17,7 +17,7 @@ RDD_TRANS:
     INIT: k-means++
     IPS_ACTIVE_CONNECTION: 2
     IPS_K_AT_HOP: [ 2, 0 ]
-    NAME: kmeans
+    NAME: attention
     NUM_CLUSTER: 3
     NUM_INIT: 10
     N_COMPOENTS: null
@@ -54,7 +54,7 @@ RDD_TRANS:
   THR_ABS_DIS_LOW: 0.3
   THR_ABS_DIS_HIGH: 0.8
   THR_ABS_NOR_LOW: 0.9
-  THR_ABS_NOR_HIGH: 0.99
+  THR_ABS_NOR_HIGH: 0.95
   TEST_MAX_POOL: false
 
   THR_FIL_DIS: 0.5

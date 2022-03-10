@@ -8,6 +8,41 @@ from .spectral_clustering import *
 from .swin import _create_swin_transformer
 from kmeans_pytorch import kmeans,kmeans_predict
 
+class Attention(nn.Module):
+    def __init__(self,classes,in_dim=1536,out_dim=384):
+        super(Attention, self).__init__()
+        self.L = in_dim
+        self.D = out_dim
+        self.K = 1
+        self.classes = classes
+        self.attention = nn.Sequential(
+            nn.Linear(self.L, self.D),
+            nn.GELU(),
+            #nn.Tanh(),
+            #nn.ReLU(),
+            #nn.Dropout(p=0.3),
+            nn.Linear(self.D, self.K)
+        )
+
+        self.classifier = nn.Sequential(
+            nn.Linear(self.L*self.K, self.classes),
+            #nn.Sigmoid()
+        )
+        initialize_weights(self.attention)
+        initialize_weights(self.classifier)
+    def forward(self, x, bs, return_atte=False):     
+        H = x.view(bs,-1,self.L) # B*NxL
+
+        A = self.attention(H)  # NxK
+        A = torch.transpose(A, -1, -2)  # KxN
+        A = F.softmax(A, dim=-1)  # softmax over N
+        M = A@H  # KxL
+        M = M.squeeze()
+        Y_prob = self.classifier(M)
+        if return_atte:
+            return Y_prob.view(bs,-1),A
+        else:
+            return Y_prob.view(bs,-1)
 
 class RddTransformer(nn.Module):
     # 二分类考虑用BCE + Node (512,1)  多分类使用CE + Node(512,cls)
@@ -44,7 +79,7 @@ class RddTransformer(nn.Module):
         self.soft_max = nn.Softmax(-1)
         initialize_weights(self.head_instance)
         initialize_weights(self.head)
-
+    
     def get_cluster_feat_f(self,clusters_feat,cluster_num):
         B = len(clusters_feat)
         feats_tmp = []
@@ -239,6 +274,8 @@ class RddTransformer(nn.Module):
             # find cluster features
             clusters_idcs,clusters_mask = self.sklearn_cluster(inst_feature)
             clusters_feat = inst_feature
+        else:
+            self.cluster_model()
         # 分簇包分类
         if self.cluster_model is not None:
             #测试时聚类方法都认为不存在固定聚类数目
@@ -292,6 +329,8 @@ def rdd_trans_swin_small_patch4_window7_224(pretrained=False, **kwargs):
             return RddTransformer(backbone=backbone,cluster=GCN(in_dim=768,out_dim=384,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),**kwargs)
         elif kwargs['cluster_name'].lower() == 'spectral':
             return RddTransformer(backbone=backbone,cluster=spectral_clustering,**kwargs)
+        elif kwargs['cluster_name'].lower() == 'attention':
+            return RddTransformer(backbone=backbone,cluster=Attention(classes=kwargs['num_classes'],in_dim=768,out_dim=192),**kwargs)
         else:
             return RddTransformer(backbone=backbone,cluster=None,**kwargs)
     else:
@@ -311,6 +350,8 @@ def rdd_trans_swin_base_patch4_window12_384_in22k(pretrained=False, **kwargs):
             return RddTransformer(backbone=backbone,cluster=GCN(in_dim=1024,out_dim=256,k1=kwargs['ips_k_at_hop'][0]),graph = KnnGraph(kwargs['ips_active_connection'],kwargs['ips_k_at_hop'],kwargs['cluster_distance']),dim=1024,**kwargs)
         elif kwargs['cluster_name'].lower() == 'spectral':
             return RddTransformer(backbone=backbone,cluster=spectral_clustering,dim=1024,**kwargs)
+        elif kwargs['cluster_name'].lower() == 'attention':
+            return RddTransformer(backbone=backbone,cluster=Attention(classes=kwargs['num_classes'],in_dim=1024,out_dim=256),dim=1024,**kwargs)
         else:
             return RddTransformer(backbone=backbone,cluster=None,dim=1024,**kwargs)
     else:
