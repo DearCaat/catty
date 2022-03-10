@@ -14,7 +14,7 @@ TRAIN:
 
 AUG:
   MULTI_VIEW: None
-
+  NO_AUG: false
 TEST:
   CROP: 0.
   BEST_METRIC: f1     

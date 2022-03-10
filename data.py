@@ -271,18 +271,21 @@ def build_transform(is_train,config):
                                     re_count=config.AUG.RECOUNT,
                                     interpolation=config.DATA.INTERPOLATION)
         else:
-            transform = A.Compose([
-                            #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
-                            A.RandomBrightnessContrast(p=0.7),
-                            A.HorizontalFlip(p=0.7),
-                            A.VerticalFlip(p=0.7),
-                            A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
-                            A.OneOf([
-                                A.Emboss(p=1),
-                                A.Sharpen(p=1),
-                                A.Blur(p=1)
-                                    ], p=0.7)
-                            ])
+            if not config.AUG.NO_AUG:
+                transform = A.Compose([
+                                #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                                A.RandomBrightnessContrast(p=0.7),
+                                A.HorizontalFlip(p=0.7),
+                                A.VerticalFlip(p=0.7),
+                                A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                                A.OneOf([
+                                    A.Emboss(p=1),
+                                    A.Sharpen(p=1),
+                                    A.Blur(p=1)
+                                        ], p=0.7)
+                                ])
+            else:
+                transform = A.Compose([])
         # transform = transforms.Compose([
         #                 transforms.Resize((510, 510), Image.BILINEAR),
         #                 transforms.RandomCrop(config.DATA.IMG_SIZE),
