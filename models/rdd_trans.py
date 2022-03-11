@@ -274,7 +274,7 @@ class RddTransformer(nn.Module):
             # find cluster features
             clusters_idcs,clusters_mask = self.sklearn_cluster(inst_feature)
             clusters_feat = inst_feature
-        else:
+        elif type(self.cluster_model) == Attention:
             self.cluster_model()
         # 分簇包分类
         if self.cluster_model is not None:
