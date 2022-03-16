@@ -1025,8 +1025,11 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                 loss = criterion(output, targets_bin)
             else:
                 loss = criterion(output, targets)
-
-            #output_soft = torch.nn.functional.softmax(output,dim=-1)
+                
+            # mean-->softmax  or  softmax-->mean  ?
+            if config.RDD_TRANS.TEST_FIRST_MEAN:
+                del output_soft
+                output_soft = torch.nn.functional.softmax(output,dim=-1)
 
             save_pred = np.append(save_pred,output_soft.cpu().numpy())
             save_label = np.append(save_label,targets.cpu().numpy())

@@ -67,3 +67,5 @@ RDD_TRANS:
   CENTER: null
   SHARPEN_TEACHER: null
   SHARPEN_STUDENT: null
+
+  TEST_FIRST_MEAN: false
