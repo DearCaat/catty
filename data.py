@@ -504,6 +504,7 @@ class MulitiViewImageDataset(data.Dataset):
         self._consecutive_errors = 0
         if not self.timm_trans:
             img = transforms.Resize(size=self.size,interpolation=str_to_interp_mode('bicubic'))(img=img)
+        
         if self.transform is not None:
             if self.is_multi_view is not None:
                 for idx,transform in enumerate(self.transform):
