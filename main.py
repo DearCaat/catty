@@ -434,11 +434,11 @@ def main(config):
             _summary = OrderedDict([('test_top1',acc1),
                                     ('test_f1',eval_metrics['macro_f1']),
                                     ('test_auc',auc),
-                                    ('test_patr90',patr[3][0] if patr else 0),
+                                    ('test_patr90',patr[1][0] if patr else 0),
                                     ('test_ema_top1',acc1_ema),
                                     ('test_ema_f1',eval_metrics_ema['macro_f1'] if eval_metrics else 0),
                                     ('test_ema_auc',auc_ema),
-                                    ('test_ema_patr90',patr_ema[-2][0] if patr_ema else 0),])
+                                    ('test_ema_patr90',patr_ema[1][0] if patr_ema else 0),])
             wandb.log(_summary)
 
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,teacher_ema=None, thr_list=[]):
@@ -592,8 +592,9 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         thr_min_dis_conf = 0.5 + (epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) / (config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) *0.499
                     # sigmod函数来保证前期增加速率远远高于后期，优于线性增长
                     elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_iter':
-                        thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
-                        thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+                        thr_min_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_NOR_LOW,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps,end=config.RDD_TRANS.THR_ABS_NOR_HIGH)
+                        thr_min_dis_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_DIS_LOW,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps,end=config.RDD_TRANS.THR_ABS_DIS_HIGH)
+                        thr_min_nor_conf = get_sigmod_num(config.RDD_TRANS.THR_FIL_NOR_LOW,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps,end=config.RDD_TRANS.THR_FIL_NOR_HIGH,alph=5)
                     elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_epoch':
                         thr_min_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_NOR_LOW,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=config.RDD_TRANS.THR_ABS_NOR_HIGH)
 
