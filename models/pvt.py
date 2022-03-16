@@ -275,7 +275,7 @@ def pvt_small(pretrained=False, **kwargs):
 
 @register_model
 def pvt_medium(pretrained=False, **kwargs):
-    model = PyramidVisionTransformer(
+    model = PyramidVisionTransformer (
         patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[8, 8, 4, 4], qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 18, 3], sr_ratios=[8, 4, 2, 1],
         **kwargs)

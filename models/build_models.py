@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from timm.models import create_model
 from .swin import *
+from .cswin import *
 from .rdd_trans import *
 from .pvt import *
 from .pvt_v2 import *
