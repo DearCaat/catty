@@ -127,6 +127,7 @@ def main(config):
         if config.RDD_TRANS.INST_NUM_CLASS == config.MODEL.NUM_CLASSES:
             std_ins = dict([('weight',std['head.weight']),('bias',std['head.bias'])])
             model_teacher.head_instance.load_state_dict(std_ins, strict=True)
+            model_teacher.head[0].load_state_dict(std_ins, strict=True)
         model_teacher.instance_feature_extractor.load_state_dict(std, strict=False)
         logger.info(f"Teacher model inited")
     elif (config.RDD_TRANS.PERSUDO_LABEL or config.RDD_TRANS.CLUSTER.NAME=='gcn') and not config.RDD_TRANS.TEACHER_INIT and not config.THUMB_MODE:
