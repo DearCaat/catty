@@ -34,7 +34,7 @@ RDD_TRANS:
   EMA_FORCE_CPU: false
   INST_NUM_CLASS: 8
   NOR_THR: 0.05
-  INST_TEST: true
+  INST_TEST: false
   BAG_TEST: true
   PERSUDO_LEARNING: true
   PERSUDO_LABEL: true
