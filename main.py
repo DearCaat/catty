@@ -334,7 +334,7 @@ def main(config):
             best_auc_ema = max(best_auc_ema,auc_ema) if epoch > 0 else 0
             max_f1_ema = max(max_f1_ema,f1_ema)
             if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-                save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,None,is_ema=True)
+                save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,max_f1_ema,None,is_ema=True)
         else:
             eval_metrics_ema = None
         f1 = eval_metrics['macro_f1']
@@ -359,7 +359,7 @@ def main(config):
                     write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
 
         if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-            save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,model_ema)
+            save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,max_f1,model_ema)
 
     logger.info(f'Max accuracy: {max_accuracy:.2f}%\t'
                 f'Max f1: {max_f1:.2f}%\t'
