@@ -102,7 +102,10 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
         if os.path.exists(best_path):
             checkpoint = torch.load(best_path, map_location='cpu')
             if config.TEST.BEST_METRIC.lower() == 'f1':
-                if best_f1 > checkpoint['best_f1']:
+                if 'best_f1' in checkpoint:
+                    if best_f1 > checkpoint['best_f1']:
+                        shutil.copyfile(save_path, best_path)
+                else:
                     shutil.copyfile(save_path, best_path)
             elif config.TEST.BEST_METRIC.lower() == 'top1':
                 if max_accuracy > checkpoint['max_accuracy']:
