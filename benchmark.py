@@ -4,6 +4,7 @@ from timeit import default_timer as timer
 import torch
 import torch.nn as nn
 import torchvision
+import timm
 import torch.utils.benchmark as benchmark
 
 @torch.no_grad()
@@ -70,7 +71,7 @@ def main() -> None:
 
     device = torch.device("cuda:0")
 
-    model = torchvision.models.efficientnet_b3(pretrained=False)
+    model = torchvision.models.s(pretrained=False)
     # model = nn.Conv2d(in_channels=input_shape[1],
     #                   out_channels=256,
     #                   kernel_size=(5, 5))

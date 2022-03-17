@@ -1,3 +1,5 @@
-CUDA_VISIBLE_DEVICES=1 python3 main.py --data-path=/home/tangwenhao/data/cub/data/ --title=cub_swin_clu --cfg=/home/tangwenhao/rdd_code/rdd_transformer/configs/cub_fgvc_trans.yaml --opts RDD_TRANS.CLUSTER.NUM_CLUSTER 2
-CUDA_VISIBLE_DEVICES=1 python3 main.py --data-path=/home/tangwenhao/data/cub/data/ --title=cub_swin_clu --cfg=/home/tangwenhao/rdd_code/rdd_transformer/configs/cub_fgvc_trans.yaml --opts RDD_TRANS.CLUSTER.NUM_CLUSTER 3
-CUDA_VISIBLE_DEVICES=1 python3 main.py --data-path=/home/tangwenhao/data/cub/data/ --title=cub_swin_clu --cfg=/home/tangwenhao/rdd_code/rdd_transformer/configs/cub_fgvc_trans.yaml --opts RDD_TRANS.CLUSTER.NUM_CLUSTER 5
+CUDA_VISIBLE_DEVICES=1 python3 main.py --data-path=/data/tangwenhao/cqu_bpdd/1.0.0/ --output=/data/tangwenhao/output/ --title=rdd_trans_new_init --cfg ./configs/baseline/rdd_swin_small.yaml ./configs/rdd_trans.yaml --opts RDD_TRANS.TEACHER_INIT /data/tangwenhao/output/rdd_swin_small/model/swin_ema_67.8f1.pth RDD_TRANS.CLUSTER.SELECT_THR 0.99 --log-wandb
+
+CUDA_VISIBLE_DEVICES=1 python3 main.py --data-path=/data/tangwenhao/cqu_bpdd/1.0.0/ --output=/data/tangwenhao/output/ --title=rdd_trans_new_init --cfg ./configs/baseline/rdd_swin_small.yaml ./configs/rdd_trans.yaml --opts RDD_TRANS.TEACHER_INIT /data/tangwenhao/output/rdd_swin_small/model/swin_ema_67.8f1.pth RDD_TRANS.CLUSTER.SELECT_THR 0.95 --log-wandb
+
+CUDA_VISIBLE_DEVICES=1 python3 main.py --data-path=/data/tangwenhao/cqu_bpdd/1.0.0/ --output=/data/tangwenhao/output/ --title=rdd_trans_new_init --cfg ./configs/baseline/rdd_swin_small.yaml ./configs/rdd_trans.yaml --opts RDD_TRANS.TEACHER_INIT /data/tangwenhao/output/rdd_swin_small/model/swin_ema_67.8f1.pth RDD_TRANS.TEST_THR 0.95 --log-wandb
