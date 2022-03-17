@@ -65,6 +65,8 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger,is_ema=False)
                 if 'max_accuracy' in checkpoint and 'best_auc' in checkpoint:
                     max_accuracy = checkpoint['max_accuracy']
                     best_auc = checkpoint['best_auc']
+                if 'best_f1' in checkpoint:
+                    best_f1 = checkpoint['best_f1']
     else:
         msg = model.load_state_dict(checkpoint, strict=False)
         logger.info(msg)
@@ -72,11 +74,12 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger,is_ema=False)
     torch.cuda.empty_cache()
     return max_accuracy,best_auc
 
-def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,ema,is_ema=False):
+def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,best_f1,ema,is_ema=False):
     save_state = {'state_dict': model.state_dict(),
                   'optimizer': optimizer.state_dict(),
                   'max_accuracy': max_accuracy,
                   'best_auc': best_auc,
+                  'best_f1': best_f1,
                   'epoch': epoch,
                   'config': config,
                   'ema':ema.module.state_dict() if ema is not None else None}
@@ -94,8 +97,22 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
         best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_best_model.pth')
     logger.info(f"{save_path} saving......")
     torch.save(save_state, save_path)
+    
     if is_best:
-        shutil.copyfile(save_path, best_path)
+        if os.path.exists(best_path):
+            checkpoint = torch.load(best_path, map_location='cpu')
+            if config.TEST.BEST_METRIC.lower() == 'f1':
+                if best_f1 > checkpoint['best_f1']:
+                    shutil.copyfile(save_path, best_path)
+            elif config.TEST.BEST_METRIC.lower() == 'top1':
+                if max_accuracy > checkpoint['max_accuracy']:
+                    shutil.copyfile(save_path, best_path)
+            elif config.TEST.BEST_METRIC.lower() == 'auc':
+                if best_auc > checkpoint['best_auc']:
+                    shutil.copyfile(save_path, best_path)
+        else:
+            shutil.copyfile(save_path, best_path)
+            
     logger.info(f"{save_path} saved !!!")
 
 def get_grad_norm(parameters, norm_type=2):

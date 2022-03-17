@@ -193,7 +193,7 @@ def main(config):
     if config.MODEL.RESUME:
         criterion = torch.nn.CrossEntropyLoss()
         criterion.cuda()
-        max_accuracy,best_auc = load_checkpoint(config, model, optimizer, lr_scheduler, logger)
+        max_accuracy,best_auc, best_f1 = load_checkpoint(config, model, optimizer, lr_scheduler, logger)
         if config.TRAIN_MODE=='eval':
             if config.LOAD_TEST_DIR:
                 dic=np.load(config.LOAD_TEST_DIR)
