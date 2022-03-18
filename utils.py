@@ -90,12 +90,12 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
         save_state['amp'] = amp.state_dict()
 
     if is_ema:
-        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_ckpt.pth')
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_best_model.pth')
+        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_ckpt.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_best_model.pth')
         history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_his_ema_best_model.pth')
     else:
-        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ckpt.pth')
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_best_model.pth')
+        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ckpt.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_best_model.pth')
         history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_his_best_model.pth')
     logger.info(f"{save_path} saving......")
     torch.save(save_state, save_path)

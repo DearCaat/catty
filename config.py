@@ -219,7 +219,9 @@ _C.NATIVE_AMP = True
 # Path to output folder, overwritten by command line argument
 _C.OUTPUT = ''
 # name of experiment, overwritten by command line argument
-_C.EXP_NAME = 'default'
+_C.EXP_NAME = "default"
+# name of project, overwritten by command line argument
+_C.PROJECT_NAME = 'default'
 # Frequency to save checkpoint
 _C.SAVE_FREQ = 1
 # Frequency to logging info
@@ -298,6 +300,8 @@ def update_config(config, args):
         config.DATA.TFRECORD_MODE = True
     if args.title:
         config.EXP_NAME = args.title
+    if args.project:
+        config.PROJECT_NAME = args.project
     if args.resume:
         config.MODEL.RESUME = args.resume
     if args.use_checkpoint:
@@ -338,7 +342,7 @@ def update_config(config, args):
     config.LOCAL_RANK = args.local_rank
 
     # output folder
-    config.OUTPUT = os.path.join(config.OUTPUT, config.EXP_NAME)
+    config.OUTPUT = os.path.join(config.OUTPUT, config.PROJECT_NAME)
 
     config.freeze()
 

@@ -87,6 +87,7 @@ def parse_option():
     parser.add_argument('--output', default='output', type=str, metavar='PATH',
                         help='root of output folder, the full path is <output>/<model_name>/<tag> (default: output)')
     parser.add_argument('--model-name',  type=str, help='model name')
+    parser.add_argument('--project',  type=str, help='experiment project')
     parser.add_argument('--title',  type=str, help='experiment title')
     parser.add_argument('--throughput', action='store_true', help='Test throughput only')
     parser.add_argument('--log-wandb', action='store_true', default=False,
@@ -1118,7 +1119,7 @@ if __name__ == '__main__':
     
     if config.LOG_WANDB:
         if has_wandb:
-            wandb.init(project=config.EXP_NAME, config=config,entity="dearcat")
+            wandb.init(project=config.PROJECT_NAME, config=config,entity="dearcat",name=config.EXP_NAME)
         else: 
             logger.warning("You've requested to log metrics to wandb but package not found. "
                             "Metrics not being logged to wandb, try `pip install wandb`")
