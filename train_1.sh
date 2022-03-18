@@ -1,3 +1,0 @@
-CUDA_VISIBLE_DEVICES=1 python3 main.py --data-path=/home/tangwenhao/data/cqu_bpdd/ --project=rdd_trans_new_init --title=clu_8 --output=/home/tangwenhao/output/ --cfg ./configs/baseline/rdd_swin_small.yaml ./configs/best/rdd_trans_70.yaml --opts RDD_TRANS.TEACHER_INIT /home/tangwenhao/output/rdd_swin_small/model/swin_ema_67.8f1.pth RDD_TRANS.CLUSTER.NUM_CLUSTER 8 --log-wandb
-
-CUDA_VISIBLE_DEVICES=1 python3 main.py --data-path=/home/tangwenhao/data/cqu_bpdd/ --project=rdd_trans_new_init --title=clu_10 --output=/home/tangwenhao/output/ --cfg ./configs/baseline/rdd_swin_small.yaml ./configs/best/rdd_trans_70.yaml --opts RDD_TRANS.TEACHER_INIT /home/tangwenhao/output/rdd_swin_small/model/swin_ema_67.8f1.pth RDD_TRANS.CLUSTER.NUM_CLUSTER 10 --log-wandb
