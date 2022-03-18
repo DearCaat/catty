@@ -15,15 +15,15 @@ except ImportError:
     amp = None
 def load_best_model(config,model,logger,is_ema=False):
     if is_ema:
-        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_ckpt.pth')
+        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_ckpt.pth')
     else:
-        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ckpt.pth')
+        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ckpt.pth')
     if os.path.exists(ckpt_path):
         os.remove(ckpt_path)
     if is_ema:
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_best_model.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_best_model.pth')
     else:
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_best_model.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_best_model.pth')
     logger.info(f"==============> Loading the best model....................")
     checkpoint = torch.load(best_path, map_location='cpu')
     logger.info(f"==============> Epoch {checkpoint['epoch']}....................")
