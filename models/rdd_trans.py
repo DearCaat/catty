@@ -233,7 +233,7 @@ class RddTransformer(nn.Module):
         return clusters_idcs,clusters_mask
 
 
-    def forward(self,x,is_teacher=False):
+    def forward(self,x,is_teacher=False,return_inst=False):
         # step 1, get the instance feat by backbone Network
         avg_bag_feature, inst_feature=self.instance_feature_extractor.forward_features(x) #B*N*D
         B,N,D = inst_feature.shape
@@ -293,8 +293,9 @@ class RddTransformer(nn.Module):
 
         # step 3 classify
         # instance classify
-        logits_inst = self.head_instance(inst_feature.view(-1,D))
-        logits_inst = logits_inst.view(B,N,-1)
+        if self.training or return_inst:
+            logits_inst = self.head_instance(inst_feature.view(-1,D))
+            logits_inst = logits_inst.view(B,N,-1)
         #score_inst = self.soft_max(logits_inst)
         # bag classify
         if self.cluster_model is not None:
@@ -306,14 +307,14 @@ class RddTransformer(nn.Module):
         #     np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
         if type(self.cluster_model) == GCN:
             return logits_bag, logits_inst,logits_edge,h1_mask, clusters_num
-        if self.training:
+        if self.training or return_inst:
             #return logits_bag, logits_inst, score_inst,clusters_num
             return logits_bag, logits_inst,clusters_num
             #return logits_bag, None, None,clusters_num
         else:
             # bag classify
             #return logits_bag, None, None,clusters_num
-            return logits_bag, logits_inst,clusters_num
+            return logits_bag, None,clusters_num
 
 @register_model
 def rdd_trans_swin_small_patch4_window7_224(pretrained=False, **kwargs):

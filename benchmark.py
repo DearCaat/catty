@@ -7,6 +7,10 @@ import torchvision
 import timm
 import torch.utils.benchmark as benchmark
 
+from config import get_config,_update_config_from_file
+from models import build_model
+
+
 @torch.no_grad()
 def run_inference(model: nn.Module,
                   input_tensor: torch.Tensor) -> torch.Tensor:
@@ -40,7 +44,10 @@ def measure_time_device(
         start_event.record()
         for _ in range(num_repeats):
             # what you do
+
             _ = model.forward(input_tensor)
+
+
         end_event.record()
         if synchronize:
             # This has to be synchronized to compute the elapsed time.
@@ -53,7 +60,10 @@ def measure_time_device(
             start_event = torch.cuda.Event(enable_timing=True)
             end_event = torch.cuda.Event(enable_timing=True)
             start_event.record()
+
             _ = model.forward(input_tensor)
+
+
             end_event.record()
             if synchronize:
                 # This has to be synchronized to compute the elapsed time.
@@ -71,10 +81,18 @@ def main() -> None:
 
     device = torch.device("cuda:0")
 
-    model = torchvision.models.s(pretrained=False)
+    config=get_config(None)
+    _update_config_from_file(config, './configs/rdd_trans.yaml')
+    model = build_model(config)
+    cpt = torch.load('/data/tangwenhao/output/rdd_trans/model/rdd_trans_swin_small_patch4_window7_224clu_3_new_best_model.pth', map_location='cpu')
+    model.load_state_dict(cpt['state_dict'], strict=True)
+    #model = torchvision.models.s(pretrained=False)
+    #model = timm.create_model(model_name='tf_efficientnet_b3')## tf_efficientnet_b3  swin_small_patch4_window7_224
     # model = nn.Conv2d(in_channels=input_shape[1],
     #                   out_channels=256,
     #                   kernel_size=(5, 5))
+
+
 
     model.to(device)
     model.eval()
