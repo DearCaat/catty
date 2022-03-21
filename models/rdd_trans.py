@@ -293,9 +293,9 @@ class RddTransformer(nn.Module):
 
         # step 3 classify
         # instance classify
-        if self.training or return_inst:
-            logits_inst = self.head_instance(inst_feature.view(-1,D))
-            logits_inst = logits_inst.view(B,N,-1)
+        #if self.training or return_inst:
+        logits_inst = self.head_instance(inst_feature.view(-1,D))
+        logits_inst = logits_inst.view(B,N,-1)
         #score_inst = self.soft_max(logits_inst)
         # bag classify
         if self.cluster_model is not None:
@@ -314,7 +314,7 @@ class RddTransformer(nn.Module):
         else:
             # bag classify
             #return logits_bag, None, None,clusters_num
-            return logits_bag, None,clusters_num
+            return logits_bag, logits_inst,clusters_num
 
 @register_model
 def rdd_trans_swin_small_patch4_window7_224(pretrained=False, **kwargs):
