@@ -1027,6 +1027,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     output = output
                 elif config.RDD_TRANS.INST_TEST and not config.RDD_TRANS.BAG_TEST:
                     output = output_ins
+                    output_soft = output_soft_ins
                     del output_ins,output_soft_ins
                 # 如果两种测试都用，则相加再除二
                 elif config.RDD_TRANS.INST_TEST and config.RDD_TRANS.BAG_TEST:
