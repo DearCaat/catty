@@ -188,9 +188,11 @@ def main(config):
     max_accuracy = 0.0
     best_auc = 0.0
     max_f1 = 0.0
+    max_patr90 = .0
     max_f1_ema = .0
     max_accuracy_ema = .0
     best_auc_ema = .0
+    max_patr90_ema = .0
 
     if config.MODEL.RESUME:
         criterion = torch.nn.CrossEntropyLoss()
@@ -324,22 +326,30 @@ def main(config):
         # save the ema checkpoint
         if model_ema is not None or teacher_ema is not None:
             f1_ema = eval_metrics_ema['macro_f1']
+            patr90_ema = eval_metrics_ema['p@r90']
             if config.TEST.BEST_METRIC.lower() == 'auc':
                 is_best_ema = (auc_ema > best_auc_ema) and epoch>0
             elif config.TEST.BEST_METRIC.lower() == 'top1':
                 is_best_ema = (acc1_ema > max_accuracy_ema) and epoch>0
             elif config.TEST.BEST_METRIC.lower() == 'f1':
                 is_best_ema = (f1_ema > max_f1_ema) and epoch>0
+            elif config.TEST.BEST_METRIC.lower() == 'p@r90':
+                is_best_ema = (patr90_ema > max_patr90_ema) and epoch>0
             else:
                 raise AttributeError
+
             max_accuracy_ema = max(max_accuracy_ema, acc1_ema) if epoch > 0 else 0
             best_auc_ema = max(best_auc_ema,auc_ema) if epoch > 0 else 0
             max_f1_ema = max(max_f1_ema,f1_ema)
+            max_patr90_ema = max(max_patr90_ema,patr90_ema)
+
             if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-                save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,max_f1_ema,None,is_ema=True)
+                save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,max_f1_ema,None,is_ema=True,best_patr90=max_patr90_ema)
         else:
             eval_metrics_ema = None
+
         f1 = eval_metrics['macro_f1']
+        patr90 = eval_metrics['p@r90']
 
         if config.TEST.BEST_METRIC.lower() == 'auc':
             is_best = (auc > best_auc) and epoch>0
@@ -347,13 +357,16 @@ def main(config):
             is_best = (acc1 > max_accuracy) and epoch>0
         elif config.TEST.BEST_METRIC.lower() == 'f1':
             is_best = (f1 > max_f1) and epoch>0
+        elif config.TEST.BEST_METRIC.lower() == 'p@r90':
+            is_best = (patr90 > max_patr90) and epoch>0
         else:
             raise AttributeError
 
         max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
         best_auc = max(best_auc,auc) if epoch > 0 else 0
         max_f1 = max(max_f1,f1)
-        
+        max_patr90 = max(max_patr90,atr90)
+
         if eval_metrics_ema is not None:
             eval_metrics.update(eval_metrics_ema)
         update_summary(
@@ -361,7 +374,7 @@ def main(config):
                     write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
 
         if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-            save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,max_f1,model_ema)
+            save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,max_f1,model_ema,best_patr90=max_patr90)
 
     logger.info(f'Max accuracy: {max_accuracy:.2f}%\t'
                 f'Max f1: {max_f1:.2f}%\t'
@@ -371,6 +384,7 @@ def main(config):
         _summary = OrderedDict([('best_top1',max_accuracy),
                                 ('best_f1',max_f1),
                                 ('best_auc',best_auc),
+                                ('p@r90',max_patr90),
                                 ('best_ema_top1',max_accuracy_ema),
                                 ('best_ema_f1',max_f1_ema),
                                 ('best_ema_auc',best_auc_ema)])
@@ -995,7 +1009,8 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                         max_index.append(torch.nonzero(mask[i])[max_inx_tmp,0].tolist())
                     
                     else:
-                        # 如果包中没有任一实例满足，则认为其为负样本包，取所有图块中得分最大的图块的置信度
+                        # 如果包中没有任一实例满足，则认为其为负样本包
+                        # 取所有图块中得分最大的图块的置信度
                         if config.RDD_TRANS.TEST_MAX_POOL:
                             _,index = torch.max(max_score[i],dim=-1)
                         else:
@@ -1086,6 +1101,9 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             mi_f1 = ma_f1
             try:
                 auc = roc_auc_score(np.array(save_label!=6,dtype=int), save_pred[:,1])
+                precision,recall,thr=precision_recall_curve(np.array(save_label!=6,dtype=int), save_pred[:,1])
+                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+                patr=getDataByStick([precision,recall],stick)
             except:
                 print(save_pred)
         else:
@@ -1093,13 +1111,16 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             mi_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='micro')
             try:
                 auc = roc_auc_score(np.array(save_label!=6,dtype=int), 1-save_pred[:,6])
+                precision,recall,thr=precision_recall_curve(np.array(save_label!=6,dtype=int), save_pred[:,1])
+                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+                patr=getDataByStick([precision,recall],stick)
             except:
                 print(save_pred)
         
         #if config.BINARYTRAIN_MODE:
         
-        logger.info(f' * Acc@1 {acc1_meter.avg:.3f} Acc@5 {acc5_meter.avg:.3f} AUC {auc*100:.3f} F1@Macro {ma_f1*100:.3f} F1@Micro {mi_f1*100:.3f}')
-    metrics = OrderedDict([('loss', loss_meter.avg), ('top1', acc1_meter.avg), ('top5', acc5_meter.avg),('auc',auc),('macro_f1',ma_f1),('micro_f1',mi_f1)])
+        logger.info(f' * Acc@1 {acc1_meter.avg:.3f} Acc@5 {acc5_meter.avg:.3f} AUC {auc*100:.3f} F1@Macro {ma_f1*100:.3f} F1@Micro {mi_f1*100:.3f} P@R90 {patr[1][0]:.3f}')
+    metrics = OrderedDict([('loss', loss_meter.avg), ('top1', acc1_meter.avg), ('top5', acc5_meter.avg),('auc',auc),('p@r90',patr[1][0]),('macro_f1',ma_f1),('micro_f1',mi_f1)])
     torch.cuda.empty_cache()
     if save_pre:
         return acc1_meter.avg, acc5_meter.avg, loss_meter.avg, auc,save_pred,save_label,metrics

@@ -74,12 +74,13 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger,is_ema=False)
     torch.cuda.empty_cache()
     return max_accuracy,best_auc
 
-def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,best_f1,ema,is_ema=False):
+def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,best_f1,ema,is_ema=False,best_patr90=0.0):
     save_state = {'state_dict': model.state_dict(),
                   'optimizer': optimizer.state_dict(),
                   'max_accuracy': max_accuracy,
                   'best_auc': best_auc,
                   'best_f1': best_f1,
+                  'p@r90':best_patr90,
                   'epoch': epoch,
                   'config': config,
                   'ema':ema.module.state_dict() if ema is not None else None}
@@ -109,6 +110,12 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
             if config.TEST.BEST_METRIC.lower() == 'f1':
                 if 'best_f1' in checkpoint_his:
                     if checkpoint['best_f1'] > checkpoint_his['best_f1']:
+                        shutil.copyfile(best_path, history_best_path)
+                else:
+                    shutil.copyfile(best_path, history_best_path)
+            elif config.TEST.BEST_METRIC.lower() == 'p@r90':
+                if 'p@r90' in checkpoint_his:
+                    if checkpoint['p@r90'] > checkpoint_his['p@r90']:
                         shutil.copyfile(best_path, history_best_path)
                 else:
                     shutil.copyfile(best_path, history_best_path)
