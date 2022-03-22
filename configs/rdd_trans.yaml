@@ -68,4 +68,4 @@ RDD_TRANS:
   SHARPEN_TEACHER: null
   SHARPEN_STUDENT: null
 
-  TEST_FIRST_MEAN: true   # 之前的模型都是false,20220316 12:54
+  TEST_FIRST_MEAN: false   # 之前的模型都是false,20220316 12:54

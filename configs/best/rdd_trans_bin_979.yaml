@@ -48,4 +48,4 @@ RDD_TRANS:
   THR_ABS_NOR_: true
   THR_REL_: true
 
-  TEST_FIRST_MEAN: true  # for 消融实验
+  TEST_FIRST_MEAN: false  # for 消融实验
