@@ -365,7 +365,7 @@ def main(config):
         max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
         best_auc = max(best_auc,auc) if epoch > 0 else 0
         max_f1 = max(max_f1,f1)
-        max_patr90 = max(max_patr90,atr90)
+        max_patr90 = max(max_patr90,patr90)
 
         if eval_metrics_ema is not None:
             eval_metrics.update(eval_metrics_ema)

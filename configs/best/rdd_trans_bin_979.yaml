@@ -26,7 +26,7 @@ RDD_TRANS:
   INST_NUM_CLASS: 2
   INST_TEST: false
   BAG_TEST: true
-  TEST_THR: 0.9       # 0.9比0.95,0.99在绝对阈值0.99时表现逗号
+  TEST_THR: 0.9       # 0.9比0.95,0.99在绝对阈值0.99时表现都好
   FILTER_SAMPLES: true
   # update it per iter
   THR_REL_EMA_DECAY: 0.99

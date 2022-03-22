@@ -1,5 +1,5 @@
 TEST:
-  BEST_METRIC: auc
+  BEST_METRIC: p@r90
   CROP: 0.
 
 MODEL:
@@ -18,14 +18,15 @@ RDD_TRANS:
   CLUSTER:
     CLUSTER_DISTANCE: cosine
     PERSISTENT_CENTER: true
-    NAME: kmeans
+    NAME: None
     NUM_CLUSTER: 2
     SELECT_THR: 0.99  #0.99 在绝对阈值0.99时表现最好
 
+  CLASSIFY_LOSS: 0.
   EMA_DECAY: 0.9998
   INST_NUM_CLASS: 2
-  INST_TEST: false
-  BAG_TEST: true
+  INST_TEST: true
+  BAG_TEST: false
   TEST_THR: 0.9       # 0.9比0.95,0.99在绝对阈值0.99时表现逗号
   FILTER_SAMPLES: true
   # update it per iter
@@ -39,7 +40,7 @@ RDD_TRANS:
   THR_ABS_NOR_LOW: 0.9
   THR_ABS_NOR_HIGH: 0.95  # 0.99没有0.95好
 
-  THR_FIL_NOR_LOW: 0.6
+  THR_FIL_NOR_LOW: 0.9
   THR_FIL_NOR_HIGH: 0.95
 
   THR_FIL_DIS: 0.5
