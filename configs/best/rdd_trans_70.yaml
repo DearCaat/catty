@@ -63,7 +63,7 @@ RDD_TRANS:
   THR_FIL_DIS: 0.5
   THR_FIL_NOR_LOW: 0.5
   THR_FIL_NOR_HIGH: 0.95
-  THR_ABS_DIS_: true
+  THR_ABS_DIS_: false        #这俩都存在的情况有待讨论，MM这文章，目前不考虑这个情况
   THR_ABS_NOR_: true
   THR_REL_: true
 

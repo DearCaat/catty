@@ -632,7 +632,10 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                             else:
                                 mask_ins_abs = (output_bag_label >= thr_min_dis_conf)
                         if config.RDD_TRANS.THR_REL_:
-                            mask_ins = ps_mask_dis & (mask_ins_abs | (output_bag_label >= min_nor_thr))
+                            if mask_ins_abs is not None:
+                                mask_ins = ps_mask_dis & (mask_ins_abs | (output_bag_label >= min_nor_thr))
+                            else:
+                                mask_ins = ps_mask_dis &  (output_bag_label >= min_nor_thr)
                         else:
                             mask_ins = ps_mask_dis & mask_ins_abs
                         # 只要相对阈值
