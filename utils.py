@@ -85,6 +85,12 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
                   'epoch': epoch,
                   'config': config,
                   'ema':ema.module.state_dict() if ema is not None else None}
+    save_state_best = {'state_dict': model.state_dict(),
+                        'max_accuracy': max_accuracy,
+                        'best_auc': best_auc,
+                        'best_f1': best_f1,
+                        'p@r90':best_patr90,
+                        'config': config}
     if config.TRAIN.LR_SCHEDULER.NAME is not None:
         save_state['lr_scheduler'] = lr_scheduler.state_dict()
     if config.APEX_AMP:
@@ -103,7 +109,8 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
     torch.save(save_state, save_path)
     
     if is_best:
-        shutil.copyfile(save_path, best_path)
+        torch.save(save_state_best, best_path)
+        # shutil.copyfile(save_path, best_path)
     if epoch == config.TRAIN.EPOCHS - 1:
         if os.path.exists(history_best_path):
             checkpoint = torch.load(best_path, map_location='cpu')
