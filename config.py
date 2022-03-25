@@ -28,8 +28,10 @@ _C.DATA.DATA_PATH = ''
 _C.DATA.PRETRAINED_DIR = ''
 # Dataset name     tfds/cqu_bpdd  cfd crack500 cracktre200
 _C.DATA.DATASET = 'cqu_bpdd'
-# 数据集中的正常图片所在的类别索引 cqu_bpdd ：6
+
 _C.DATA.NOR_CLS_INDEX = 6
+# 数据集中的正常图片所在的类别索引 cqu_bpdd ：6
+_C.DATA.DATA_NOR_INDEX = 6
 _C.DATA.GRAY = True
 # Input image size (h,w)  cqu_bpdd (900,1200) cfd(300,450)
 _C.DATA.IMG_SIZE = (224,224)

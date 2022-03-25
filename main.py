@@ -203,12 +203,12 @@ def main(config):
                 dic=np.load(config.LOAD_TEST_DIR)
                 label=dic['label']
                 pred=dic['pred']
-                if 'cqu_bpdd' in config.DATA.DATASET:
-                    for m in range(len(label)):
-                        if int(label[m])==6:
-                            label[m] = 0
-                        else:
-                            label[m] = 1
+                #if 'cqu_bpdd' in config.DATA.DATASET:
+                for m in range(len(label)):
+                    if int(label[m])==config.DATA.DATA_NOR_INDEX:
+                        label[m] = 0
+                    else:
+                        label[m] = 1
                 pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
                 if config.MODEL.NUM_CLASSES > 2:
                     pred = 1-pred[:,6]
@@ -223,19 +223,19 @@ def main(config):
                 logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
                 _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
                 np.savez(_save_path,pred=pred,label=label)
-                if 'cqu_bpdd' in config.DATA.DATASET:
-                    for m in range(len(label)):
-                        if int(label[m])==6:
-                            label[m] = 0
-                        else:
-                            label[m] = 1
+                #if 'cqu_bpdd' in config.DATA.DATASET:
+                for m in range(len(label)):
+                    if int(label[m])==config.DATA.DATA_NOR_INDEX:
+                        label[m] = 0
+                    else:
+                        label[m] = 1
                 pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
                 if config.MODEL.NUM_CLASSES > 2:
                     pred = 1-pred[:,6]
                 else:
                     pred = pred[:,1]
                 precision,recall,thr=precision_recall_curve(label, pred)
-                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99]  
                 patr=getDataByStick([precision,recall],stick)
                 logger.info(patr)
             return
@@ -502,8 +502,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         # 当伪标签为二分类时或二分类训练时，需要二分类标签进行loss计算
         if config.BINARYTRAIN_MODE or (not config.THUMB_MODE and config.RDD_TRANS.INST_NUM_CLASS):
             targets_bin = targets.clone()
-            targets_bin[targets==6] = 0
-            targets_bin[targets!=6] = 1
+            targets_bin[targets==config.DATA.DATA_NOR_INDEX] = 0
+            targets_bin[targets!=config.DATA.DATA_NOR_INDEX] = 1
         
         # timm dataloader prefetcher will do this
         if mixup_fn is not None and ((not config.DATA.TIMM_PREFETCHER and config.DATA.TIMM) or not config.DATA.TIMM):
@@ -908,9 +908,9 @@ def predict(config, data_loader, model,amp_autocast=suppress, log_suffix=''):
             #if config.EVAL_MODE:
             targets_bin = targets.clone()
 
-            if 'cqu_bpdd' in config.DATA.DATASET:
-                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+            #if 'cqu_bpdd' in config.DATA.DATASET:
+            targets_bin[targets==config.DATA.DATA_NOR_INDEX] = 0
+            targets_bin[targets!=config.DATA.DATA_NOR_INDEX] = 1
             # compute output
             with amp_autocast():
                 output = model(images)
@@ -974,9 +974,9 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             if config.BINARYTRAIN_MODE:
                 topk = (1,1)
             m = 0
-            if 'cqu_bpdd' in config.DATA.DATASET:
-                targets_bin[targets==6] = 0
-                targets_bin[targets!=6] = 1
+            # if 'cqu_bpdd' in config.DATA.DATASET:
+            targets_bin[targets==config.DATA.DATA_NOR_INDEX] = 0
+            targets_bin[targets!=config.DATA.DATA_NOR_INDEX] = 1
 
             # compute output
             with amp_autocast():
@@ -1098,11 +1098,11 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
         save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
         auc = 0
         if config.BINARYTRAIN_MODE:
-            ma_f1 = f1_score(np.array(save_label!=6,dtype=int),np.argmax(save_pred,axis=1),average='binary')
+            ma_f1 = f1_score(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int),np.argmax(save_pred,axis=1),average='binary')
             mi_f1 = ma_f1
             try:
-                auc = roc_auc_score(np.array(save_label!=6,dtype=int), save_pred[:,1])
-                precision,recall,thr=precision_recall_curve(np.array(save_label!=6,dtype=int), save_pred[:,1])
+                auc = roc_auc_score(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int), save_pred[:,1])
+                precision,recall,thr=precision_recall_curve(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int), save_pred[:,1])
                 stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
                 patr=getDataByStick([precision,recall],stick)
             except:
@@ -1111,8 +1111,8 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             ma_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='macro')
             mi_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='micro')
             try:
-                auc = roc_auc_score(np.array(save_label!=6,dtype=int), 1-save_pred[:,6])
-                precision,recall,thr=precision_recall_curve(np.array(save_label!=6,dtype=int), save_pred[:,1])
+                auc = roc_auc_score(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int), 1-save_pred[:,6])
+                precision,recall,thr=precision_recall_curve(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int), save_pred[:,1])
                 stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
                 patr=getDataByStick([precision,recall],stick)
             except:

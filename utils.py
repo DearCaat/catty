@@ -50,6 +50,7 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger,is_ema=False)
         logger.info(msg)
         max_accuracy = 0.0
         best_auc = 0.0
+        best_f1 = 0.0
         if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e' :
             if 'lr_scheduler' in checkpoint:
                 lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
@@ -72,7 +73,7 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger,is_ema=False)
         logger.info(msg)
     del checkpoint
     torch.cuda.empty_cache()
-    return max_accuracy,best_auc
+    return max_accuracy,best_auc,best_f1
 
 def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,best_f1,ema,is_ema=False,best_patr90=0.0):
     save_state = {'state_dict': model.state_dict(),
