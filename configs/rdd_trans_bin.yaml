@@ -1,5 +1,5 @@
 TEST:
-  BEST_METRIC: p@r90
+  BEST_METRIC: auc
   CROP: 0.
 
 MODEL:
@@ -27,7 +27,7 @@ RDD_TRANS:
   INST_NUM_CLASS: 2
   INST_TEST: true
   BAG_TEST: false
-  TEST_THR: 0.9       # 0.9比0.95,0.99在绝对阈值0.99时表现逗号
+  TEST_THR: 0.8       # 0.9比0.95,0.99在绝对阈值0.99时表现逗号
   FILTER_SAMPLES: true
   # update it per iter
   THR_REL_EMA_DECAY: 0.99
@@ -40,10 +40,10 @@ RDD_TRANS:
   THR_ABS_NOR_LOW: 0.9
   THR_ABS_NOR_HIGH: 0.95  # 0.99没有0.95好
 
-  THR_FIL_NOR_LOW: 0.9
+  THR_FIL_NOR_LOW: 0.7
   THR_FIL_NOR_HIGH: 0.95
 
-  THR_FIL_DIS: 0.5
+  THR_FIL_DIS: 0.
 
   THR_ABS_DIS_: false
   THR_ABS_NOR_: true
