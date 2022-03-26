@@ -194,68 +194,17 @@ def main(config):
     best_auc_ema = .0
     max_patr90_ema = .0
 
-    if config.MODEL.RESUME:
-        criterion = torch.nn.CrossEntropyLoss()
-        criterion.cuda()
-        max_accuracy,best_auc, best_f1 = load_checkpoint(config, model, optimizer, lr_scheduler, logger)
-        if config.TRAIN_MODE=='eval':
-            if config.LOAD_TEST_DIR:
-                dic=np.load(config.LOAD_TEST_DIR)
-                label=dic['label']
-                pred=dic['pred']
-                #if 'cqu_bpdd' in config.DATA.DATASET:
-                for m in range(len(label)):
-                    if int(label[m])==config.DATA.DATA_NOR_INDEX:
-                        label[m] = 0
-                    else:
-                        label[m] = 1
-                pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
-                if config.MODEL.NUM_CLASSES > 2:
-                    pred = 1-pred[:,6]
-                else:
-                    pred = pred[:,1]
-                precision,recall,thr=precision_recall_curve(label, pred)
-                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
-                patr=getDataByStick([precision,recall],stick)
-                logger.info(patr)
-            else:
-                acc1, acc5, loss, auc,pred,label,eval_metrics = validate(config, data_loader_test, model,save_pre=True,amp_autocast=amp_autocast,criterion=criterion)
-                logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
-                _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
-                np.savez(_save_path,pred=pred,label=label)
-                #if 'cqu_bpdd' in config.DATA.DATASET:
-                for m in range(len(label)):
-                    if int(label[m])==config.DATA.DATA_NOR_INDEX:
-                        label[m] = 0
-                    else:
-                        label[m] = 1
-                pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
-                if config.MODEL.NUM_CLASSES > 2:
-                    pred = 1-pred[:,6]
-                else:
-                    pred = pred[:,1]
-                precision,recall,thr=precision_recall_curve(label, pred)
-                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99]  
-                patr=getDataByStick([precision,recall],stick)
-                logger.info(patr)
-            return
-        elif config.TRAIN_MODE=='predict':
-            pred,label= predict(config, data_loader_test, model,amp_autocast=amp_autocast)
-            _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_predict_'+config.DATA.DATASET.split('/')[-1])+'.npz'
-            np.savez(_save_path,pred=pred,label=label)
-
-            return
     if model_teacher is not None:
         teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[] if config.RDD_TRANS.EMA_DIFF is None else config.RDD_TRANS.EMA_DIFF,decay_diff=config.RDD_TRANS.EMA_DECAY_DIFF)
-        if config.MODEL.RESUME:
-            load_checkpoint(config, teacher_ema.module, optimizer, lr_scheduler, logger)
+        # if config.MODEL.RESUME:
+         #    load_checkpoint(config, teacher_ema.module, optimizer, lr_scheduler, logger)
     else:
         teacher_ema = None
     model_ema = None
     if config.MODEL_EMA:    
         model_ema = ModelEmaV3(model, decay=config.EMA_DECAY, device='cpu' if config.EMA_FORCE_CPU else None)
-        if config.MODEL.RESUME:
-            load_checkpoint(config, model_ema.module, optimizer, lr_scheduler, logger)
+        #if config.MODEL.RESUME:
+            #load_checkpoint(config, model_ema.module, optimizer, lr_scheduler, logger)
     # setup exponential moving average of model weights, SWA could be used here too
     '''model_ema = None
     if args.model_ema:
@@ -280,7 +229,6 @@ def main(config):
         # NOTE: EMA model does not need to be wrapped by DDP
     else:
         model_without_ddp = model
-
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info(f"number of params: {n_parameters}")
     if hasattr(model_without_ddp, 'flops'):
@@ -296,6 +244,117 @@ def main(config):
     else:
         criterion = torch.nn.CrossEntropyLoss()
     criterion.cuda()
+
+    if config.MODEL.RESUME:
+        if config.MODEL.RESUME.lower() == 'auto':
+            load_best_model(config, model_without_ddp, logger)
+            acc1, acc5, loss, auc,pred,label,eval_metrics = validate(config, data_loader_test, model_without_ddp,save_pre=True,amp_autocast=amp_autocast,criterion=criterion)
+            logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
+            _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
+            np.savez(_save_path,pred=pred,label=label)
+            if 'cqu_bpdd' in config.DATA.DATASET:
+                for m in range(len(label)):
+                    if int(label[m])==6:
+                        label[m] = 0
+                    else:
+                        label[m] = 1
+            pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
+            if config.MODEL.NUM_CLASSES > 2:
+                pred = 1-pred[:,6]
+            else:
+                pred = pred[:,1]
+            
+            precision,recall,thr=precision_recall_curve(label, pred)
+            stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+            patr=getDataByStick([precision,recall],stick)
+            logger.info(patr)
+
+            acc1_ema,auc_ema,eval_metrics_ema,patr_ema = 0,0,None,None
+            #ema
+            if model_ema is not None or teacher_ema is not None:
+                load_best_model(config, model_ema.module if model_ema is not None else teacher_ema.module, logger,is_ema=True)
+                
+                acc1_ema, acc5_ema,loss_ema,auc_ema,pred,label,eval_metrics_ema = validate(config, data_loader_test, model_ema.module if model_ema is not None else teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion,save_pre=True)
+                
+                logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1_ema:.2f}% {auc_ema:.2f}%")
+                _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_ema_'+config.DATA.DATASET.split('/')[-1])+'.npz'
+                np.savez(_save_path,pred=pred,label=label)
+                if 'cqu_bpdd' in config.DATA.DATASET:
+                    for m in range(len(label)):
+                        if int(label[m])==6:
+                            label[m] = 0
+                        else:
+                            label[m] = 1
+                pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
+                if config.MODEL.NUM_CLASSES > 2:
+                    pred = 1-pred[:,6]
+                else:
+                    pred = pred[:,1]
+                precision,recall,thr=precision_recall_curve(label, pred)
+                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+                patr_ema=getDataByStick([precision,recall],stick)
+                logger.info(patr_ema)
+            
+            if config.LOG_WANDB and has_wandb:
+                _summary = OrderedDict([('test_top1',acc1),
+                                        ('test_f1',eval_metrics['macro_f1']),
+                                        ('test_auc',auc),
+                                        ('test_patr90',patr[1][0] if patr else 0),
+                                        ('test_ema_top1',acc1_ema),
+                                        ('test_ema_f1',eval_metrics_ema['macro_f1'] if eval_metrics else 0),
+                                        ('test_ema_auc',auc_ema),
+                                        ('test_ema_patr90',patr_ema[1][0] if patr_ema else 0),])
+                wandb.log(_summary)
+            return
+        else:
+            max_accuracy,best_auc, best_f1 = load_checkpoint(config, model, optimizer, lr_scheduler, logger)
+            if config.TRAIN_MODE=='eval':
+                if config.LOAD_TEST_DIR:
+                    dic=np.load(config.LOAD_TEST_DIR)
+                    label=dic['label']
+                    pred=dic['pred']
+                    #if 'cqu_bpdd' in config.DATA.DATASET:
+                    for m in range(len(label)):
+                        if int(label[m])==config.DATA.DATA_NOR_INDEX:
+                            label[m] = 0
+                        else:
+                            label[m] = 1
+                    pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
+                    if config.MODEL.NUM_CLASSES > 2:
+                        pred = 1-pred[:,6]
+                    else:
+                        pred = pred[:,1]
+                    precision,recall,thr=precision_recall_curve(label, pred)
+                    stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+                    patr=getDataByStick([precision,recall],stick)
+                    logger.info(patr)
+                else:
+                    acc1, acc5, loss, auc,pred,label,eval_metrics = validate(config, data_loader_test, model,save_pre=True,amp_autocast=amp_autocast,criterion=criterion)
+                    logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
+                    _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
+                    np.savez(_save_path,pred=pred,label=label)
+                    #if 'cqu_bpdd' in config.DATA.DATASET:
+                    for m in range(len(label)):
+                        if int(label[m])==config.DATA.DATA_NOR_INDEX:
+                            label[m] = 0
+                        else:
+                            label[m] = 1
+                    pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
+                    if config.MODEL.NUM_CLASSES > 2:
+                        pred = 1-pred[:,6]
+                    else:
+                        pred = pred[:,1]
+                    precision,recall,thr=precision_recall_curve(label, pred)
+                    stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99]  
+                    patr=getDataByStick([precision,recall],stick)
+                    logger.info(patr)
+                return
+            elif config.TRAIN_MODE=='predict':
+                pred,label= predict(config, data_loader_test, model,amp_autocast=amp_autocast)
+                _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_predict_'+config.DATA.DATASET.split('/')[-1])+'.npz'
+                np.savez(_save_path,pred=pred,label=label)
+
+                return
 
     logger.info("Start training")
     start_time = time.time()
@@ -918,11 +977,64 @@ def predict(config, data_loader, model,amp_autocast=suppress, log_suffix=''):
             with amp_autocast():
                 output = model(images)
             if isinstance(output, (tuple, list)):
-                index = 0 if config.THUMB_MODE or config.RDD_TRANS.NOT_INST_TEST else 1
-
-                output = output[index]
-
+                if config.RDD_TRANS.PERSUDO_LEARNING:
+                    output_ins = output[1]
+                    cluster_num = output[-1]
+                    output_soft_ins = torch.nn.functional.softmax(output_ins,dim=-1)
+                    output = output[0]
+                else:
+                    index = 0 
+                    cluster_num = output[-1]
+                    output = output[index]
             output_soft = torch.nn.functional.softmax(output,dim=-1)
+            
+            if not config.THUMB_MODE and config.RDD_TRANS.INST_TEST and config.RDD_TRANS.PERSUDO_LEARNING:
+                #使用max-pool来测试
+                b,p,cls = output_ins.shape
+                max_score,max_index_cls = torch.max(output_soft_ins,dim=-1)  # B P
+                # 实例中最大的病害类别置信度大于阈值 
+                mask = (max_score - config.RDD_TRANS.TEST_THR > 0) & (max_index_cls - config.DATA.NOR_CLS_INDEX != 0)
+                mask_max_nor = max_index_cls == config.DATA.NOR_CLS_INDEX
+                max_index = []
+                for i in range(b):
+                    # 如果包中有任一实例满足该条件,找出满足要求的最大置信度实例作为包的预测值
+                    if mask[i].any()==True:
+                        score_tmp = max_score[i,mask[i]]  # B
+                        _,max_inx_tmp = torch.max(score_tmp,dim=-1)
+                        max_index.append(torch.nonzero(mask[i])[max_inx_tmp,0].tolist())
+                    
+                    else:
+                        # 如果包中没有任一实例满足，则认为其为负样本包
+                        # 取所有图块中得分最大的图块的置信度
+                        if config.RDD_TRANS.TEST_MAX_POOL:
+                            _,index = torch.max(max_score[i],dim=-1)
+                        else:
+                        # 取所有图块中正常类得分最大的图块的置信度
+                            _,index = torch.max(output_soft_ins[i,:,config.DATA.NOR_CLS_INDEX],dim=-1)
+                        max_index.append(index)
+
+                output_ins = output_ins[[i for i in range(b)],max_index,:]
+                output_soft_ins = output_soft_ins[[i for i in range(b)],max_index,:]
+
+                del max_score,mask
+
+                if config.RDD_TRANS.BAG_TEST and not config.RDD_TRANS.INST_TEST:
+                    output = output
+                elif config.RDD_TRANS.INST_TEST and not config.RDD_TRANS.BAG_TEST:
+                    output = output_ins
+                    output_soft = output_soft_ins
+                    del output_ins,output_soft_ins
+                # 如果两种测试都用，则相加再除二
+                elif config.RDD_TRANS.INST_TEST and config.RDD_TRANS.BAG_TEST:
+                    if config.RDD_TRANS.INST_NUM_CLASS != config.MODEL.NUM_CLASSES:
+                        output = (output_ins[:,:7] + output) / 2
+                        output_soft = (output_soft + output_soft_ins[:,:7]) / 2
+                    else:
+                        output = (output_ins + output) / 2
+                        output_soft = (output_soft + output_soft_ins) / 2
+                    del output_ins,output_soft_ins
+
+            #output_soft = torch.nn.functional.softmax(output,dim=-1)
     
             save_pred = np.append(save_pred,output_soft.cpu().numpy())
             save_label = np.append(save_label,targets.cpu().numpy())
