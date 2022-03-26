@@ -15,27 +15,40 @@ from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from models import build_model
 from config import get_config
 
-def model_init(cpt_path,cpt_b_path):
+def model_init(cpt_path,cpt_b_path,cpt_ema_path=None,is_bin=False):
     
     config=get_config(None)
-    _update_config_from_file(config, './configs/best/rdd_trans_70.yaml')
+    if is_bin:
+        _update_config_from_file(config, './configs/rdd_trans.yaml')
+        _update_config_from_file(config, './configs/best/rdd_trans_bin_979.yaml')
+    else:
+        _update_config_from_file(config, './configs/best/rdd_trans_70.yaml')
     #_update_config_from_file(config, '/home/tangwenhao/rdd_code/rdd_transformer/configs/best/rdd_trans_bin_979.yaml')
 
     model = build_model(config)
+    
     # /home/tangwenhao/output/rdd_trans_new_init/model/rdd_trans_swin_small_patch4_window7_224_his_best_model.pth
     # /home/tangwenhao/output/rdd_trans_bin_abl/model/rdd_trans_swin_small_patch4_window7_224clu_2_ema_best_model.pth
     cpt = torch.load(cpt_path, map_location='cpu')
     model.load_state_dict(cpt['state_dict'], strict=False)
 
+    model_ema = build_model(config)
+    if cpt_ema_path is not None:
+        cpt_ema = torch.load(cpt_ema_path, map_location='cpu')
+        model_ema.load_state_dict(cpt_ema['state_dict'], strict=False)
+
     config=get_config(None)
-    _update_config_from_file(config, './configs/baseline/rdd_swin_small.yaml')
-    
+    if is_bin:
+        _update_config_from_file(config, './configs/baseline/rdd_swin_small_bin.yaml')
+    else:
+        _update_config_from_file(config, './configs/baseline/rdd_swin_small.yaml')
+
     model_b = build_model(config)
     cpt = torch.load(cpt_b_path, map_location='cpu')
     model_b.load_state_dict(cpt['state_dict'], strict=False)
     _ = model_b.eval()
 
-    return model,model_b
+    return model,model_b,model_ema
 
 def reshape_transform(tensor, height=7, width=7):
     result = tensor.reshape(tensor.size(0),
@@ -50,23 +63,35 @@ def main():
     # cementation_fissures crack longitudinal_crack loose massive_crack mending normal transverse_crack
     class_map = ['cementation_fissures','crack', 'longitudinal_crack', 'loose', 'massive_crack', 'mending', 'normal', 'transverse_crack']
     #class_map = ['normal','distress']
-    cpt = '/home/tangwenhao/output/rdd_trans_new_init/model/rdd_trans_swin_small_patch4_window7_224_his_ema_best_model.pth'
-    cpt_b = '/home/tangwenhao/output/swin/model/swin_small_patch4_window7_224_best_model.pth'
+    # cpt = '/home/tangwenhao/output/rdd_trans_new_init/model/rdd_trans_swin_small_patch4_window7_224_his_best_model.pth'
+    # cpt_b = '/home/tangwenhao/output/swin/model/swin_small_patch4_window7_224_best_model.pth'
+    # cpt_ema = '/home/tangwenhao/output/rdd_trans_new_init/model/rdd_trans_swin_small_patch4_window7_224_his_ema_best_model.pth'
+    is_bin = False
 
-    output = './output/heatmap/1/'
+    cpt = '/home/tangwenhao/output/rdd_trans_bin_abl/model/rdd_trans_swin_small_patch4_window7_224clu_2_best_model.pth'
+    cpt_b = '/home/tangwenhao/output/rdd_swin_small_bin/model/swin_small_patch4_window7_224_best_model.pth'
+    cpt_ema = '/home/tangwenhao/output/rdd_trans_bin_abl/model/rdd_trans_swin_small_patch4_window7_224clu_2_ema_best_model.pth'
+    is_bin = True
+
+    output = './output/heatmap/2/'
+
+    root_dir = '/home/tangwenhao/data/cqu_bpdd/test'
+
     if not os.path.exists(output):
             os.mkdir(output)
     num_imgs_per_class = 10
     
-    model,model_b = model_init(cpt,cpt_b)
+    model,model_b,model_ema = model_init(cpt,cpt_b,cpt_ema,is_bin=is_bin)
 
     target_layers = [model.instance_feature_extractor.layers[-1].blocks[-1].norm1]
+    target_layers_ema = [model_ema.instance_feature_extractor.layers[-1].blocks[-1].norm1]
     target_layers_b = [model_b.layers[-1].blocks[-1].norm1]
     cam_b = GradCAM(model=model_b, target_layers=target_layers_b, reshape_transform=reshape_transform)
     cam = GradCAM(model=model, target_layers=target_layers, reshape_transform=reshape_transform)
+    cam_ema = GradCAM(model=model_ema, target_layers=target_layers_ema, reshape_transform=reshape_transform)
 
     for idx,class_name in enumerate(class_map):
-        root_dir = '/home/tangwenhao/data/cqu_bpdd/test'
+        
         _dir = os.path.join(root_dir,class_name)
         _output = os.path.join(output,class_name)
         if not os.path.exists(_output):
@@ -74,16 +99,21 @@ def main():
         for root,dirs,files in os.walk(_dir):
             num_pic = len(files)
         for i in range(num_imgs_per_class):
-            _file = random.randint(0, num_pic)
+            _file = random.randint(0, num_pic-1)
             img = Image.open(os.path.join(_dir,str(_file)+'.jpg')).convert('RGB')
 
             imgs = transforms.Resize(size=(224,224),interpolation=str_to_interp_mode('bicubic'))(img=img)
             imgs = transforms.ToTensor()(imgs)
             imgs = transforms.Normalize(mean=torch.tensor((0.485, 0.456, 0.406)),std=torch.tensor((0.229, 0.224, 0.225)))(imgs)
             imgs = imgs.unsqueeze(0)
-
-            target_category = [ClassifierOutputTarget(idx)]
+            if is_bin:
+                _idx = int(class_name != 'normal')
+                target_category = [ClassifierOutputTarget(_idx)]
+            else:
+                target_category = [ClassifierOutputTarget(idx)]
             grayscale_cam = cam(input_tensor=imgs,
+                                targets=target_category,)
+            grayscale_cam_ema = cam_ema(input_tensor=imgs,
                                 targets=target_category,)
             grayscale_cam_b = cam_b(input_tensor=imgs,
                     targets=target_category,)
@@ -95,12 +125,15 @@ def main():
             cam_image_b = show_cam_on_image(rgb_img, grayscale_cam_b,use_rgb=True)
             grayscale_cam = grayscale_cam[0, :]
             cam_image = show_cam_on_image(rgb_img, grayscale_cam,use_rgb=True)
+            grayscale_cam_ema = grayscale_cam_ema[0, :]
+            cam_image_ema = show_cam_on_image(rgb_img, grayscale_cam_ema,use_rgb=True)
 
             save_path = os.path.join(_output,'baseline_'+str(i)+'.jpg')
 
             Image.fromarray(cam_image_b).save(save_path,quality=95)
             img.save(save_path.replace('baseline','ori'),quality=95)
             Image.fromarray(cam_image).save(save_path.replace('baseline','pict'),quality=95)
+            Image.fromarray(cam_image_ema).save(save_path.replace('baseline','pict_ema'),quality=95)
 
             # with open('./output/heatmap/cat.txt','a',encoding='utf-8') as f:
             #     text = '\n'+save_path[26:-4]+' '+ class_name
