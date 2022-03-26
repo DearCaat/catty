@@ -26,7 +26,8 @@ def load_best_model(config,model,logger,is_ema=False):
         best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_best_model.pth')
     logger.info(f"==============> Loading the best model....................")
     checkpoint = torch.load(best_path, map_location='cpu')
-    logger.info(f"==============> Epoch {checkpoint['epoch']}....................")
+    if 'epoch' in checkpoint:
+        logger.info(f"==============> Epoch {checkpoint['epoch']}....................")
     msg = model.load_state_dict(checkpoint['state_dict'], strict=False)
     logger.info(msg)
     if config.APEX_AMP and checkpoint['config'].APEX_AMP:
@@ -90,6 +91,7 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
                         'best_auc': best_auc,
                         'best_f1': best_f1,
                         'p@r90':best_patr90,
+                        'epoch': epoch,
                         'config': config}
     if config.TRAIN.LR_SCHEDULER.NAME is not None:
         save_state['lr_scheduler'] = lr_scheduler.state_dict()
