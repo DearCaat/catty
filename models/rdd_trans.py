@@ -52,6 +52,7 @@ class RddTransformer(nn.Module):
         self.cluster_distance = kwargs['cluster_distance']
         self.nor_index = kwargs['nor_index']
         self.cluster_num = None
+        self.cluster_flip_sel = kwargs['cluster_flip_sel']
         if type(cluster)==GCN:
             self.graph = kwargs['graph']
             self.clustre_thr = kwargs['cluster_thr']
@@ -163,7 +164,7 @@ class RddTransformer(nn.Module):
             max_clu_index = torch.argmax(scores,dim=1).view(B,1)
             mask_max = mask_max.scatter_(1,max_clu_index,1) == 1
             # 在测试阶段，如果最高病害置信度小于一定值，那我认为它是正常包，使用置信度最低的一个簇
-            if not self.training and self.nor_index >= 0:
+            if not self.training and self.nor_index >= 0 and self.cluster_flip_sel:
                 mask_min = scores.clone() 
                 mask_min[:,:] = 0
                 min_clu_index = torch.argmin(scores,dim=1).view(B,1)
@@ -178,7 +179,7 @@ class RddTransformer(nn.Module):
             for b in range(B):
                 max_clu_index = torch.argmax(scores[j:j+clusters_num[b]])
                 # 在测试阶段，如果最高病害置信度小于一定值，那我认为它是正常包，使用置信度最低的一个簇
-                if not self.training and scores[j+max_clu_index] < thr and self.nor_index >= 0:
+                if not self.training and scores[j+max_clu_index] < thr and self.nor_index >= 0 and self.cluster_flip_sel:
                     max_clu_index = torch.argmin(scores[j:j+clusters_num[b]])
                 if b == 0:
                     feats = feats_tmp[j:j+clusters_num[b]][max_clu_index]

@@ -28,7 +28,8 @@ def build_model(config):
             cluster_rbf_distance = config.RDD_TRANS.CLUSTER.RBF_DISTANCE,
             cluster_rbf_gamma = config.RDD_TRANS.CLUSTER.RBF_GAMMA,
             cluster_n_compoents = config.RDD_TRANS.CLUSTER.N_COMPOENTS,
-            persistent_center = config.RDD_TRANS.CLUSTER.PERSISTENT_CENTER
+            persistent_center = config.RDD_TRANS.CLUSTER.PERSISTENT_CENTER,
+            cluster_flip_sel = config.RDD_TRANS.TEST_CLU_FLIP_SEL
         )
     elif model_name.startswith('vgg'):
         model = create_model(

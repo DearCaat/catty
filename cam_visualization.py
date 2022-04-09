@@ -2,6 +2,7 @@ import torch
 from PIL import Image
 import random
 import os
+import argparse
 from torchvision import transforms
 from timm.data.transforms import str_to_interp_mode
 from config import _update_config_from_file
@@ -14,6 +15,13 @@ from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
 from models import build_model
 from config import get_config
+
+def parse_option():
+    parser = argparse.ArgumentParser('WSPLIN training and evaluation script', add_help=False)
+    parser.add_argument('--bin', action='store_true', help='Use thumb data')
+    
+    args, unparsed = parser.parse_known_args()
+    return args
 
 def model_init(cpt_path,cpt_b_path,cpt_ema_path=None,is_bin=False):
     
@@ -60,20 +68,22 @@ def reshape_transform(tensor, height=7, width=7):
     return result
 
 def main():
+    args = parse_option()
+    is_bin = args.bin if args.bin else False
+
     # cementation_fissures crack longitudinal_crack loose massive_crack mending normal transverse_crack
-    class_map = ['cementation_fissures','crack', 'longitudinal_crack', 'loose', 'massive_crack', 'mending', 'normal', 'transverse_crack']
-    #class_map = ['normal','distress']
-    # cpt = '/home/tangwenhao/output/rdd_trans_new_init/model/rdd_trans_swin_small_patch4_window7_224_his_best_model.pth'
-    # cpt_b = '/home/tangwenhao/output/swin/model/swin_small_patch4_window7_224_best_model.pth'
-    # cpt_ema = '/home/tangwenhao/output/rdd_trans_new_init/model/rdd_trans_swin_small_patch4_window7_224_his_ema_best_model.pth'
-    is_bin = False
-
-    cpt = '/home/tangwenhao/output/rdd_trans_bin_abl/model/rdd_trans_swin_small_patch4_window7_224clu_2_best_model.pth'
-    cpt_b = '/home/tangwenhao/output/rdd_swin_small_bin/model/swin_small_patch4_window7_224_best_model.pth'
-    cpt_ema = '/home/tangwenhao/output/rdd_trans_bin_abl/model/rdd_trans_swin_small_patch4_window7_224clu_2_ema_best_model.pth'
-    is_bin = True
-
-    output = './output/heatmap/2/'
+    if is_bin:
+        class_map = ['normal','distress']
+        cpt = '/home/tangwenhao/output/rdd_trans_bin_abl/model/rdd_trans_swin_small_patch4_window7_224clu_2_best_model.pth'
+        cpt_b = '/home/tangwenhao/output/rdd_swin_small_bin/model/swin_small_patch4_window7_224_best_model.pth'
+        cpt_ema = '/home/tangwenhao/output/rdd_trans_bin_abl/model/rdd_trans_swin_small_patch4_window7_224clu_2_ema_best_model.pth'
+        output = './output/heatmap/bin/'
+    else:
+        class_map = ['cementation_fissures','crack', 'longitudinal_crack', 'loose', 'massive_crack', 'mending', 'normal', 'transverse_crack']
+        cpt = '/home/tangwenhao/output/rdd_trans_new_init/model/rdd_trans_swin_small_patch4_window7_224_his_best_model.pth'
+        cpt_b = '/home/tangwenhao/output/swin/model/swin_small_patch4_window7_224_best_model.pth'
+        cpt_ema = '/home/tangwenhao/output/rdd_trans_new_init/model/rdd_trans_swin_small_patch4_window7_224_his_ema_best_model.pth'
+        output = './output/heatmap/mul/'
 
     root_dir = '/home/tangwenhao/data/cqu_bpdd/test'
 
