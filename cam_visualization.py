@@ -7,7 +7,7 @@ from torchvision import transforms
 from timm.data.transforms import str_to_interp_mode
 from config import _update_config_from_file
 import numpy as np
-
+import shutil
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 import cv2
@@ -19,6 +19,7 @@ from config import get_config
 def parse_option():
     parser = argparse.ArgumentParser('WSPLIN training and evaluation script', add_help=False)
     parser.add_argument('--bin', action='store_true', help='Use thumb data')
+    parser.add_argument('--num', type=int, default=10 ,help="batch size for single GPU")
     
     args, unparsed = parser.parse_known_args()
     return args
@@ -30,6 +31,7 @@ def model_init(cpt_path,cpt_b_path,cpt_ema_path=None,is_bin=False):
         _update_config_from_file(config, './configs/rdd_trans.yaml')
         _update_config_from_file(config, './configs/best/rdd_trans_bin_979.yaml')
     else:
+        _update_config_from_file(config, './configs/rdd_trans.yaml')
         _update_config_from_file(config, './configs/best/rdd_trans_70.yaml')
     #_update_config_from_file(config, '/home/tangwenhao/rdd_code/rdd_transformer/configs/best/rdd_trans_bin_979.yaml')
 
@@ -73,7 +75,7 @@ def main():
 
     # cementation_fissures crack longitudinal_crack loose massive_crack mending normal transverse_crack
     if is_bin:
-        class_map = ['normal','distress']
+        class_map = ['cementation_fissures','crack', 'longitudinal_crack', 'loose', 'massive_crack', 'mending', 'normal', 'transverse_crack']
         cpt = '/home/tangwenhao/output/rdd_trans_bin_abl/model/rdd_trans_swin_small_patch4_window7_224clu_2_best_model.pth'
         cpt_b = '/home/tangwenhao/output/rdd_swin_small_bin/model/swin_small_patch4_window7_224_best_model.pth'
         cpt_ema = '/home/tangwenhao/output/rdd_trans_bin_abl/model/rdd_trans_swin_small_patch4_window7_224clu_2_ema_best_model.pth'
@@ -85,11 +87,14 @@ def main():
         cpt_ema = '/home/tangwenhao/output/rdd_trans_new_init/model/rdd_trans_swin_small_patch4_window7_224_his_ema_best_model.pth'
         output = './output/heatmap/mul/'
 
+    if os.path.exists(output):
+        shutil.rmtree(output)
+
     root_dir = '/home/tangwenhao/data/cqu_bpdd/test'
 
     if not os.path.exists(output):
             os.mkdir(output)
-    num_imgs_per_class = 10
+    num_imgs_per_class = args.num
     
     model,model_b,model_ema = model_init(cpt,cpt_b,cpt_ema,is_bin=is_bin)
 
