@@ -18,8 +18,8 @@ def load_best_model(config,model,logger,is_ema=False):
         ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_ckpt.pth')
     else:
         ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ckpt.pth')
-    if os.path.exists(ckpt_path):
-        os.remove(ckpt_path)
+    # if os.path.exists(ckpt_path):
+    #     os.remove(ckpt_path)
     if is_ema:
         best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_best_model.pth')
     else:
