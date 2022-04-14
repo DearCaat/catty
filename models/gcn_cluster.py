@@ -239,7 +239,7 @@ class KnnGraph(object):
         hops_1 = knn_graph[:,:,:self.k_at_hop[0] + 1]      # B N [1 K1] 这里的1是center point 的索引
         # 添加第二跳
         if len(self.k_at_hop) > 1:
-            hops_2 = hops_1.unsqueeze(-1).repeat(1,1,1,self.k_at_hop[1]+1).clone()  #B N [1 K1] [1 K2]
+            hops_2 = hops_1[0,hops_1[:,:]][:,:,:,:self.k_at_hop[1]+1].clone()  #B N [1 K1] [1 K2]
             hops = hops_2
             hops = hops.flatten(-2,-1)
         else:
