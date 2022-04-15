@@ -354,6 +354,7 @@ class KnnGraph(object):
         # 正则化特征，IPS特征减去中心点特征
         #feat = (-feats.unsqueeze(1).repeat(1,N,1,1)).add(feat)
         feat.sub_(feat_)
+        feat[mask_candidate==False].fill_(0)
         #feat.sub_(feats.unsqueeze(-2))
 
         return feat,A_,mask_one_hop_idcs,hops_1[:,:,1:]
