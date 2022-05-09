@@ -150,6 +150,7 @@ class BaseTrainer():
                     else:
                         lr_scheduler.step_update(epoch * num_steps + idx)
 
+                # 每个iter更新
                 self.trainer.update_per_iter(config,epoch,idx)
 
             torch.cuda.synchronize()
@@ -181,7 +182,7 @@ class BaseTrainer():
                     f'mem {memory_used:.0f}MB')
                 # log per iter
                 log_meter(self.trainer.train_metrics,self.trainer.train_metrics_iter_log,logger)
-
+        #每一轮更新一次
         self.trainer.update_per_epoch(config,epoch)
 
         if hasattr(optimizer, 'sync_lookahead'):

@@ -22,7 +22,7 @@ from timm.models import  model_parameters
 from config import get_config
 from collections import OrderedDict
 from models import build_model
-from trainer import build_trainer
+from engine import build_trainer
 from data import build_loader
 from utils import ModelEmaV3, get_sigmod_num
 from lr_scheduler import build_scheduler
@@ -122,14 +122,7 @@ def main(config):
         
     logger.info(f"Creating model:{config.MODEL.NAME}/{config.MODEL.BACKBONE}")
     model = build_model(config)
-    #if not config.THUMB_MODE:
-        # model_teacher = build_model(config)
-        # model_teacher.cuda()
-        # cpt = torch.load('/home/tangwenhao/rdd/output/swin_test/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
-        # std = cpt['state_dict']
-        # std['head_instance.weight'] = std['head.weight']
-        # std['head_instance.bias'] = std['head.bias']
-        # model_teacher.load_state_dict(std, strict=True)
+
     # setup augmentation batch splits for contrastive loss or split bn
     '''num_aug_splits = 0
     if config.AUG.SPLITS > 0:

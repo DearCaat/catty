@@ -990,6 +990,7 @@ def predict(config, data_loader, model,amp_autocast=suppress, log_suffix=''):
             
             if not config.THUMB_MODE and config.RDD_TRANS.INST_TEST and config.RDD_TRANS.PERSUDO_LEARNING:
                 #使用max-pool来测试
+                print('das')
                 b,p,cls = output_ins.shape
                 max_score,max_index_cls = torch.max(output_soft_ins,dim=-1)  # B P
                 # 实例中最大的病害类别置信度大于阈值 
@@ -1269,6 +1270,9 @@ if __name__ == '__main__':
             config.NATIVE_AMP = True
         elif  has_apex:
             config.APEX_AMP = True
+    else:
+        config.NATIVE_AMP = False
+        config.APEX_AMP = False
     if config.NATIVE_AMP and has_native_amp:
         use_amp = 'native'
     elif config.APEX_AMP and has_apex:
