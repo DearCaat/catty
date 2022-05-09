@@ -87,6 +87,7 @@ def parse_option():
     parser.add_argument('--output', default='output', type=str, metavar='PATH',
                         help='root of output folder, the full path is <output>/<model_name>/<tag> (default: output)')
     parser.add_argument('--model-name',  type=str, help='model name')
+    parser.add_argument('--project',  type=str, help='experiment project')
     parser.add_argument('--title',  type=str, help='experiment title')
     parser.add_argument('--throughput', action='store_true', help='Test throughput only')
     parser.add_argument('--log-wandb', action='store_true', default=False,
@@ -162,17 +163,26 @@ def main(config):
     else:
         lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train))
 
+    # setup exponential moving average of model weights, SWA could be used here too
+    model_ema = None
+    if config.MODEL_EMA:
+        # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
+        model_ema = ModelEmaV3(model, decay=config.EMA_DECAY, device='cpu' if config.EMA_FORCE_CPU else None)
+
     max_accuracy = 0.0
     best_auc = 0.0
     max_f1 = 0.0
     max_f1_ema = .0
     max_accuracy_ema = .0
     best_auc_ema = .0
+     
 
     if config.MODEL.RESUME:
         criterion = torch.nn.CrossEntropyLoss()
         criterion.cuda()
         max_accuracy,best_auc = load_checkpoint(config, model, optimizer, lr_scheduler, logger)
+        if model_ema is not None:
+            load_checkpoint(config, model_ema,logger=logger,is_ema=True) 
         if config.TRAIN_MODE=='eval':
             if config.LOAD_TEST_DIR:
                 dic=np.load(config.LOAD_TEST_DIR)
@@ -218,27 +228,7 @@ def main(config):
             pred,label= predict(config, data_loader_test, model,amp_autocast=amp_autocast)
             _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_predict_'+config.DATA.DATASET.split('/')[-1])+'.npz'
             np.savez(_save_path,pred=pred,label=label)
-
             return
-    teacher_ema = None
-    model_ema = None
-    if not config.THUMB_MODE or config.MODEL_EMA:
-        # cpt = torch.load('/home/tangwenhao/rdd/model/swin_small_patch4_window7_224_best_model.pth', map_location='cpu')
-        # std = cpt['state_dict']
-        # std['head_instance.weight'] = std['head.weight']
-        # std['head_instance.bias'] = std['head.bias']
-        # model.load_state_dict(std)
-        #teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[])
-        model_ema = ModelEmaV3(model, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None)
-
-    # setup exponential moving average of model weights, SWA could be used here too
-    '''model_ema = None
-    if args.model_ema:
-        # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
-        model_ema = ModelEmaV2(
-            model, decay=args.model_ema_decay, device='cpu' if args.model_ema_force_cpu else None)
-        if args.resume:
-            load_checkpoint(model_ema.module, args.resume, use_ema=True)'''
 
     # setup distributed training
     if config.DISTRIBUTED:
@@ -402,6 +392,9 @@ if __name__ == '__main__':
             config.NATIVE_AMP = True
         elif  has_apex:
             config.APEX_AMP = True
+    else:
+        config.NATIVE_AMP = True
+        config.APEX_AMP = True
     if config.NATIVE_AMP and has_native_amp:
         use_amp = 'native'
     elif config.APEX_AMP and has_apex:
