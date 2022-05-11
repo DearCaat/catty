@@ -51,7 +51,7 @@ _C.DATA.DALI = False
 # dataset train split (default: train)
 _C.DATA.TRAIN_SPLIT = 'train'
 # dataset validation split (default: validation)
-_C.DATA.VAL_SPLIT = 'val'
+_C.DATA.VAL_SPLIT = 'test'
 # dataset test split (default: test)
 _C.DATA.TEST_SPLIT = 'test'
 # epoch repeat multiplier (number of times to repeat dataset epoch per train epoch).

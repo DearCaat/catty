@@ -1,5 +1,5 @@
 import torch
-from kmeans_pytorch import kmeans
+# from kmeans_pytorch import kmeans
 from .similarity import *
 import numpy as np
 from sklearn.manifold import spectral_embedding

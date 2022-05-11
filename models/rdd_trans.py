@@ -6,7 +6,7 @@ from timm.models.registry import register_model
 from .gcn_cluster import *
 from .spectral_clustering import *
 from .swin import _create_swin_transformer
-from kmeans_pytorch import kmeans,kmeans_predict
+# from kmeans_pytorch import kmeans,kmeans_predict
 
 class Attention(nn.Module):
     def __init__(self,classes,in_dim=1536,out_dim=384):
