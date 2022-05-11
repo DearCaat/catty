@@ -146,6 +146,7 @@ _C.TRAIN.OPTIMIZER.MOMENTUM = 0.9
 
 #Loss
 _C.TRAIN.LOSS = CN()
+_C.TRAIN.LOSS.NAME = 'crossentropy'
 _C.TRAIN.LOSS.LAMBDA_L1 = 1e-3
 
 # -----------------------------------------------------------------------------

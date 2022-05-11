@@ -1,4 +1,5 @@
 import os
+from sklearn import metrics
 import torch
 import torch.distributed as dist
 import shutil
@@ -33,7 +34,50 @@ def load_best_model(config,model,logger,is_ema=False):
     if config.APEX_AMP and checkpoint['config'].APEX_AMP:
         amp.initialize(model, opt_level='O1')
 
-def load_checkpoint(config, model, optimizer, lr_scheduler, logger,is_ema=False):
+def load_checkpoint(config, model,optimizer=None, lr_scheduler=None,logger=None,is_ema=False):
+    logger.info(f"==============> Resuming form {config.MODEL.RESUME}....................")
+    if config.MODEL.RESUME.startswith('https'):
+        checkpoint = torch.hub.load_state_dict_from_url(
+            config.MODEL.RESUME, map_location='cpu', check_hash=True)
+    else:
+        checkpoint = torch.load(config.MODEL.RESUME, map_location='cpu')
+    if is_ema:
+        if 'ema' in checkpoint:
+            msg = model.load_state_dict(checkpoint['ema'], strict=False)
+            logger.info(msg)
+            return 0
+    # 是否只读取模型
+    if 'state_dict' in checkpoint:
+        msg = model.load_state_dict(checkpoint['state_dict'], strict=False)
+        logger.info(msg)
+        max_accuracy = 0.0
+        best_auc = 0.0
+        best_f1 = 0.0
+        if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e' :
+            if 'lr_scheduler' in checkpoint:
+                lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+            if 'optimizer' in checkpoint and 'epoch' in checkpoint:
+                optimizer.load_state_dict(checkpoint['optimizer'])
+                config.defrost()
+                config.TRAIN.START_EPOCH = checkpoint['epoch'] + 1
+                config.freeze()
+                if 'amp' in checkpoint and config.APEX_AMP and checkpoint['config'].APEX_AMP:
+                    amp.initialize(model, opt_level='O1')
+                    amp.load_state_dict(checkpoint['amp'])
+                logger.info(f"=> loaded successfully '{config.MODEL.RESUME}' (epoch {checkpoint['epoch']})")
+                if 'max_accuracy' in checkpoint and 'best_auc' in checkpoint:
+                    max_accuracy = checkpoint['max_accuracy']
+                    best_auc = checkpoint['best_auc']
+                if 'best_f1' in checkpoint:
+                    best_f1 = checkpoint['best_f1']
+    else:
+        msg = model.load_state_dict(checkpoint, strict=False)
+        logger.info(msg)
+    del checkpoint
+    torch.cuda.empty_cache()
+    return max_accuracy,best_auc,best_f1
+
+def load_checkpoint_V2(config, model,optimizer=None, lr_scheduler=None,logger=None,is_ema=False):
     logger.info(f"==============> Resuming form {config.MODEL.RESUME}....................")
     if config.MODEL.RESUME.startswith('https'):
         checkpoint = torch.hub.load_state_dict_from_url(
@@ -134,6 +178,55 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
                     shutil.copyfile(best_path, history_best_path)
             elif config.TEST.BEST_METRIC.lower() == 'auc':
                 if checkpoint['best_auc'] > checkpoint_his['best_auc']:
+                    shutil.copyfile(best_path, history_best_path)
+        else:
+            shutil.copyfile(best_path, history_best_path)
+
+    logger.info(f"{save_path} saved !!!")
+
+def save_checkpoint_V2(config, epoch, model, best_metrics,optimizer, lr_scheduler, logger,is_best,ema,is_ema=False):
+    save_state = {'state_dict': model.state_dict(),
+                  'optimizer': optimizer.state_dict(),
+                  'best_metrics':best_metrics,
+                  'epoch': epoch,
+                  'config': config,
+                  'ema':ema.module.state_dict() if ema is not None else None}
+    save_state_best = {'state_dict': model.state_dict(),
+                        'best_metrics':best_metrics,
+                        'epoch': epoch,
+                        'config': config}
+    if config.TRAIN.LR_SCHEDULER.NAME is not None:
+        save_state['lr_scheduler'] = lr_scheduler.state_dict()
+    if config.APEX_AMP:
+        amp.initialize(model, opt_level='O1')
+        save_state['amp'] = amp.state_dict()
+
+    if is_ema:
+        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_ckpt.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_best_model.pth')
+        history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_his_ema_best_model.pth')
+    else:
+        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ckpt.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_best_model.pth')
+        history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_his_best_model.pth')
+    logger.info(f"{save_path} saving......")
+    torch.save(save_state, save_path)
+    
+    if is_best:
+        torch.save(save_state_best, best_path)
+        # shutil.copyfile(save_path, best_path)
+    if epoch == config.TRAIN.EPOCHS - 1:
+        if os.path.exists(history_best_path):
+            checkpoint = torch.load(best_path, map_location='cpu')
+            checkpoint_his = torch.load(history_best_path, map_location='cpu')
+            metrics = checkpoint['best_metrics']
+            metrics_his = checkpoint_his['best_metrics']
+            best_metric_name = config.TEST.BEST_METRIC.lower()
+
+            if best_metric_name in metrics_his:
+                if metrics[best_metric_name] > metrics_his[best_metric_name]:
+                    shutil.copyfile(best_path, history_best_path)
+                else:
                     shutil.copyfile(best_path, history_best_path)
         else:
             shutil.copyfile(best_path, history_best_path)
