@@ -98,8 +98,13 @@ _C.MODEL.PRETRAINED = True
 
 _C.MODEL.NUM_PATCHES=17
 
-# 在多模型训练的时候，到底哪些模型需要存放在GPU中，0始终是主模型
-_C.MODEL.TOGPU_MODEL_IDS = [0] 
+# 在多模型训练的时候，到底哪些模型需要存放在GPU中，main始终是主模型，在最前面
+_C.MODEL.TOGPU_MODEL_NAME = ['main'] 
+# 在多模型训练的时候，到底哪些模型需要保存在checkpoint中，,除main以外
+_C.MODEL.SAVE_OTHER_MODEL_NAME = [] 
+# 在多模型训练的时候，到底哪些模型需要保留下最佳模型中，main始终是主模型，在最前面,每一个都会单独存一个文件，训练过程中也会有单独的ckpt文件
+_C.MODEL.SAVE_BEST_MODEL_NAME = ['main'] 
+
 
 # -----------------------------------------------------------------------------
 # Training settings
@@ -209,8 +214,8 @@ _C.AUG.MULTI_VIEW = None
 _C.TEST = CN()
 # Whether to use center crop when testing
 _C.TEST.CROP = 1.
-# top1 f1 auc
-_C.TEST.BEST_MODEL_METRIC = 'top1'
+# top1 f1 auc，{'model_best_save_idx':'metric'}
+_C.TEST.BEST_MODEL_METRIC = {'main':'top1'}
 
 # -----------------------------------------------------------------------------
 # Misc

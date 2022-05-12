@@ -1,8 +1,7 @@
 import os
-
-from torch.nn.modules import module
-
+from sys import prefix
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import time
 import argparse
 import datetime
@@ -13,6 +12,7 @@ import math
 import torch
 import torch.backends.cudnn as cudnn
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
+from torch.nn.modules import module
 
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.utils import *
@@ -24,7 +24,7 @@ from collections import OrderedDict
 from models import build_model
 from engine import build_trainer
 from data import build_loader
-from utils import ModelEmaV3, get_sigmod_num, load_checkpoint_V2
+from utils import ModelEmaV3, _save_checkpoint_V2, get_sigmod_num, load_best_model_V2, load_checkpoint_V2
 from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
 from criterion import build_criterion
@@ -137,19 +137,19 @@ def main(config):
         model = convert_splitbn_model(model, max(num_aug_splits, 2))'''
 
     # 考虑多模型情况下的，GPU存储
-    for model_id in config.MODEL.TOGPU_MODEL_IDS:
-        models[model_id].cuda()
+    for model_name in config.MODEL.TOGPU_MODEL_NAME:
+        models[model_name].cuda()
 
     logger.info(f"model:{config.MODEL.NAME}/{config.MODEL.BACKBONE}")
 
-    optimizer = build_optimizer(config, model)
+    optimizer = build_optimizer(config, models['main'])
 
     # setup automatic mixed-precision (AMP) loss scaling and op casting
     # 半精度暂时只考虑训练
     amp_autocast = suppress  # do nothing
     loss_scaler = None
     if use_amp == 'apex':
-        models[0], optimizer = amp.initialize(models[0], optimizer, opt_level='O1')
+        models['main'], optimizer = amp.initialize(models['main'], optimizer, opt_level='O1')
         loss_scaler = ApexScaler()
         if config.LOCAL_RANK == 0:
             logger.info('Using NVIDIA APEX AMP. Training in mixed precision.')
@@ -172,7 +172,8 @@ def main(config):
     model_ema = None
     if config.MODEL_EMA:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
-        model_ema = ModelEmaV3(models[0], decay=config.EMA_DECAY, device='cpu' if config.EMA_FORCE_CPU else None)
+        model_ema = ModelEmaV3(models['main'], decay=config.EMA_DECAY, device='cpu' if config.EMA_FORCE_CPU else None)
+        best_metrics_ema = deepcopy(best_metrics) 
 
     # setup loss function
     criterions = build_criterion(config)
@@ -181,50 +182,18 @@ def main(config):
 
     if config.MODEL.RESUME:
 
-        max_accuracy,best_auc = load_checkpoint_V2(config, model, optimizer, lr_scheduler, logger)
+        best_metrics,best_metrics_ema = load_checkpoint_V2(config, models, optimizer, lr_scheduler, logger,model_ema)
 
-        if model_ema is not None:
-            load_checkpoint(config, model_ema,logger=logger,is_ema=True) 
         if config.TRAIN_MODE=='eval':
-            if config.LOAD_TEST_DIR:
-                dic=np.load(config.LOAD_TEST_DIR)
-                label=dic['label']
-                pred=dic['pred']
-                if 'cqu_bpdd' in config.DATA.DATASET:
-                    for m in range(len(label)):
-                        if int(label[m])==6:
-                            label[m] = 0
-                        else:
-                            label[m] = 1
-                pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
-                if config.MODEL.NUM_CLASSES > 2:
-                    pred = 1-pred[:,6]
-                else:
-                    pred = pred[:,1]
-                precision,recall,thr=precision_recall_curve(label, pred)
-                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
-                patr=getDataByStick([precision,recall],stick)
-                logger.info(patr)
+            if '_ema_' in config.MODEL.RESUME:
+                ema_prefix = 'ema'
+                models_without_ddp['main'] = model_ema.module
             else:
-                acc1, acc5, loss, auc,pred,label,eval_metrics = validate(config, data_loader_test, model,save_pre=True,amp_autocast=amp_autocast,criterion=criterion)
-                logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
-                _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
-                np.savez(_save_path,pred=pred,label=label)
-                if 'cqu_bpdd' in config.DATA.DATASET:
-                    for m in range(len(label)):
-                        if int(label[m])==6:
-                            label[m] = 0
-                        else:
-                            label[m] = 1
-                pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
-                if config.MODEL.NUM_CLASSES > 2:
-                    pred = 1-pred[:,6]
-                else:
-                    pred = pred[:,1]
-                precision,recall,thr=precision_recall_curve(label, pred)
-                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
-                patr=getDataByStick([precision,recall],stick)
-                logger.info(patr)
+                ema_prefix = ''
+            loss_eval, eval_metrics,pred,label = validate(config, data_loader_test, models_without_ddp,save_pre=True,amp_autocast=amp_autocast,criterion=criterions,prefix=f'{ema_prefix}_test')
+
+            _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+ema_prefix+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
+            np.savez(_save_path,pred=pred,label=label)
             return
         elif config.TRAIN_MODE=='predict':
             pred,label= predict(config, data_loader_test, model,amp_autocast=amp_autocast)
@@ -238,18 +207,22 @@ def main(config):
             # Apex DDP preferred unless native amp is activated
             if config.LOCAL_RANK == 0:
                 logger.info("Using NVIDIA APEX DistributedDataParallel.")
-            models[0] = ApexDDP(models[0], delay_allreduce=True)
+            models['main'] = ApexDDP(models['main'], delay_allreduce=True)
         else:
             if config.LOCAL_RANK  == 0:
                 logger.info("Using native Torch DistributedDataParallel.")
-            models[0] = NativeDDP(models[0], device_ids=[config.LOCAL_RANK ])  # can use device str in Torch >= 1.1
+            models['main'] = NativeDDP(models['main'], device_ids=[config.LOCAL_RANK ])  # can use device str in Torch >= 1.1
         models_without_ddp = models
-        models_without_ddp[0] = models[0].module
+        models_without_ddp[0] = models['main'].module
         # NOTE: EMA model does not need to be wrapped by DDP
     else:
         models_without_ddp = models
+    if model_ema is not None:
+        models_without_ddp_ema = deepcopy(models_without_ddp)
+        models_without_ddp_ema['main'] =  model_ema.module
+        
 
-    n_parameters = sum(p.numel() for p in models[0].parameters() if p.requires_grad)
+    n_parameters = sum(p.numel() for p in models['main'].parameters() if p.requires_grad)
     logger.info(f"number of params: {n_parameters}")
     if hasattr(models_without_ddp[0], 'flops'):
         flops = models_without_ddp[0].flops()
@@ -269,43 +242,31 @@ def main(config):
 
         loss_r,train_metrics = train_one_epoch(config, models_without_ddp, criterions, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,amp_autocast=amp_autocast, loss_scaler=loss_scaler,model_ema=model_ema)
         #np.append(loss_rec,loss_r)
-        loss,eval_metrics = validate(config, data_loader_val, models_without_ddp,amp_autocast=amp_autocast,criterion=criterions)
+        loss,eval_metrics = validate(config, data_loader_val, models_without_ddp,amp_autocast=amp_autocast,criterion=criterions,prefix=f'_val')
 
+        eval_metrics_ema = {}
         if model_ema is not None:
-            loss_ema,eval_metrics_ema = validate(config, data_loader_val, model_ema.module,amp_autocast=amp_autocast,criterion=criterions)
+            loss_ema,eval_metrics_ema = validate(config, data_loader_val, models_without_ddp_ema,amp_autocast=amp_autocast,criterion=criterions,prefix=f'ema_val')
 
-        logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
+        eval_best_metric_ema = eval_metrics_ema[config.TEST.BEST_MODEL_METRIC['main']] if model_ema is not None else 0.
+        logger.info(f"The {config.TEST.BEST_MODEL_METRIC['main']} of the network on the {len(dataset_val)} test images: {eval_metrics[config.TEST.BEST_MODEL_METRIC['main']]:.1f}% {eval_best_metric_ema:.1f}%")
 
+        # save the checkpoint
+        save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,model_ema,eval_metrics,is_ema=False,best_metrics_ema=best_metrics_ema)
+        
         # save the ema checkpoint
         if model_ema is not None:
-            is_best_ema = max(best_metrics[config.TEST.BEST_MODEL_METRIC],eval_metrics_ema[config.TEST.BEST_MODEL_METRIC])
-
-            f1_ema = eval_metrics_ema['macro_f1']
-            is_best_ema = f1_ema > max_f1_ema
-            max_accuracy_ema = max(max_accuracy_ema, acc1_ema) if epoch > 0 else 0
-            best_auc_ema = max(best_auc_ema,auc_ema) if epoch > 0 else 0
-            max_f1_ema = max(max_f1_ema,f1_ema)
-
-            if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-                save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,None,is_ema=True)
-
-        f1 = eval_metrics['macro_f1']
-        is_best = (auc > best_auc if config.BINARYTRAIN_MODE else f1 > max_f1) and epoch>0
-        max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
-        best_auc = max(best_auc,auc) if epoch > 0 else 0
-        max_f1 = max(max_f1,f1)
-
+            # ema模型暂时只考虑main模型的最佳模型存储
+            save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,model_ema,eval_metrics_ema,is_ema=True,best_metrics_ema=best_metrics_ema)
+        
         update_summary(
-                    epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
-                    write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
+            epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
+            write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
 
-        if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-            save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,model_ema)
-
-    logger.info(f'Max accuracy: {max_accuracy:.2f}%\t'
-                f'Max f1: {max_f1:.2f}%\t'
-                f'Max ema_f1: {max_f1_ema:.2f}%\t'
-                f'Best AUC: {best_auc:.2f}%')
+    for bt_metric in list(best_metrics.keys()):
+        logger.info(f'Best {bt_metric}: {best_metrics[bt_metric]:.2f}%\t')
+    if config.LOG_WANDB and has_wandb:
+        wandb.log(best_metrics)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -314,49 +275,43 @@ def main(config):
     if config.TRAIN_MODE=='t_e':
         dataset_test,data_loader_test = build_loader(is_train=False,config=config)
 
-        load_best_model(config, model_without_ddp, logger)
-        acc1, acc5, loss, auc,pred,label,eval_metrics = validate(config, data_loader_test, model_without_ddp,save_pre=True,amp_autocast=amp_autocast,criterion=criterion)
-        logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
+        load_best_model_V2(config, models_without_ddp, logger)
+        loss_eval, eval_metrics,pred,label = validate(config, data_loader_test, models_without_ddp,save_pre=True,amp_autocast=amp_autocast,criterion=criterions,perfix='_test')
+
         _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
         np.savez(_save_path,pred=pred,label=label)
-        if 'cqu_bpdd' in config.DATA.DATASET:
-            for m in range(len(label)):
-                if int(label[m])==6:
-                    label[m] = 0
-                else:
-                    label[m] = 1
-        pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
-        if config.MODEL.NUM_CLASSES > 2:
-            pred = 1-pred[:,6]
-        else:
-            pred = pred[:,1]
-        precision,recall,thr=precision_recall_curve(label, pred)
-        stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
-        patr=getDataByStick([precision,recall],stick)
-        logger.info(patr)
-
         #ema
-        if model_ema is not None or teacher_ema is not None:
-            load_best_model(config, model_ema.module if model_ema is not None else teacher_ema.module, logger,is_ema=True)
-            acc1_ema, acc5_ema,loss_ema,auc_ema,pred,label,eval_metrics_ema = validate(config, data_loader_test, model_ema.module if model_ema is not None else teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion,save_pre=True)
-            logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1_ema:.2f}% {auc_ema:.2f}%")
+        eval_metrics_ema = {}
+        if model_ema is not None:
+            load_best_model_V2(config, model_ema.module, logger,is_ema=True)
+            loss_eval_ema, eval_metrics_ema,pred_ema,label_ema = validate(config, data_loader_test, models_without_ddp_ema,amp_autocast=amp_autocast,criterion=criterions,save_pre=True,perfix='ema_test')
+
             _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_ema_'+config.DATA.DATASET.split('/')[-1])+'.npz'
-            np.savez(_save_path,pred=pred,label=label)
-            if 'cqu_bpdd' in config.DATA.DATASET:
-                for m in range(len(label)):
-                    if int(label[m])==6:
-                        label[m] = 0
-                    else:
-                        label[m] = 1
-            pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
-            if config.MODEL.NUM_CLASSES > 2:
-                pred = 1-pred[:,6]
-            else:
-                pred = pred[:,1]
-            precision,recall,thr=precision_recall_curve(label, pred)
-            stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
-            patr=getDataByStick([precision,recall],stick)
-            logger.info(patr)
+            np.savez(_save_path,pred=pred_ema,label=label_ema)
+
+        eval_best_metric_ema = eval_metrics_ema[config.TEST.BEST_MODEL_METRIC['main']] if model_ema is not None else 0.
+        logger.info(f"The {config.TEST.BEST_MODEL_METRIC['main']} of the network on the {len(dataset_val)} test images: {eval_metrics[config.TEST.BEST_MODEL_METRIC['main']]:.1f}% {eval_best_metric_ema:.1f}%")
+
+        if config.LOG_WANDB and has_wandb:
+            wandb.log(eval_metrics.update(eval_metrics_ema))
+
+# 此函数是为了处理ema和多模型保存而创建，ema模型的save_ckpt和正常模型流程基本一致，故将其抽象出来
+def save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,ema_model,eval_metrics,is_ema,best_metrics_ema):
+    # main始终在最前面，最佳评价指标字典必须和最佳模型名称列表一一对应
+    assert config.SAVE_BEST_MODEL_NAME[0] == 'main' and list(config.TEST.BEST_MODEL_METRIC.keys()) == config.SAVE_BEST_MODEL_NAME
+
+    for best_model_name in config.SAVE_BEST_MODEL_NAME:
+        prefix = '' if best_model_name == 'main' else best_model_name
+
+        best_metric_name = config.TEST.BEST_MODEL_METRIC[best_model_name].lower()
+        is_best = eval_metrics[best_metric_name] > best_metrics[best_metric_name]
+        for idx,_ in enumerate(best_metrics):
+            best_metrics[idx] = max(best_metrics[idx],eval_metrics[idx])      
+
+        if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
+            _save_checkpoint_V2(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,is_best,ema_model,prefix,best_model_name,is_ema,best_metrics_ema)
+        if is_ema:
+            return
 
 if __name__ == '__main__':
 

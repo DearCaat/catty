@@ -14,13 +14,49 @@ try:
     from apex import amp
 except ImportError:
     amp = None
-def load_best_model(config,model,logger,is_ema=False):
+def load_best_model_V2(config,models,logger,is_ema=False):
+    ema_prefix = 'ema' if is_ema else ''
+
+    for best_model_name in config.SAVE_BEST_MODEL_NAME:
+        prefix = '' if best_model_name == 'main' else best_model_name
+        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f"_{prefix}_"+f"_{ema_prefix}_"+'ckpt.pth')
+        if os.path.exists(ckpt_path):
+            os.remove(ckpt_path)
+
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f"_{prefix}_"+f"_{ema_prefix}_"+'btml.pth')
+
+        logger.info(f"==============> Loading the best {prefix} {ema_prefix} model....................")
+        checkpoint = torch.load(best_path, map_location='cpu')
+
+        if 'epoch' in checkpoint:
+            logger.info(f"==============> Epoch {checkpoint['epoch']}....................")
+
+        if is_ema:
+            msg = models.load_state_dict(checkpoint['ema'], strict=False)
+            logger.info(f"ema: {msg}")
+            return 
+
+        if best_model_name == 'main':
+            
+            msg = models[best_model_name].load_state_dict(checkpoint['state_dict'], strict=False)
+            if config.APEX_AMP and checkpoint['config'].APEX_AMP:
+                amp.initialize(models['main'], opt_level='O1')
+        else:
+            msg = models[best_model_name].load_state_dict(checkpoint['other_models'][best_model_name], strict=False)
+
+        logger.info(f"{prefix}: {msg}")
+
+        
+    
+
+def load_best_model(config,models,logger,is_ema=False):
+
     if is_ema:
         ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_ckpt.pth')
     else:
         ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ckpt.pth')
-    # if os.path.exists(ckpt_path):
-    #     os.remove(ckpt_path)
+    if os.path.exists(ckpt_path):
+        os.remove(ckpt_path)
     if is_ema:
         best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_best_model.pth')
     else:
@@ -29,10 +65,10 @@ def load_best_model(config,model,logger,is_ema=False):
     checkpoint = torch.load(best_path, map_location='cpu')
     if 'epoch' in checkpoint:
         logger.info(f"==============> Epoch {checkpoint['epoch']}....................")
-    msg = model.load_state_dict(checkpoint['state_dict'], strict=False)
+    msg = models['main'].load_state_dict(checkpoint['state_dict'], strict=False)
     logger.info(msg)
     if config.APEX_AMP and checkpoint['config'].APEX_AMP:
-        amp.initialize(model, opt_level='O1')
+        amp.initialize(models['main'], opt_level='O1')
 
 def load_checkpoint(config, model,optimizer=None, lr_scheduler=None,logger=None,is_ema=False):
     logger.info(f"==============> Resuming form {config.MODEL.RESUME}....................")
@@ -77,43 +113,54 @@ def load_checkpoint(config, model,optimizer=None, lr_scheduler=None,logger=None,
     torch.cuda.empty_cache()
     return max_accuracy,best_auc,best_f1
 
-def load_checkpoint_V2(config, model,optimizer=None, lr_scheduler=None,logger=None,is_ema=False):
+def load_checkpoint_V2(config, models,optimizer=None, lr_scheduler=None,logger=None,model_ema=None):
     logger.info(f"==============> Resuming form {config.MODEL.RESUME}....................")
     if config.MODEL.RESUME.startswith('https'):
         checkpoint = torch.hub.load_state_dict_from_url(
             config.MODEL.RESUME, map_location='cpu', check_hash=True)
     else:
         checkpoint = torch.load(config.MODEL.RESUME, map_location='cpu')
-    if is_ema:
-        if 'ema' in checkpoint:
-            msg = model.load_state_dict(checkpoint['ema'], strict=False)
-            logger.info(msg)
-            return 0
+    
     # 是否只读取模型
     if 'state_dict' in checkpoint:
-        msg = model.load_state_dict(checkpoint['state_dict'], strict=False)
-        logger.info(msg)
+        config.defrost()
+        msg = models['main'].load_state_dict(checkpoint['state_dict'], strict=False)
+        logger.info(f"main: {msg}")
+        if 'ema' in checkpoint and model_ema is not None:
+            msg = model_ema.load_state_dict(checkpoint['ema'], strict=False)
+            logger.info(f"ema: {msg}")
+
+        if 'other_models' in checkpoint:
+            other_models = checkpoint['other_models']
+            config.MODEL.SAVE_OTHER_MODEL_NAME = list(other_models.keys())
+            for model_prefix in config.MODEL.SAVE_OTHER_MODEL_NAME:
+                msg = models[model_prefix].load_state_dict(other_models[model_prefix])
+                logger.info(f"{model_prefix}: {msg}")
+
         best_metrics = None
-        if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e' :
+        best_metrics_ema = None
+
+        if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e':
             if 'lr_scheduler' in checkpoint:
                 lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             if 'optimizer' in checkpoint and 'epoch' in checkpoint:
                 optimizer.load_state_dict(checkpoint['optimizer'])
-                config.defrost()
                 config.TRAIN.START_EPOCH = checkpoint['epoch'] + 1
-                config.freeze()
                 if 'amp' in checkpoint and config.APEX_AMP and checkpoint['config'].APEX_AMP:
-                    amp.initialize(model, opt_level='O1')
+                    amp.initialize(models['main'], opt_level='O1')
                     amp.load_state_dict(checkpoint['amp'])
                 logger.info(f"=> loaded successfully '{config.MODEL.RESUME}' (epoch {checkpoint['epoch']})")
                 if 'best_metrics' in checkpoint:
                     best_metrics = checkpoint['best_metrics']
+                if 'best_metrics_ema' in checkpoint:
+                    best_metrics_ema = checkpoint['best_metrics_ema']
+            config.freeze()
     else:
-        msg = model.load_state_dict(checkpoint, strict=False)
+        msg = models['main'].load_state_dict(checkpoint, strict=False)
         logger.info(msg)
     del checkpoint
     torch.cuda.empty_cache()
-    return best_metrics
+    return best_metrics,best_metrics_ema
 
 def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,best_f1,ema,is_ema=False,best_patr90=0.0):
     save_state = {'state_dict': model.state_dict(),
@@ -179,50 +226,56 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
 
     logger.info(f"{save_path} saved !!!")
 
-def save_checkpoint_V2(config, epoch, model, best_metrics,optimizer, lr_scheduler, logger,is_best,ema,is_ema=False):
-    save_state = {'state_dict': model.state_dict(),
+
+def _save_checkpoint_V2(config, epoch, models, best_metrics,optimizer, lr_scheduler, logger,is_best,ema,prefix='',best_model_name='main',is_ema=False,best_metrics_ema=None):
+    ema_prefix = 'ema' if is_ema else ''
+    other_models_sd = {}
+    for m in config.MODEL.SAVE_OTHER_MODEL_NAME:
+        if str(m).lower() == 'main':
+            continue
+        else:
+            other_models_sd[str(m)] = models[m].state_dict()
+    save_state = {'state_dict': models['main'].state_dict(),
                   'optimizer': optimizer.state_dict(),
                   'best_metrics':best_metrics,
                   'epoch': epoch,
                   'config': config,
-                  'ema':ema.module.state_dict() if ema is not None else None}
-    save_state_best = {'state_dict': model.state_dict(),
-                        'best_metrics':best_metrics,
-                        'epoch': epoch,
-                        'config': config}
+                  'other_models':other_models_sd,
+                  'ema':ema.module.state_dict() if ema is not None else None,
+                  'best_metrics_ema': best_metrics_ema}
+
     if config.TRAIN.LR_SCHEDULER.NAME is not None:
         save_state['lr_scheduler'] = lr_scheduler.state_dict()
     if config.APEX_AMP:
-        amp.initialize(model, opt_level='O1')
+        amp.initialize(models['main'], opt_level='O1')
         save_state['amp'] = amp.state_dict()
 
-    if is_ema:
-        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_ckpt.pth')
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_best_model.pth')
-        history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_his_ema_best_model.pth')
-    else:
-        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ckpt.pth')
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_best_model.pth')
-        history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_his_best_model.pth')
+    # get the saved filename
+    save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f"_{prefix}_"+f"_{ema_prefix}_"+'ckpt.pth')
+
     logger.info(f"{save_path} saving......")
     torch.save(save_state, save_path)
     
     if is_best:
-        torch.save(save_state_best, best_path)
-        # shutil.copyfile(save_path, best_path)
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f"_{prefix}_"+f"_{ema_prefix}_"+'btml.pth')
+        shutil.copyfile(save_path, best_path)
     if epoch == config.TRAIN.EPOCHS - 1:
+        # 多次实验留下的最佳
+        history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{prefix}_"+f"_{ema_prefix}_"+'hbtml.pth')
+
         if os.path.exists(history_best_path):
             checkpoint = torch.load(best_path, map_location='cpu')
             checkpoint_his = torch.load(history_best_path, map_location='cpu')
+
             metrics = checkpoint['best_metrics']
             metrics_his = checkpoint_his['best_metrics']
-            best_metric_name = config.TEST.BEST_MODEL_METRIC.lower()
+            best_metric_name = config.TEST.BEST_MODEL_METRIC[str(best_model_name)].lower()
 
             if best_metric_name in metrics_his:
                 if metrics[best_metric_name] > metrics_his[best_metric_name]:
                     shutil.copyfile(best_path, history_best_path)
-                else:
-                    shutil.copyfile(best_path, history_best_path)
+            else:
+                shutil.copyfile(best_path, history_best_path)
         else:
             shutil.copyfile(best_path, history_best_path)
 
@@ -293,6 +346,7 @@ def get_sigmod_num(start=0,curr_step=0,all_step=0,end=0.999,alph=10):
     '''
     thr_min_conf = start + (round((1 / (1+math.exp(-alph*(curr_step / all_step)))-0.5 )*2,3)) * (end-start)
     return thr_min_conf
+
 class ModelEmaV3(torch.nn.Module):
     """ Model Exponential Moving Average V2
 
