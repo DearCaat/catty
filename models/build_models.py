@@ -47,4 +47,5 @@ def build_model(config):
             drop_rate=config.MODEL.DROP_RATE,
             drop_path_rate=config.MODEL.DROP_PATH_RATE
         )
+    model = [model] if type(model) not in (list,tuple) else model
     return model

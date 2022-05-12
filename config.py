@@ -98,6 +98,9 @@ _C.MODEL.PRETRAINED = True
 
 _C.MODEL.NUM_PATCHES=17
 
+# 在多模型训练的时候，到底哪些模型需要存放在GPU中，0始终是主模型
+_C.MODEL.TOGPU_MODEL_IDS = [0] 
+
 # -----------------------------------------------------------------------------
 # Training settings
 # -----------------------------------------------------------------------------
@@ -207,7 +210,7 @@ _C.TEST = CN()
 # Whether to use center crop when testing
 _C.TEST.CROP = 1.
 # top1 f1 auc
-_C.TEST.BEST_METRIC = 'top1'
+_C.TEST.BEST_MODEL_METRIC = 'top1'
 
 # -----------------------------------------------------------------------------
 # Misc

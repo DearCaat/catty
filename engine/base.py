@@ -58,7 +58,10 @@ def log_meter(metrics,log_list,logger):
 class BaseTrainer():
     def __init__(self,trainer,**kwargs):
         self.trainer = trainer
-    def train_one_epoch(self,config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,logger=None,**kwargs):
+        self.best_metrics = trainer.test_metrics
+
+
+    def train_one_epoch(self,config,models, criterions, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,logger=None,**kwargs):
         model.train()
         torch.cuda.empty_cache()
         optimizer.zero_grad()
@@ -81,51 +84,42 @@ class BaseTrainer():
                 samples = samples.cuda(non_blocking=config.DATA.PIN_MEMORY)
                 targets = targets.cuda(non_blocking=config.DATA.PIN_MEMORY)
 
-            # 当伪标签为二分类时或二分类训练时，需要二分类标签进行loss计算
-            if config.BINARYTRAIN_MODE:
-                targets_bin = targets.clone()
-                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
-            else:
-                targets_bin = None
-
             # timm dataloader prefetcher will do this
             if mixup_fn is not None and not config.DATA.TIMM:
                 samples, targets = mixup_fn(samples, targets)
 
             with amp_autocast():
-                loss,metrics_values,output = self.trainer.cal_loss_func(config,model,idx,samples,targets,targets_bin,epoch,num_steps,criterion)
+                loss,metrics_values,output = self.trainer.cal_loss_func(config,models,idx,samples,targets,epoch,num_steps,criterions)
                 if isinstance(output, (tuple, list)):
                     predictions = output[0]
 
-        # with torch.autograd.detect_anomaly():
             if config.TRAIN.ACCUMULATION_STEPS > 1:
                 loss = loss / config.TRAIN.ACCUMULATION_STEPS
                 if loss_scaler is not None:
                     loss_scaler(
                         loss, optimizer,
                         clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
-                        parameters=model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
+                        parameters=model_parameters(models, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
                         create_graph=second_order)
                 else:
                     loss.backward(create_graph=second_order)
                     if config.TRAIN.CLIP_GRAD > 0:
                         dispatch_clip_grad(
-                            model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
+                            model_parameters(models, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
                             value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
                 if (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0:
                     optimizer.step()
                     optimizer.zero_grad()
                     if model_ema is not None:
-                        model_ema.update(model)
+                        model_ema.update(models[0])
                     if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
                         lr_scheduler.step(epoch * num_steps + idx)
                     else:
                         lr_scheduler.step_update(epoch * num_steps + idx)
-                    
+
+                    # 每个iter更新
                     self.trainer.update_per_iter(config,epoch,idx)
             else:
-                #loss = criterion(outputs, targets)
                 optimizer.zero_grad()
                 if loss_scaler is not None:
                     loss_scaler(

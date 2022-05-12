@@ -14,4 +14,4 @@ def build_trainer(config):
             criterion_teacher = config.RDD_TRANS.TEACHER_LOSS
         )
     base = BaseTrainer(trainer=trainer)
-    return base.train_one_epoch,base.predict,base.validate
+    return base.train_one_epoch,base.predict,base.validate,base.best_metrics

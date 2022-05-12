@@ -93,9 +93,7 @@ def load_checkpoint_V2(config, model,optimizer=None, lr_scheduler=None,logger=No
     if 'state_dict' in checkpoint:
         msg = model.load_state_dict(checkpoint['state_dict'], strict=False)
         logger.info(msg)
-        max_accuracy = 0.0
-        best_auc = 0.0
-        best_f1 = 0.0
+        best_metrics = None
         if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e' :
             if 'lr_scheduler' in checkpoint:
                 lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
@@ -108,17 +106,14 @@ def load_checkpoint_V2(config, model,optimizer=None, lr_scheduler=None,logger=No
                     amp.initialize(model, opt_level='O1')
                     amp.load_state_dict(checkpoint['amp'])
                 logger.info(f"=> loaded successfully '{config.MODEL.RESUME}' (epoch {checkpoint['epoch']})")
-                if 'max_accuracy' in checkpoint and 'best_auc' in checkpoint:
-                    max_accuracy = checkpoint['max_accuracy']
-                    best_auc = checkpoint['best_auc']
-                if 'best_f1' in checkpoint:
-                    best_f1 = checkpoint['best_f1']
+                if 'best_metrics' in checkpoint:
+                    best_metrics = checkpoint['best_metrics']
     else:
         msg = model.load_state_dict(checkpoint, strict=False)
         logger.info(msg)
     del checkpoint
     torch.cuda.empty_cache()
-    return max_accuracy,best_auc,best_f1
+    return best_metrics
 
 def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,best_f1,ema,is_ema=False,best_patr90=0.0):
     save_state = {'state_dict': model.state_dict(),
@@ -161,22 +156,22 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
         if os.path.exists(history_best_path):
             checkpoint = torch.load(best_path, map_location='cpu')
             checkpoint_his = torch.load(history_best_path, map_location='cpu')
-            if config.TEST.BEST_METRIC.lower() == 'f1':
+            if config.TEST.BEST_MODEL_METRIC.lower() == 'f1':
                 if 'best_f1' in checkpoint_his:
                     if checkpoint['best_f1'] > checkpoint_his['best_f1']:
                         shutil.copyfile(best_path, history_best_path)
                 else:
                     shutil.copyfile(best_path, history_best_path)
-            elif config.TEST.BEST_METRIC.lower() == 'p@r90':
+            elif config.TEST.BEST_MODEL_METRIC.lower() == 'p@r90':
                 if 'p@r90' in checkpoint_his:
                     if checkpoint['p@r90'] > checkpoint_his['p@r90']:
                         shutil.copyfile(best_path, history_best_path)
                 else:
                     shutil.copyfile(best_path, history_best_path)
-            elif config.TEST.BEST_METRIC.lower() == 'top1':
+            elif config.TEST.BEST_MODEL_METRIC.lower() == 'top1':
                 if checkpoint['max_accuracy'] > checkpoint_his['max_accuracy']:
                     shutil.copyfile(best_path, history_best_path)
-            elif config.TEST.BEST_METRIC.lower() == 'auc':
+            elif config.TEST.BEST_MODEL_METRIC.lower() == 'auc':
                 if checkpoint['best_auc'] > checkpoint_his['best_auc']:
                     shutil.copyfile(best_path, history_best_path)
         else:
@@ -221,7 +216,7 @@ def save_checkpoint_V2(config, epoch, model, best_metrics,optimizer, lr_schedule
             checkpoint_his = torch.load(history_best_path, map_location='cpu')
             metrics = checkpoint['best_metrics']
             metrics_his = checkpoint_his['best_metrics']
-            best_metric_name = config.TEST.BEST_METRIC.lower()
+            best_metric_name = config.TEST.BEST_MODEL_METRIC.lower()
 
             if best_metric_name in metrics_his:
                 if metrics[best_metric_name] > metrics_his[best_metric_name]:

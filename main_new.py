@@ -24,9 +24,10 @@ from collections import OrderedDict
 from models import build_model
 from engine import build_trainer
 from data import build_loader
-from utils import ModelEmaV3, get_sigmod_num
+from utils import ModelEmaV3, get_sigmod_num, load_checkpoint_V2
 from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
+from criterion import build_criterion
 from logger import create_logger
 from utils import load_best_model, load_checkpoint, save_checkpoint, get_grad_norm,  reduce_tensor,l1_regularizer,getDataByStick
 from sklearn.metrics import roc_auc_score,precision_recall_curve,f1_score
@@ -114,7 +115,7 @@ def parse_option():
 
 def main(config):
 
-    train_one_epoch,predict,validate = build_trainer(config)
+    train_one_epoch,predict,validate,best_metrics = build_trainer(config)
 
     if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e':
         dataset_train, dataset_val, data_loader_train, data_loader_val, mixup_fn = build_loader(is_train=True,config=config)
@@ -122,7 +123,7 @@ def main(config):
         dataset_test,data_loader_test = build_loader(is_train=False,config=config)
         
     logger.info(f"Creating model:{config.MODEL.NAME}/{config.MODEL.BACKBONE}")
-    model = build_model(config)
+    models = build_model(config)
 
     # setup augmentation batch splits for contrastive loss or split bn
     '''num_aug_splits = 0
@@ -135,16 +136,20 @@ def main(config):
         assert num_aug_splits > 1 or args.resplit
         model = convert_splitbn_model(model, max(num_aug_splits, 2))'''
 
-    model.cuda()
+    # 考虑多模型情况下的，GPU存储
+    for model_id in config.MODEL.TOGPU_MODEL_IDS:
+        models[model_id].cuda()
+
     logger.info(f"model:{config.MODEL.NAME}/{config.MODEL.BACKBONE}")
 
     optimizer = build_optimizer(config, model)
 
     # setup automatic mixed-precision (AMP) loss scaling and op casting
+    # 半精度暂时只考虑训练
     amp_autocast = suppress  # do nothing
     loss_scaler = None
     if use_amp == 'apex':
-        model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
+        models[0], optimizer = amp.initialize(models[0], optimizer, opt_level='O1')
         loss_scaler = ApexScaler()
         if config.LOCAL_RANK == 0:
             logger.info('Using NVIDIA APEX AMP. Training in mixed precision.')
@@ -167,20 +172,17 @@ def main(config):
     model_ema = None
     if config.MODEL_EMA:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
-        model_ema = ModelEmaV3(model, decay=config.EMA_DECAY, device='cpu' if config.EMA_FORCE_CPU else None)
+        model_ema = ModelEmaV3(models[0], decay=config.EMA_DECAY, device='cpu' if config.EMA_FORCE_CPU else None)
 
-    max_accuracy = 0.0
-    best_auc = 0.0
-    max_f1 = 0.0
-    max_f1_ema = .0
-    max_accuracy_ema = .0
-    best_auc_ema = .0
-     
+    # setup loss function
+    criterions = build_criterion(config)
+    for cri_ids in range(len(criterions)):
+        criterions[cri_ids].cuda()
 
     if config.MODEL.RESUME:
-        criterion = torch.nn.CrossEntropyLoss()
-        criterion.cuda()
-        max_accuracy,best_auc = load_checkpoint(config, model, optimizer, lr_scheduler, logger)
+
+        max_accuracy,best_auc = load_checkpoint_V2(config, model, optimizer, lr_scheduler, logger)
+
         if model_ema is not None:
             load_checkpoint(config, model_ema,logger=logger,is_ema=True) 
         if config.TRAIN_MODE=='eval':
@@ -236,63 +238,54 @@ def main(config):
             # Apex DDP preferred unless native amp is activated
             if config.LOCAL_RANK == 0:
                 logger.info("Using NVIDIA APEX DistributedDataParallel.")
-            model = ApexDDP(model, delay_allreduce=True)
+            models[0] = ApexDDP(models[0], delay_allreduce=True)
         else:
             if config.LOCAL_RANK  == 0:
                 logger.info("Using native Torch DistributedDataParallel.")
-            model = NativeDDP(model, device_ids=[config.LOCAL_RANK ])  # can use device str in Torch >= 1.1
-        model_without_ddp = model.module
+            models[0] = NativeDDP(models[0], device_ids=[config.LOCAL_RANK ])  # can use device str in Torch >= 1.1
+        models_without_ddp = models
+        models_without_ddp[0] = models[0].module
         # NOTE: EMA model does not need to be wrapped by DDP
     else:
-        model_without_ddp = model
+        models_without_ddp = models
 
-    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    n_parameters = sum(p.numel() for p in models[0].parameters() if p.requires_grad)
     logger.info(f"number of params: {n_parameters}")
-    if hasattr(model_without_ddp, 'flops'):
-        flops = model_without_ddp.flops()
+    if hasattr(models_without_ddp[0], 'flops'):
+        flops = models_without_ddp[0].flops()
         logger.info(f"number of GFLOPs: {flops / 1e9}")
-
-    # setup loss function
-    if config.AUG.MIXUP > 0.:
-        # smoothing is handled with mixup label transform
-        criterion = SoftTargetCrossEntropy()
-    elif config.MODEL.LABEL_SMOOTHING > 0.:
-        criterion = LabelSmoothingCrossEntropy(smoothing=config.MODEL.LABEL_SMOOTHING)
-    else:
-        criterion = torch.nn.CrossEntropyLoss()
-    criterion.cuda()
 
     logger.info("Start training")
     start_time = time.time()
     loss_rec = np.array([])
 
-    thr_list = np.array([config.RDD_TRANS.NOR_THR for i in range(config.RDD_TRANS.INST_NUM_CLASS)])
-
+    # wandb log. watch, record gradient of the model training
     if config.LOG_WANDB and has_wandb:
         wandb.watch(model, log_freq=100)
-    # try:
+
     for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
         if not config.DATA.TFRECORD_MODE and config.DISTRIBUTED:
             data_loader_train.sampler.set_epoch(epoch)
 
-        loss_r,train_metrics = train_one_epoch(config, model_without_ddp, criterion, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,amp_autocast=amp_autocast, loss_scaler=loss_scaler,teacher_ema=teacher_ema,model_ema=model_ema,thr_list=thr_list)
+        loss_r,train_metrics = train_one_epoch(config, models_without_ddp, criterions, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,amp_autocast=amp_autocast, loss_scaler=loss_scaler,model_ema=model_ema)
         #np.append(loss_rec,loss_r)
-        acc1, acc5,loss,auc,eval_metrics = validate(config, data_loader_val, model_without_ddp,amp_autocast=amp_autocast,criterion=criterion)
-        if teacher_ema is not None:
-            acc1_ema, acc5_ema,loss_ema,auc_ema,eval_metrics_ema = validate(config, data_loader_val, teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion)
-        elif model_ema is not None:
-            acc1_ema, acc5_ema,loss_ema,auc_ema,eval_metrics_ema = validate(config, data_loader_val, model_ema.module,amp_autocast=amp_autocast,criterion=criterion)
+        loss,eval_metrics = validate(config, data_loader_val, models_without_ddp,amp_autocast=amp_autocast,criterion=criterions)
+
+        if model_ema is not None:
+            loss_ema,eval_metrics_ema = validate(config, data_loader_val, model_ema.module,amp_autocast=amp_autocast,criterion=criterions)
+
         logger.info(f"Accuracy of the network on the {len(dataset_val)} test images: {acc1:.1f}%")
-        for i in range(len(thr_list)):
-            logger.info(f"Thr:  {thr_list[i]:.2f}")
-        
+
         # save the ema checkpoint
-        if model_ema is not None or teacher_ema is not None:
+        if model_ema is not None:
+            is_best_ema = max(best_metrics[config.TEST.BEST_MODEL_METRIC],eval_metrics_ema[config.TEST.BEST_MODEL_METRIC])
+
             f1_ema = eval_metrics_ema['macro_f1']
             is_best_ema = f1_ema > max_f1_ema
             max_accuracy_ema = max(max_accuracy_ema, acc1_ema) if epoch > 0 else 0
             best_auc_ema = max(best_auc_ema,auc_ema) if epoch > 0 else 0
             max_f1_ema = max(max_f1_ema,f1_ema)
+
             if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
                 save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,None,is_ema=True)
 
@@ -313,8 +306,7 @@ def main(config):
                 f'Max f1: {max_f1:.2f}%\t'
                 f'Max ema_f1: {max_f1_ema:.2f}%\t'
                 f'Best AUC: {best_auc:.2f}%')
-    # except:
-    #     print(torch.cuda.memory_stats())
+
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     logger.info('Training time {}'.format(total_time_str))
@@ -367,7 +359,6 @@ def main(config):
             logger.info(patr)
 
 if __name__ == '__main__':
-    #torch.multiprocessing.set_start_method('spawn')
 
     _, config = parse_option()
     os.makedirs(config.OUTPUT, exist_ok=True)
@@ -379,7 +370,7 @@ if __name__ == '__main__':
     
     if config.LOG_WANDB:
         if has_wandb:
-            wandb.init(project=config.EXP_NAME, config=config)
+            wandb.init(project=config.PROJECT_NAME, config=config,entity="dearcat",name=config.EXP_NAME)
         else: 
             logger.warning("You've requested to log metrics to wandb but package not found. "
                             "Metrics not being logged to wandb, try `pip install wandb`")
@@ -401,7 +392,7 @@ if __name__ == '__main__':
         use_amp = 'apex'
     elif config.APEX_AMP or config.NATIVE_AMP:
         logger.warning("Neither APEX or native Torch AMP is available, using float32. "
-                        "Install NVIDA apex or upgrade to PyTorch 1.6") 
+                        "Install NVIDIA apex or upgrade to PyTorch 1.6") 
     config.freeze()
 
     if 'WORLD_SIZE' in os.environ:
