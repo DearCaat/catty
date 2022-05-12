@@ -9,6 +9,221 @@ import torch
 from timm.utils import *
 from timm.models import  model_parameters
 
+class INetClsEngine:
+    def __init__(self,**kwargs) -> None:
+        self.train_metrics = OrderedDict([
+        ('loss_teacher_meter',AverageMeter()),
+        ('acc1_meter',AverageMeter()),
+        ('acc5_meter',AverageMeter()),
+        ])
+        self.train_metrics_epoch_log =['dis_rec_meters','selec_rec_meters']
+        self.train_metrics_iter_log =['loss_teacher_meter','dis_ins_meter','patch_num_meter','cluster_num_meter','cluster_ema_num_meter']
+
+        self.test_metrics = OrderedDict([
+        ('acc1_meter',AverageMeter()),
+        ('acc5_meter',AverageMeter()),
+        ('cluster_num_meter',AverageMeter()),
+        ('auc',.0),
+        ('macro_f1',.0),
+        ('micro_f1',.0)
+        ])
+        self.test_metrics_epoch_log =['auc','macro_f1','micro_f1']
+        self.test_metrics_iter_log =['acc1_meter','acc5_meter','patch_num_meter','cluster_num_meter']
+    def cal_loss_func(self,config,model,idx,samples,targets,targets_bin,epoch,num_steps,criterion,**kwargs,):
+
+        criterion_teacher = self.criterion_teacher if self.criterion_teacher is not None else criterion
+        dis_ins,p,label_pl,b,cluster_num_ema = 0,1,[],targets.size(0),[0]
+
+        output,o_inst,_,cluster_num = model(samples)
+        # 设定正常图片在类别中的索引
+        pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
+        
+            #_,pl_inst = teacher_ema.module(samples)
+        #output_pl = torch.nn.functional.softmax(pl_inst,dim=2)
+        if config.RDD_TRANS.INST_NUM_CLASS != 2:
+            targets_pl = targets
+        else:
+            if targets_bin is None:
+                targets_bin = targets.clone()
+                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
+                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+            targets_pl = targets_bin
+
+        if config.RDD_TRANS.PERSUDO_LEARNING: 
+            with torch.no_grad():
+                _,pl_inst,output_pl,cluster_num_ema = model_ema.module(samples)
+                torch.cuda.empty_cache()
+            b,p,cls = pl_inst.shape
+            t_cpu = targets_pl.cpu()
+            ins_t = targets_pl.unsqueeze(-1).repeat((1,p))
+
+            output_bag_label = output_pl[torch.functional.F.one_hot(ins_t,num_classes=config.RDD_TRANS.INST_NUM_CLASS) == 1].view(b,p)        #包所属标签下的置信度
+            if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]
+                min_nor_thr = out_tmp_sort[[i for i in range(b)],np.floor(p*self.thr_list[t_cpu])] # [b 1]
+                min_nor_thr = min_nor_thr.unsqueeze(-1).repeat((1,p))        # [b p]
+            else:
+                min_nor_thr = torch.ones(size=(b,p))
+            min_nor_thr = min_nor_thr.cuda(non_blocking=True)
+
+            _,label_pl = torch.max(output_pl,dim=2)
+            #label_pl = torch.argmax(output_pl,dim=2)
+            #label_tmp = label_pl.clone()
+            #获得正常包索引和病害包索引
+            #bs_index_nor = targets_pl==pl_nor_cls_index
+            #bs_index_dis = bs_index_nor==False
+            ps_mask_nor = (ins_t - pl_nor_cls_index == 0)
+            ps_mask_dis = ps_mask_nor==False
+
+            #将所有实例设为正常
+            label_pl[:,:] = pl_nor_cls_index 
+            # sigmod函数来保证前期增加速率远远高于后期，优于线性增长
+            thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+            thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+            #把网络判断为不是正常的部分实例置为包病害标签
+            if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                #判断为相应病害的实例置为包标签
+                #mask_ins =  (label_tmp - ins_t  == 0)
+                #将病害包里判断为不是正常的实例都置为包标签 & (output_bag_label > thr_min_conf)
+                mask_ins =   ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf)) & (output_bag_label > thr_min_dis_conf) )  | (output_bag_label - min_nor_thr >  0))
+                label_pl[mask_ins] = ins_t[mask_ins]
+                #选取部分置信度比较高的实例参与loss计算   label_tmp - config.DATA.NOR_CLS_INDEX  == 0
+                mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
+            else:
+                #全部都用
+                #mask_ins = (label_tmp - label_tmp == 0)
+                #只要正常图片 (output_bag_label - 0.9 > 0)
+                mask_ins = ps_mask_nor 
+
+                #label_pl[bs_index_dis] = ins_t[bs_index_dis]
+
+            #统计病害实例
+            dis_count = torch.count_nonzero(label_pl - pl_nor_cls_index,dim=1) 
+            dis_ins += torch.sum(dis_count)
+
+            selec_rec = [ () for i in range(len(self.thr_list)) ]
+            dis_rec = [ () for i in range(len(self.thr_list)) ]
+            for i in range(len(self.thr_list)):
+                i_index = targets_pl==i
+                dis_tmp = dis_count[i_index]
+                selec_tmp = mask_ins[i_index]
+
+                if len(selec_tmp)>0:
+                    selec_rec[i] = ( len(selec_tmp[selec_tmp==True]) / (len(selec_tmp)*p),b)
+
+                if len(dis_tmp) > 0 and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                    thr_tmp = torch.sum(dis_tmp) / (p * len(dis_tmp))
+                    self.dis_ratio_list[i].append(thr_tmp.cpu())
+
+                    #thr_list[i] = 0.9999 * thr_list[i] + (1-0.9999)* thr_tmp
+                    #thr_list[i] = 0.1 if thr_list[i] < 0.1 else thr_list[i]
+                    #thr_list[i] = thr_tmp
+                    dis_rec[i] = (thr_tmp,b)
+
+            #选择部分patch来计算loss
+            #if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+            label_pl = label_pl[mask_ins]
+            o_inst = o_inst[mask_ins]
+            #     label_pl = label_pl[bs_index_nor]
+            #     label_pl = label_pl.view(-1)
+            #     o_inst = o_inst[bs_index_nor]
+            #     o_inst = o_inst.view(-1,cls)
+        #else:
+
+        #计算loss
+            label_pl = label_pl.view(-1)
+            o_inst = o_inst.view(-1,cls)
+            if o_inst.size(0)>0:
+                loss_pl = criterion_teacher(o_inst,label_pl)
+            else:
+                loss_pl = 0
+        else:
+            loss_pl = 0
+
+        classify_loss = criterion(output, targets)
+        loss = classify_loss + loss_pl
+
+        metrics_values = OrderedDict([
+        ('classify_loss_meter',(classify_loss,targets.size(0))),
+        
+        ('loss_teacher_meter', (torch.tensor(loss_pl),targets.size(0))),
+        ('dis_ins_meter',(torch.tensor(dis_ins / (targets.size(0) * p)),targets.size(0))),
+        ('patch_num_meter',(torch.tensor(len(label_pl) / (p*b)),b)),
+        ('cluster_num_meter', (torch.tensor(sum(cluster_num) / b),b)),
+        ('cluster_ema_num_meter',(torch.tensor(sum(cluster_num_ema)),b)),
+        ('dis_rec_meters',torch.tensor(dis_rec)),
+        ('selec_rec_meters',torch.tensor(selec_rec)),
+        ])
+
+        return loss,metrics_values,OrderedDict([('dis_ratio_list',self.dis_ratio_list)])
+
+    def update_per_iter(self,config,epoch,idx,**kwargs):
+        teacher_ema = kwargs['teacher_ema']
+        model = kwargs['model']
+
+        if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup' or config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
+                #teacher_ema.decay_diff = (epoch * num_steps + idx) / (config.TRAIN.EPOCHS * num_steps)
+                teacher_ema.decay_diff = 0
+        if config.RDD_TRANS.EMA_DECAY_SCHEDULER == 'warmup_flat':
+            teacher_ema.decay_diff = config.RDD_TRANS.EMA_DECAY if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH else teacher_ema.decay_diff
+        if epoch > 1:
+            # 将前面特征层与后面实例分类层分开更新，分类层更新率更高
+            #teacher_ema.decay_diff = 0.9997
+            # 前面10个epoch不更新特征层
+            #teacher_ema.decay = 1 if epoch < 10 else config.RDD_TRANS.EMA_DECAY
+            teacher_ema.update(model)
+
+    def update_per_epoch(self,config,epoch,**kwargs):
+        if config.RDD_TRANS.PERSUDO_LEARNING and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+            for i in range(len(self.thr_list)):
+                dis_ratio_tmp= np.sort(np.array(self.dis_ratio_list[i]))
+                self.thr_list[i] = 0.75 * self.thr_list[i] + 0.25 * dis_ratio_tmp[math.floor(len(dis_ratio_tmp) * 0.01)]
+        
+        # 每一轮更新内部参数
+        self.dis_ratio_list=[[] for i in range(len(self.thr_list))]
+    def measure_per_iter(self,output,targets,**kwargs):
+        topk = (1,5)
+        cluster_num = kwargs['cluster_num']
+
+        # topk acc cls
+        acc1,acc5 = accuracy(output, targets, topk=topk)
+
+        metrics_values = OrderedDict([
+        ('acc1_meter',(acc1,targets.size(0))),
+        ('acc5_meter',(acc5,targets.size(0))),
+        ('cluster_num_meter',(torch.tensor(sum(cluster_num) / targets.size(0)),targets.size(0))),
+        ])
+        others = OrderedDict([
+        ('Null',None)
+        ])
+        return metrics_values,others
+    def measure_per_epoch(self,config,**kwargs):
+        auc = 0
+        label = kwargs['label']
+        pred = kwargs['pred']
+        if config.BINARYTRAIN_MODE:
+            ma_f1 = f1_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int),np.argmax(pred,axis=1),average='binary')
+            mi_f1 = ma_f1
+
+            auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), pred[:,1])
+
+        else:
+            ma_f1 = f1_score(label,np.argmax(pred,axis=1),average='macro')
+            mi_f1 = f1_score(label,np.argmax(pred,axis=1),average='micro')
+
+            auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), 1-pred[:,config.DATA.NOR_CLS_INDEX])
+
+        metrics_values = OrderedDict([
+        ('auc',auc),
+        ('macro_f1',ma_f1),
+        ('micro_f1',mi_f1)
+        ])
+        others = OrderedDict([
+        ('Null',None)
+        ])
+
+        return metrics_values,others
+
 
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,logger=None):
     model.train()
