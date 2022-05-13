@@ -12,7 +12,9 @@ from PIL import Image
 _logger = logging.getLogger(__name__)
 _ERROR_RETRY = 50
 
-def _build_dataset(name,config,_type='train'):
+def _build_dataset(config,_type='train'):
+
+    name = config.DATA.DATALOADER_NAME.lower().split('_')[1]
 
     if _type == 'train':
         split = config.DATA.TRAIN_SPLIT
@@ -37,7 +39,7 @@ def _build_dataset(name,config,_type='train'):
 
 
 def build_dataset(config,_type='train_val'):
-    name = config..lower()
+    
     _type = _type.lower()
     _type = _type.split('_')
 
@@ -45,7 +47,7 @@ def build_dataset(config,_type='train_val'):
 
     datasets = set()
     for _t in _type:
-        datasets += (_build_dataset(name,config,_t))
+        datasets += (_build_dataset(config,_t))
 
     return datasets
 

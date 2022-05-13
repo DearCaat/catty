@@ -218,6 +218,8 @@ _C.TEST = CN()
 _C.TEST.CROP = 1.
 # top1 f1 auc，{'model_best_save_idx':'metric'}
 _C.TEST.BEST_MODEL_METRIC = {'main':'top1'}
+# 二分类测试
+_C.TEST.BINARY_MODE = False
 
 # -----------------------------------------------------------------------------
 # Misc
@@ -330,6 +332,7 @@ def update_config(config, args):
     if args.binary_train:
         config.BINARYTRAIN_MODE = True
         config.MODEL.NUM_CLASSES = 2
+        config.TEST.BINARY_MODE = True
     if args.load_test_dir:
         config.LOAD_TEST_DIR = args.load_test_dir
     if args.epochs:

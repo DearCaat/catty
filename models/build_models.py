@@ -31,12 +31,14 @@ def build_model(config):
             persistent_center = config.RDD_TRANS.CLUSTER.PERSISTENT_CENTER,
             cluster_flip_sel = config.RDD_TRANS.TEST_CLU_FLIP_SEL
         )
+        models = {'main':model}
     elif model_name.startswith('vgg'):
         model = create_model(
             config.MODEL.NAME,
             pretrained=config.MODEL.PRETRAINED,
             num_classes=config.MODEL.NUM_CLASSES,
         )
+        models = {'main':model}
     else:
         # drop_rate=config.MODEL.DROP_RATE,
         # drop_path_rate=config.MODEL.DROP_PATH_RATE
@@ -47,5 +49,5 @@ def build_model(config):
             drop_rate=config.MODEL.DROP_RATE,
             drop_path_rate=config.MODEL.DROP_PATH_RATE
         )
-    model = [model] if type(model) not in (list,tuple) else model
-    return model
+        models = {'main':model}
+    return models
