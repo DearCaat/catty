@@ -1,22 +1,54 @@
 import torch.utils.data as data
 from transform import build_transform
+from timm.data import create_dataset,create_parser
+from utils import _search_split
+import logging
+from timm.data.transforms import str_to_interp_mode
+from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+import numpy as np
+import torch
+from PIL import Image
 
-def build_dataset(config):
-    
+_logger = logging.getLogger(__name__)
+_ERROR_RETRY = 50
 
-#采用timm库，作了小小改动，支持多gpu，支持多线程，支持shuffle，不支持cache
-def tfds_dataset(is_train,config):
-    if is_train:
-        transform_train = build_transform(True,config)
-        train_dataset = IterableImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,split='train',gray=config.DATA.GRAY,shuffle=True,transform=transform_train,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,thumb=config.THUMB_MODE)
+def _build_dataset(name,config,_type='train'):
 
-        transform_test = build_transform(False,config)
-        val_dataset = IterableImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,split='test',gray=config.DATA.GRAY,transform=transform_test,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,eval=eval,thumb=config.THUMB_MODE)
-        return train_dataset,val_dataset
-    else:
-        transform_test = build_transform(False,config)
-        test_dataset = IterableImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,split='test',gray=config.DATA.GRAY,transform=transform_test,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,eval=eval,thumb=config.THUMB_MODE)
-        return test_dataset
+    if _type == 'train':
+        split = config.DATA.TRAIN_SPLIT
+        is_train = True
+    elif _type == 'val':
+        split = config.DATA.VAL_SPLIT
+        is_train = False
+    elif _type == 'test':
+        split = config.DATA.TEST_SPLIT
+        is_train = False
+    if name == 'timm':
+        return create_dataset(
+        config.DATA.DATASET,
+        root=config.DATA.DATA_PATH, split=split, is_training=is_train,
+        batch_size=config.DATA.BATCH_SIZE,repeats=config.DATA.EPOCH_REPEATS)
+    elif name == 'tfds':
+        transform = build_transform(is_train,config)
+        return IterableImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,split=split,gray=config.DATA.GRAY,shuffle=True,transform=transform,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,thumb=config.THUMB_MODE)
+    elif name == 'multiview':
+        transform = build_transform(is_train,config)
+        return MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform,is_multi_view=config.AUG.MULTI_VIEW,size=config.DATA.IMG_SIZE,timm_trans=config.AUG.TIMM_TRANS)
+
+
+def build_dataset(config,_type='train_val'):
+    name = config..lower()
+    _type = _type.lower()
+    _type = _type.split('_')
+
+    assert all(_t in ('train','val','test') for _t in _type)
+
+    datasets = set()
+    for _t in _type:
+        datasets += (_build_dataset(name,config,_t))
+
+    return datasets
+
 
 # 适用于常见的多数据增强的方法，暂时考虑两个视角
 class MulitiViewImageDataset(data.Dataset):
@@ -189,6 +221,7 @@ class PatchImageDataset(data.Dataset):
     def filenames(self, basename=False, absolute=False):
         return self.parser.filenames(basename, absolute)
 
+#采用timm库，作了小小改动，支持多gpu，支持多线程，支持shuffle，不支持cache
 class IterableImageDataset(data.IterableDataset):
 
     def __init__(

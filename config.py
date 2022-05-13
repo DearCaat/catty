@@ -61,6 +61,8 @@ _C.DATA.TIMM = False
 _C.DATA.TIMM_PREFETCHER = False
 # pytorch dataloader
 _C.DATA.DROP_LAST = False
+# "dataloader_dataset" 
+_C.DATA.DATALOADER_NAME = 'timm_timm'
 
 
 _C.DATA.PATCH_SIZE=300

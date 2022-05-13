@@ -1,14 +1,11 @@
 from timm.data import create_dataset,create_loader
 import torch
+from dataset import build_dataset
 
-def timm_dataloader(config,is_train):
+def timm_dataloader(config,dataset_name,is_train):
     if is_train:
-        dataset_train = create_dataset(
-        config.DATA.DATASET,
-        root=config.DATA.DATA_PATH, split=config.DATA.TRAIN_SPLIT, is_training=True,
-        batch_size=config.DATA.BATCH_SIZE,repeats=config.DATA.EPOCH_REPEATS)
-        dataset_val = create_dataset(
-            config.DATA.DATASET, root=config.DATA.DATA_PATH, split=config.DATA.VAL_SPLIT, is_training=False, batch_size=config.DATA.BATCH_SIZE)
+        dataset_train,dataset_val = build_dataset()
+
         loader_train = create_loader(
             dataset_train,
             input_size=config.DATA.IMG_SIZE,
