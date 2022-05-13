@@ -53,16 +53,17 @@ def log_meter(metrics,log_list,logger):
                     log_str += f'{key} {value.val:4f} ({value.avg:.4f})\t'
                 else:
                     log_str += f'{key} {value:4f}\t'
-        logger.info(log_str)
+        if len(log_str) != 0:
+            logger.info(log_str)
 
 class BaseTrainer():
-    def __init__(self,trainer,**kwargs):
-        self.trainer = trainer
-        self.best_metrics = trainer.test_metrics
+    def __init__(self,engine,**kwargs):
+        self.engine = engine
+        self.best_metrics = engine.test_metrics
 
 
     def train_one_epoch(self,config,models, criterions, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,logger=None,**kwargs):
-        model.train()
+        models['main'].train()
         torch.cuda.empty_cache()
         optimizer.zero_grad()
         second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
@@ -89,7 +90,7 @@ class BaseTrainer():
                 samples, targets = mixup_fn(samples, targets)
 
             with amp_autocast():
-                loss,metrics_values,output = self.trainer.cal_loss_func(config,models,idx,samples,targets,epoch,num_steps,criterions)
+                loss,metrics_values,output = self.engine.cal_loss_func(config,models,idx,samples,targets,epoch,num_steps,criterions)
                 if isinstance(output, (tuple, list)):
                     predictions = output[0]
 
@@ -118,25 +119,25 @@ class BaseTrainer():
                         lr_scheduler.step_update(epoch * num_steps + idx)
 
                     # 每个iter更新
-                    self.trainer.update_per_iter(config,epoch,idx)
+                    self.engine.update_per_iter(config,epoch,idx,output=output)
             else:
                 optimizer.zero_grad()
                 if loss_scaler is not None:
                     loss_scaler(
                         loss, optimizer,
                         clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
-                        parameters=model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
+                        parameters=model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
                         create_graph=second_order)
                 else:
                     loss.backward(create_graph=second_order)
                     if config.TRAIN.CLIP_GRAD > 0:
                         dispatch_clip_grad(
-                            model_parameters(model, exclude_head='agc' in config.TRAIN.CLIP_MODE),
+                            model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE),
                             value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
                 
                 optimizer.step()
                 if model_ema is not None:
-                    model_ema.update(model)
+                    model_ema.update(models['main'])
 
                 if config.TRAIN.LR_SCHEDULER.NAME is not None:
                     if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
@@ -145,13 +146,13 @@ class BaseTrainer():
                         lr_scheduler.step_update(epoch * num_steps + idx)
 
                 # 每个iter更新
-                self.trainer.update_per_iter(config,epoch,idx)
+                self.engine.update_per_iter(config,epoch,idx,output=output)
 
             torch.cuda.synchronize()
             if not config.DISTRIBUTED:
                 loss_meter.update(loss.item(), targets.size(0))
             #acc1_meter.update(acc1.item(), targets.size(0))
-                update_metrics(config,self.trainer.train_metrics,metrics_values)
+                update_metrics(config,self.engine.train_metrics,metrics_values)
 
             batch_time.update(time.time() - end)
             np.append(loss_rec,loss_meter.avg)
@@ -161,7 +162,7 @@ class BaseTrainer():
                 if config.DISTRIBUTED:
                     reduced_loss = reduce_tensor(loss.data)
                     loss_meter.update(reduced_loss.item(), input.size(0))
-                    update_metrics(config,self.trainer.train_metrics,metrics_values,distributed=True)
+                    update_metrics(config,self.engine.train_metrics,metrics_values,distributed=True)
                 #lr = optimizer.param_groups[0]['lr']
                 lrl = [param_group['lr'] for param_group in optimizer.param_groups]
                 lr = sum(lrl) / len(lrl)
@@ -175,9 +176,9 @@ class BaseTrainer():
                     f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
                     f'mem {memory_used:.0f}MB')
                 # log per iter
-                log_meter(self.trainer.train_metrics,self.trainer.train_metrics_iter_log,logger)
+                log_meter(self.engine.train_metrics,self.engine.train_metrics_iter_log,logger)
         #每一轮更新一次
-        self.trainer.update_per_epoch(config,epoch)
+        self.engine.update_per_epoch(config,epoch)
 
         if hasattr(optimizer, 'sync_lookahead'):
             optimizer.sync_lookahead()
@@ -185,7 +186,7 @@ class BaseTrainer():
         epoch_time = time.time() - start
         logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
         # log per epoch
-        log_meter(self.trainer.train_metrics,self.trainer.train_metrics_epoch_log,logger)
+        log_meter(self.engine.train_metrics,self.engine.train_metrics_epoch_log,logger)
 
         torch.cuda.empty_cache()
         return loss,OrderedDict([('loss', loss_meter.avg)])
@@ -248,8 +249,8 @@ class BaseTrainer():
 
         return save_pred,save_label
 
-    def validate(self, config, data_loader, model,save_pre=False,amp_autocast=suppress, log_suffix='',criterion=None,logger=None,**kwargs):
-        model.eval()
+    def validate(self, config, data_loader, models,save_pre=False,amp_autocast=suppress, log_suffix='',criterion=None,logger=None,**kwargs):
+        models['main'].eval()
         torch.cuda.empty_cache()
 
         batch_time = AverageMeter()
@@ -269,35 +270,27 @@ class BaseTrainer():
                     images = images.cuda(non_blocking=True)
                     targets = targets.cuda(non_blocking=True)
 
-                #if config.EVAL_MODE:
-                targets_bin = targets.clone()
-
-                if 'cqu_bpdd' in config.DATA.DATASET:
-                    targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-                    targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
-
                 # compute output
                 with amp_autocast():
-                    output = model(images)
+                    output = models['main'](images)
                 if isinstance(output, (tuple, list)):
                     predition = output[0]
+                else:
+                    predition = output
 
                 output_soft = torch.nn.functional.softmax(predition,dim=-1)
 
-                if config.BINARYTRAIN_MODE:
-                    loss = criterion(predition, targets_bin)
-                else:
-                    loss = criterion(predition, targets)
+                loss = criterion[0](predition, targets)
                     
                 save_pred = np.append(save_pred,output_soft.cpu().numpy())
                 save_label = np.append(save_label,targets.cpu().numpy())
                 
-                metrics_values,others = self.trainer.measure_per_iter(output,targets)
+                metrics_values,others = self.engine.measure_per_iter(config,output,targets)
 
                 if config.DISTRIBUTED:
                     loss = reduce_tensor(loss)
                 loss_meter.update(loss.item(), targets.size(0))
-                update_metrics(config,self.trainer.test_metrics,metrics_values,config.DISTRIBUTED)
+                update_metrics(config,self.engine.test_metrics,metrics_values,config.DISTRIBUTED)
 
                 torch.cuda.synchronize()
                 # measure elapsed time
@@ -311,15 +304,15 @@ class BaseTrainer():
                         f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                         f'Loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
                         f'Mem {memory_used:.0f}MB')
-                    log_meter(self.trainer.test_metrics,self.trainer.test_metrics_iter_log,logger)
+                    log_meter(self.engine.test_metrics,self.engine.test_metrics_iter_log,logger)
             
             save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
 
-            metrics_values_epoch,others_epoch = self.trainer.measure_per_epoch(config,others=others,label=save_label,pred=save_pred)
-            update_metrics(config,self.trainer.test_metrics,metrics_values_epoch)
-            log_meter(metrics_values_epoch,self.trainer.test_metrics_epoch_log,logger)
+            metrics_values_epoch,others_epoch = self.engine.measure_per_epoch(config,others=others,label=save_label,pred=save_pred)
+            update_metrics(config,self.engine.test_metrics,metrics_values_epoch)
+            log_meter(metrics_values_epoch,self.engine.test_metrics_epoch_log,logger)
 
-        metrics = OrderedDict([(key,value.avg) if isinstance(value,AverageMeter) else (key,value) for key,value in self.trainer.test_metrics.items()])
+        metrics = OrderedDict([(key+log_suffix,value.avg) if isinstance(value,AverageMeter) else (key+log_suffix,value) for key,value in self.engine.test_metrics.items()])
         torch.cuda.empty_cache()
         if save_pre:
             return loss_meter.avg, metrics, save_pred, save_label

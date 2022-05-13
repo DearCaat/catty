@@ -74,7 +74,7 @@ _C.DATA.CROP_SIZE=300
 # Trainer settings, more settings please refer to /configs/**.yaml
 # -----------------------------------------------------------------------------
 _C.TRAINER = CN()
-_C.TRAINER.NAME = 'rdd_trans'
+_C.TRAINER.NAME = 'iNet_cls'
 
 # -----------------------------------------------------------------------------
 # Model settings
@@ -216,8 +216,8 @@ _C.AUG.MULTI_VIEW = None
 _C.TEST = CN()
 # Whether to use center crop when testing
 _C.TEST.CROP = 1.
-# top1 f1 auc，{'model_best_save_idx':'metric'}
-_C.TEST.BEST_MODEL_METRIC = {'main':'top1'}
+# top1 f1 auc，['model_best_save_idx','metric']
+_C.TEST.BEST_MODEL_METRIC = ['main','top1']
 # 二分类测试
 _C.TEST.BINARY_MODE = False
 
@@ -282,8 +282,8 @@ def _update_config_from_file(config, cfg_file):
 def update_config(config, args):
     if args.trainer:
         config.TRAINER.NAME = args.trainer
-    pth = os.path.join(os.path.abspath('.'),'configs',config.TRAINER.NAME+'.yaml')
-    _update_config_from_file(config, pth)
+    # pth = os.path.join(os.path.abspath('.'),'configs',config.TRAINER.NAME+'.yaml')
+    # _update_config_from_file(config, pth)
 
     if args.cfg:
         if type(args.cfg) in (tuple,list):

@@ -1,4 +1,6 @@
+from ast import Or
 from contextlib import suppress
+from distutils.command.config import config
 import time
 import numpy as np
 import datetime
@@ -10,7 +12,7 @@ from timm.utils import *
 from timm.models import  model_parameters
 
 class INetClsEngine:
-    def __init__(self,**kwargs):
+    def __init__(self,config,**kwargs):
         # 除了主损失以外的metric，主损失会每个iter进行log
         # 每个iter更新的指标需要初始化成AverageMeter
         self.train_metrics = OrderedDict([
@@ -22,13 +24,19 @@ class INetClsEngine:
 
         self.test_metrics = OrderedDict([
         ('acc1_meter',AverageMeter()),
-        ('acc5_meter',AverageMeter()),
-        ('auc',.0),
-        ('macro_f1',.0),
-        ('micro_f1',.0)
-        ])
-        self.test_metrics_epoch_log =['auc','macro_f1','micro_f1']
+        ('acc5_meter',AverageMeter()),])
+
+        self.test_metrics_epoch_log =[]
         self.test_metrics_iter_log =['acc1_meter','acc5_meter']
+
+        if config.TEST.BINARY_MODE:
+            self.test_metrics.update(OrderedDict([
+                ('auc',.0),
+                ('macro_f1',.0),
+                ('micro_f1',.0),
+            ]))
+            self.test_metrics_epoch_log += ['auc','macro_f1','micro_f1']
+        
 
     def cal_loss_func(self,config,models,idx,samples,targets,epoch,num_steps,criterions,**kwargs):
 
@@ -82,7 +90,6 @@ class INetClsEngine:
         ('micro_f1',mi_f1)
         ])
         others = OrderedDict([
-        ('Null',None)
         ])
 
         return metrics_values,others

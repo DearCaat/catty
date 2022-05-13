@@ -1,7 +1,7 @@
 import torch.utils.data as data
-from transform import build_transform
+from .transform import build_transform
 from timm.data import create_dataset,create_parser
-from utils import _search_split
+from .utils import _search_split
 import logging
 from timm.data.transforms import str_to_interp_mode
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
@@ -45,9 +45,9 @@ def build_dataset(config,_type='train_val'):
 
     assert all(_t in ('train','val','test') for _t in _type)
 
-    datasets = set()
+    datasets = ()
     for _t in _type:
-        datasets += (_build_dataset(config,_t))
+        datasets += (_build_dataset(config,_t),)
 
     return datasets
 

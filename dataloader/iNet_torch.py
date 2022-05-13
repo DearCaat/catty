@@ -1,6 +1,6 @@
 from timm.data import create_dataset,create_loader
 import torch
-from dataset import build_dataset
+from .dataset import build_dataset
 
 def timm_dataloader(config,is_train):
     if is_train:

@@ -29,6 +29,6 @@ THUMB_MODE: true
 MODEL_EMA: true
 EMA_FORCE_CPU: true
 
-LOG_WANDB: true
+LOG_WANDB: false
 TRAIN_MODE: train
 EMA_DECAY: 0.9993

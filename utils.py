@@ -262,14 +262,14 @@ def _save_checkpoint_V2(config, epoch, models, best_metrics,optimizer, lr_schedu
     if epoch == config.TRAIN.EPOCHS - 1:
         # 多次实验留下的最佳
         history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{prefix}_"+f"_{ema_prefix}_"+'hbtml.pth')
-
+        best_model_metirc = list2dict(config.TEST.BEST_MODEL_METRIC)
         if os.path.exists(history_best_path):
             checkpoint = torch.load(best_path, map_location='cpu')
             checkpoint_his = torch.load(history_best_path, map_location='cpu')
 
             metrics = checkpoint['best_metrics']
             metrics_his = checkpoint_his['best_metrics']
-            best_metric_name = config.TEST.BEST_MODEL_METRIC[str(best_model_name)].lower()
+            best_metric_name = best_model_metirc[str(best_model_name)].lower()
 
             if best_metric_name in metrics_his:
                 if metrics[best_metric_name] > metrics_his[best_metric_name]:
@@ -315,6 +315,14 @@ def decimal_num(number):
         while number * 10 ** num != int(number * 10 ** num ):
             num += 1
         return num
+
+def list2dict(_list):
+    # [key,value,key2,value2,...] --> {key:value,key2:value2}
+    assert len(_list) % 2 == 0
+    _dict = {}
+    for i in range(0,len(_list),2):
+        _dict.update({_list[i]:_list[i+1]})
+    return _dict
    
 def getDataByStick(data,stick):
     '''

@@ -29,7 +29,7 @@ from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
 from criterion import build_criterion
 from logger import create_logger
-from utils import load_best_model, load_checkpoint, save_checkpoint, get_grad_norm,  reduce_tensor,l1_regularizer,getDataByStick
+from utils import load_best_model, load_checkpoint, save_checkpoint, get_grad_norm,  reduce_tensor,l1_regularizer,getDataByStick,list2dict
 from sklearn.metrics import roc_auc_score,precision_recall_curve,f1_score
 from contextlib import suppress
 try:
@@ -190,7 +190,7 @@ def main(config):
                 models_without_ddp['main'] = model_ema.module
             else:
                 ema_prefix = ''
-            loss_eval, eval_metrics,pred,label = validate(config, data_loader_test, models_without_ddp,save_pre=True,amp_autocast=amp_autocast,criterion=criterions,prefix=f'{ema_prefix}_test')
+            loss_eval, eval_metrics,pred,label = validate(config, data_loader_test, models_without_ddp,save_pre=True,amp_autocast=amp_autocast,criterion=criterions,log_suffix=f'_{ema_prefix}_test')
 
             _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+ema_prefix+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
             np.savez(_save_path,pred=pred,label=label)
@@ -224,8 +224,8 @@ def main(config):
 
     n_parameters = sum(p.numel() for p in models['main'].parameters() if p.requires_grad)
     logger.info(f"number of params: {n_parameters}")
-    if hasattr(models_without_ddp[0], 'flops'):
-        flops = models_without_ddp[0].flops()
+    if hasattr(models_without_ddp['main'], 'flops'):
+        flops = models_without_ddp['main'].flops()
         logger.info(f"number of GFLOPs: {flops / 1e9}")
 
     logger.info("Start training")
@@ -240,16 +240,17 @@ def main(config):
         if not config.DATA.TFRECORD_MODE and config.DISTRIBUTED:
             data_loader_train.sampler.set_epoch(epoch)
 
-        loss_r,train_metrics = train_one_epoch(config, models_without_ddp, criterions, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,amp_autocast=amp_autocast, loss_scaler=loss_scaler,model_ema=model_ema)
+        loss_r,train_metrics = train_one_epoch(config, models_without_ddp, criterions, data_loader_train, optimizer, epoch, mixup_fn, lr_scheduler,amp_autocast=amp_autocast, loss_scaler=loss_scaler,model_ema=model_ema,logger=logger)
         #np.append(loss_rec,loss_r)
-        loss,eval_metrics = validate(config, data_loader_val, models_without_ddp,amp_autocast=amp_autocast,criterion=criterions,prefix=f'_val')
+        loss,eval_metrics = validate(config, data_loader_val, models_without_ddp,amp_autocast=amp_autocast,criterion=criterions,logger=logger,log_suffix=f'_val')
 
         eval_metrics_ema = {}
         if model_ema is not None:
-            loss_ema,eval_metrics_ema = validate(config, data_loader_val, models_without_ddp_ema,amp_autocast=amp_autocast,criterion=criterions,prefix=f'ema_val')
+            loss_ema,eval_metrics_ema = validate(config, data_loader_val, models_without_ddp_ema,amp_autocast=amp_autocast,criterion=criterions,logger=logger,log_suffix=f'_ema_val')
 
-        eval_best_metric_ema = eval_metrics_ema[config.TEST.BEST_MODEL_METRIC['main']] if model_ema is not None else 0.
-        logger.info(f"The {config.TEST.BEST_MODEL_METRIC['main']} of the network on the {len(dataset_val)} test images: {eval_metrics[config.TEST.BEST_MODEL_METRIC['main']]:.1f}% {eval_best_metric_ema:.1f}%")
+        best_model_metirc = list2dict(config.TEST.BEST_MODEL_METRIC) 
+        eval_best_metric_ema = eval_metrics_ema[best_model_metirc['main']] if model_ema is not None else 0.
+        logger.info(f"The {best_model_metirc['main']} of the network on the {len(dataset_val)} test images: {eval_metrics[best_model_metirc['main']]:.1f}% {eval_best_metric_ema:.1f}%")
 
         # save the checkpoint
         save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,model_ema,eval_metrics,is_ema=False,best_metrics_ema=best_metrics_ema)
@@ -276,7 +277,7 @@ def main(config):
         dataset_test,data_loader_test = build_loader(is_train=False,config=config)
 
         load_best_model_V2(config, models_without_ddp, logger)
-        loss_eval, eval_metrics,pred,label = validate(config, data_loader_test, models_without_ddp,save_pre=True,amp_autocast=amp_autocast,criterion=criterions,perfix='_test')
+        loss_eval, eval_metrics,pred,label = validate(config, data_loader_test, models_without_ddp,save_pre=True,amp_autocast=amp_autocast,criterion=criterions,log_suffix='_test')
 
         _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
         np.savez(_save_path,pred=pred,label=label)
@@ -284,26 +285,27 @@ def main(config):
         eval_metrics_ema = {}
         if model_ema is not None:
             load_best_model_V2(config, model_ema.module, logger,is_ema=True)
-            loss_eval_ema, eval_metrics_ema,pred_ema,label_ema = validate(config, data_loader_test, models_without_ddp_ema,amp_autocast=amp_autocast,criterion=criterions,save_pre=True,perfix='ema_test')
+            loss_eval_ema, eval_metrics_ema,pred_ema,label_ema = validate(config, data_loader_test, models_without_ddp_ema,amp_autocast=amp_autocast,criterion=criterions,save_pre=True,log_suffix='_ema_test')
 
             _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_ema_'+config.DATA.DATASET.split('/')[-1])+'.npz'
             np.savez(_save_path,pred=pred_ema,label=label_ema)
 
-        eval_best_metric_ema = eval_metrics_ema[config.TEST.BEST_MODEL_METRIC['main']] if model_ema is not None else 0.
-        logger.info(f"The {config.TEST.BEST_MODEL_METRIC['main']} of the network on the {len(dataset_val)} test images: {eval_metrics[config.TEST.BEST_MODEL_METRIC['main']]:.1f}% {eval_best_metric_ema:.1f}%")
+        eval_best_metric_ema = eval_metrics_ema[best_model_metirc['main']] if model_ema is not None else 0.
+        logger.info(f"The {best_model_metirc['main']} of the network on the {len(dataset_val)} test images: {eval_metrics[best_model_metirc['main']]:.1f}% {eval_best_metric_ema:.1f}%")
 
         if config.LOG_WANDB and has_wandb:
             wandb.log(eval_metrics.update(eval_metrics_ema))
 
 # 此函数是为了处理ema和多模型保存而创建，ema模型的save_ckpt和正常模型流程基本一致，故将其抽象出来
 def save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,ema_model,eval_metrics,is_ema,best_metrics_ema):
+    best_model_metirc = list2dict(config.TEST.BEST_MODEL_METRIC) 
     # main始终在最前面，最佳评价指标字典必须和最佳模型名称列表一一对应
-    assert config.SAVE_BEST_MODEL_NAME[0] == 'main' and list(config.TEST.BEST_MODEL_METRIC.keys()) == config.SAVE_BEST_MODEL_NAME
+    assert config.SAVE_BEST_MODEL_NAME[0] == 'main' and list(best_model_metirc.keys()) == config.SAVE_BEST_MODEL_NAME
 
     for best_model_name in config.SAVE_BEST_MODEL_NAME:
         prefix = '' if best_model_name == 'main' else best_model_name
 
-        best_metric_name = config.TEST.BEST_MODEL_METRIC[best_model_name].lower()
+        best_metric_name = best_model_metirc[best_model_name].lower()
         is_best = eval_metrics[best_metric_name] > best_metrics[best_metric_name]
         for idx,_ in enumerate(best_metrics):
             best_metrics[idx] = max(best_metrics[idx],eval_metrics[idx])      

@@ -1,5 +1,5 @@
 from timm.data import Mixup
-from iNet_torch import *
+from .iNet_torch import *
 
 def build_loader(is_train,config):
     mixup_fn = None
