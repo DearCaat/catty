@@ -516,18 +516,14 @@ class SwinTransformer(nn.Module):
 
     def forward_features(self, _x):
         x = self.patch_embed(_x)
-        if torch.isnan(x).any():
-            print(self.state_dict())
+
         if self.absolute_pos_embed is not None:
             x = x + self.absolute_pos_embed
-        if torch.isnan(x).any():
-            print('2'+x)
+
         x = self.pos_drop(x)
-        if torch.isnan(x).any():
-            print('3'+x)
+
         x = self.layers(x)
-        if torch.isnan(x).any():
-            print('4'+x)
+
         _,_,dim = x.shape
         x = self.norm(x)  # B L C
         f = self.avgpool(x.transpose(1, 2))  # B C 1
@@ -537,8 +533,7 @@ class SwinTransformer(nn.Module):
     def forward(self, x):
         x,_ = self.forward_features(x)
         x = self.head(x)
-        if torch.isnan(x).any():
-            print('5'+x)
+
         return x
 
 def _create_swin_transformer(variant, pretrained=False, default_cfg=None, **kwargs):

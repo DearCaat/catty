@@ -234,7 +234,7 @@ def main(config):
 
     # wandb log. watch, record gradient of the model training
     if config.LOG_WANDB and has_wandb:
-        wandb.watch(model, log_freq=100)
+        wandb.watch(models_without_ddp['main'], log_freq=100)
 
     for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
         if not config.DATA.TFRECORD_MODE and config.DISTRIBUTED:

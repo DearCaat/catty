@@ -261,7 +261,7 @@ _C.EMA_FORCE_CPU = False
 _C.EMA_DECAY = 0.9997
 
 _C.TRAIN_MODE = 't_e'
-
+_C.EMPTY_CACHE = False
 
 def _update_config_from_file(config, cfg_file):
     config.defrost()

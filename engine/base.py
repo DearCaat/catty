@@ -68,7 +68,8 @@ class BaseTrainer():
 
     def train_one_epoch(self,config,models, criterions, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,logger=None,**kwargs):
         models['main'].train()
-        torch.cuda.empty_cache()
+        if config.EMPTY_CACHE:
+            torch.cuda.empty_cache()
         optimizer.zero_grad()
         second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
         num_steps = len(data_loader)
@@ -191,7 +192,8 @@ class BaseTrainer():
         # log per epoch
         log_meter(self.engine.train_metrics,self.engine.train_metrics_epoch_log,logger)
 
-        torch.cuda.empty_cache()
+        if config.EMPTY_CACHE:
+            torch.cuda.empty_cache()
         return loss,OrderedDict([('loss', loss_meter.avg)])
 
     def predict(config, data_loader, model,amp_autocast=suppress,logger=None):
@@ -254,7 +256,8 @@ class BaseTrainer():
 
     def validate(self, config, data_loader, models,save_pre=False,amp_autocast=suppress,criterion=None,logger=None,**kwargs):
         models['main'].eval()
-        torch.cuda.empty_cache()
+        if config.EMPTY_CACHE:
+            torch.cuda.empty_cache()
 
         batch_time = AverageMeter()
         loss_meter = AverageMeter()
@@ -316,7 +319,8 @@ class BaseTrainer():
             log_meter(metrics_values_epoch,self.engine.test_metrics_epoch_log,logger)
 
         metrics = OrderedDict([(key,value.avg) if isinstance(value,AverageMeter) else (key,value) for key,value in self.engine.test_metrics.items()])
-        torch.cuda.empty_cache()
+        if config.EMPTY_CACHE:
+            torch.cuda.empty_cache()
         if save_pre:
             return loss_meter.avg, metrics, save_pred, save_label
         else:    
