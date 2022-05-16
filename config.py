@@ -217,7 +217,7 @@ _C.TEST = CN()
 # Whether to use center crop when testing
 _C.TEST.CROP = 1.
 # top1 f1 auc，['model_best_save_idx','metric']
-_C.TEST.BEST_MODEL_METRIC = ['main','top1']
+_C.TEST.BEST_MODEL_METRIC = ['main','acc1']
 # 二分类测试
 _C.TEST.BINARY_MODE = False
 

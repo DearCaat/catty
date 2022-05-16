@@ -48,7 +48,8 @@ def build_dataset(config,_type='train_val'):
     datasets = ()
     for _t in _type:
         datasets += (_build_dataset(config,_t),)
-
+    if len(datasets) == 1:
+        datasets = datasets[0]
     return datasets
 
 

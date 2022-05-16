@@ -16,18 +16,18 @@ class INetClsEngine:
         # 除了主损失以外的metric，主损失会每个iter进行log
         # 每个iter更新的指标需要初始化成AverageMeter
         self.train_metrics = OrderedDict([
-        ('acc1_meter',AverageMeter()),
-        ('acc5_meter',AverageMeter()),
+        ('acc1',AverageMeter()),
+        ('acc5',AverageMeter()),
         ])
         self.train_metrics_epoch_log =[]
         self.train_metrics_iter_log =[]
 
         self.test_metrics = OrderedDict([
-        ('acc1_meter',AverageMeter()),
-        ('acc5_meter',AverageMeter()),])
+        ('acc1',AverageMeter()),
+        ('acc5',AverageMeter()),])
 
         self.test_metrics_epoch_log =[]
-        self.test_metrics_iter_log =['acc1_meter','acc5_meter']
+        self.test_metrics_iter_log =['acc1','acc5']
 
         if config.TEST.BINARY_MODE:
             self.test_metrics.update(OrderedDict([
@@ -61,34 +61,36 @@ class INetClsEngine:
         acc1,acc5 = accuracy(output, targets, topk=topk)
 
         metrics_values = OrderedDict([
-        ('acc1_meter',(acc1,targets.size(0))),
-        ('acc5_meter',(acc5,targets.size(0))),
+        ('acc1',(acc1,targets.size(0))),
+        ('acc5',(acc5,targets.size(0))),
         ])
 
         others = OrderedDict([])
 
         return metrics_values,others
     def measure_per_epoch(self,config,**kwargs):
-        auc = 0
-        label = kwargs['label']
-        pred = kwargs['pred']
-        if config.BINARYTRAIN_MODE:
-            ma_f1 = f1_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int),np.argmax(pred,axis=1),average='binary')
-            mi_f1 = ma_f1
+        metrics_values = OrderedDict([])
+        if config.TEST.BINARY_MODE:
+            auc = 0
+            label = kwargs['label']
+            pred = kwargs['pred']
+            if config.BINARYTRAIN_MODE:
+                ma_f1 = f1_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int),np.argmax(pred,axis=1),average='binary')
+                mi_f1 = ma_f1
 
-            auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), pred[:,1])
+                auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), pred[:,1])
 
-        else:
-            ma_f1 = f1_score(label,np.argmax(pred,axis=1),average='macro')
-            mi_f1 = f1_score(label,np.argmax(pred,axis=1),average='micro')
+            else:
+                ma_f1 = f1_score(label,np.argmax(pred,axis=1),average='macro')
+                mi_f1 = f1_score(label,np.argmax(pred,axis=1),average='micro')
 
-            auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), 1-pred[:,config.DATA.NOR_CLS_INDEX])
+                auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), 1-pred[:,config.DATA.NOR_CLS_INDEX])
 
-        metrics_values = OrderedDict([
-        ('auc',auc),
-        ('macro_f1',ma_f1),
-        ('micro_f1',mi_f1)
-        ])
+            metrics_values.update(OrderedDict([
+            ('auc',auc),
+            ('macro_f1',ma_f1),
+            ('micro_f1',mi_f1)
+            ]))
         others = OrderedDict([
         ])
 

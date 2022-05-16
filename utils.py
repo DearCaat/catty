@@ -15,15 +15,15 @@ try:
 except ImportError:
     amp = None
 def load_best_model_V2(config,models,logger,is_ema=False):
-    ema_prefix = 'ema' if is_ema else ''
+    ema_prefix = '_ema' if is_ema else ''
 
-    for best_model_name in config.SAVE_BEST_MODEL_NAME:
-        prefix = '' if best_model_name == 'main' else best_model_name
-        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f"_{prefix}_"+f"_{ema_prefix}_"+'ckpt.pth')
+    for best_model_name in config.MODEL.SAVE_BEST_MODEL_NAME:
+        prefix = best_model_name
+        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_ckpt.pth')
         if os.path.exists(ckpt_path):
             os.remove(ckpt_path)
 
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f"_{prefix}_"+f"_{ema_prefix}_"+'btml.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_btml.pth')
 
         logger.info(f"==============> Loading the best {prefix} {ema_prefix} model....................")
         checkpoint = torch.load(best_path, map_location='cpu')
@@ -31,13 +31,7 @@ def load_best_model_V2(config,models,logger,is_ema=False):
         if 'epoch' in checkpoint:
             logger.info(f"==============> Epoch {checkpoint['epoch']}....................")
 
-        if is_ema:
-            msg = models.load_state_dict(checkpoint['ema'], strict=False)
-            logger.info(f"ema: {msg}")
-            return 
-
         if best_model_name == 'main':
-            
             msg = models[best_model_name].load_state_dict(checkpoint['state_dict'], strict=False)
             if config.APEX_AMP and checkpoint['config'].APEX_AMP:
                 amp.initialize(models['main'], opt_level='O1')
@@ -46,8 +40,8 @@ def load_best_model_V2(config,models,logger,is_ema=False):
 
         logger.info(f"{prefix}: {msg}")
 
-        
-    
+        if is_ema:
+            return
 
 def load_best_model(config,models,logger,is_ema=False):
 
@@ -228,7 +222,7 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
 
 
 def _save_checkpoint_V2(config, epoch, models, best_metrics,optimizer, lr_scheduler, logger,is_best,ema,prefix='',best_model_name='main',is_ema=False,best_metrics_ema=None):
-    ema_prefix = 'ema' if is_ema else ''
+    ema_prefix = '_ema' if is_ema else ''
     other_models_sd = {}
     for m in config.MODEL.SAVE_OTHER_MODEL_NAME:
         if str(m).lower() == 'main':
@@ -243,6 +237,12 @@ def _save_checkpoint_V2(config, epoch, models, best_metrics,optimizer, lr_schedu
                   'other_models':other_models_sd,
                   'ema':ema.module.state_dict() if ema is not None else None,
                   'best_metrics_ema': best_metrics_ema}
+    # 全部保存占用空间太大，最佳模型只保存部分模型信息              
+    best_state = {
+        'state_dict': ema.module.state_dict() if is_ema else models['main'].state_dict(),
+        'config': config,
+        'best_metrics': best_metrics_ema if is_ema else best_metrics,
+    }
 
     if config.TRAIN.LR_SCHEDULER.NAME is not None:
         save_state['lr_scheduler'] = lr_scheduler.state_dict()
@@ -251,17 +251,19 @@ def _save_checkpoint_V2(config, epoch, models, best_metrics,optimizer, lr_schedu
         save_state['amp'] = amp.state_dict()
 
     # get the saved filename
-    save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f"_{prefix}_"+f"_{ema_prefix}_"+'ckpt.pth')
+    save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_ckpt.pth')
 
     logger.info(f"{save_path} saving......")
     torch.save(save_state, save_path)
     
     if is_best:
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f"_{prefix}_"+f"_{ema_prefix}_"+'btml.pth')
-        shutil.copyfile(save_path, best_path)
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_btml.pth')
+        torch.save(best_state, best_path)
+        # shutil.copyfile(save_path, best_path)
     if epoch == config.TRAIN.EPOCHS - 1:
         # 多次实验留下的最佳
-        history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{prefix}_"+f"_{ema_prefix}_"+'hbtml.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_btml.pth')
+        history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{prefix}"+f"{ema_prefix}"+'_hbtml.pth')
         best_model_metirc = list2dict(config.TEST.BEST_MODEL_METRIC)
         if os.path.exists(history_best_path):
             checkpoint = torch.load(best_path, map_location='cpu')

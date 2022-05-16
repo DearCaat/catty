@@ -1,4 +1,5 @@
 from contextlib import suppress
+from copy import deepcopy
 import time
 import numpy as np
 from numpy import ndarray
@@ -38,29 +39,32 @@ def _log_list_meter(list,key,logger):
         if isinstance(item,(list,tuple,Tensor,ndarray)):
             _log_list_meter(item)
         elif isinstance(item,AverageMeter):
-            log_str += f'{key} {item.val:4f} ({item.avg:.4f})\t'
+            log_str += f'{key} {item.val:.4f} ({item.avg:.4f})\t'
         else:
-            log_str += f'{key} {item:4f}\t'
+            log_str += f'{key} {item:.4f}\t'
     logger.info(log_str)
 
 def log_meter(metrics,log_list,logger):
         log_str = ''
         for key, value in metrics.items():
             if key in log_list:
+                key = key[:-6] if '_meter' in key else key
                 if isinstance(value,(list,tuple,Tensor,ndarray)):
                     _log_list_meter(value,key,logger)
                 elif isinstance(value,AverageMeter):
-                    log_str += f'{key} {value.val:4f} ({value.avg:.4f})\t'
+                    log_str += f'{key} {value.val:.4f} ({value.avg:.4f})\t'
                 else:
-                    log_str += f'{key} {value:4f}\t'
+                    log_str += f'{key} {value:.4f}\t'
         if len(log_str) != 0:
             logger.info(log_str)
 
 class BaseTrainer():
     def __init__(self,engine,**kwargs):
         self.engine = engine
-        self.best_metrics = engine.test_metrics
-
+        self.best_metrics = deepcopy(engine.test_metrics)
+        for key, value in self.best_metrics.items():
+            if isinstance(value,AverageMeter):
+                self.best_metrics[key] = value.avg
 
     def train_one_epoch(self,config,models, criterions, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,logger=None,**kwargs):
         models['main'].train()
@@ -151,7 +155,6 @@ class BaseTrainer():
             torch.cuda.synchronize()
             if not config.DISTRIBUTED:
                 loss_meter.update(loss.item(), targets.size(0))
-            #acc1_meter.update(acc1.item(), targets.size(0))
                 update_metrics(config,self.engine.train_metrics,metrics_values)
 
             batch_time.update(time.time() - end)
@@ -161,7 +164,7 @@ class BaseTrainer():
             if last_batch or idx % config.PRINT_FREQ == 0:
                 if config.DISTRIBUTED:
                     reduced_loss = reduce_tensor(loss.data)
-                    loss_meter.update(reduced_loss.item(), input.size(0))
+                    loss_meter.update(reduced_loss.item(), targets.size(0))
                     update_metrics(config,self.engine.train_metrics,metrics_values,distributed=True)
                 #lr = optimizer.param_groups[0]['lr']
                 lrl = [param_group['lr'] for param_group in optimizer.param_groups]
@@ -249,7 +252,7 @@ class BaseTrainer():
 
         return save_pred,save_label
 
-    def validate(self, config, data_loader, models,save_pre=False,amp_autocast=suppress, log_suffix='',criterion=None,logger=None,**kwargs):
+    def validate(self, config, data_loader, models,save_pre=False,amp_autocast=suppress,criterion=None,logger=None,**kwargs):
         models['main'].eval()
         torch.cuda.empty_cache()
 
@@ -312,7 +315,7 @@ class BaseTrainer():
             update_metrics(config,self.engine.test_metrics,metrics_values_epoch)
             log_meter(metrics_values_epoch,self.engine.test_metrics_epoch_log,logger)
 
-        metrics = OrderedDict([(key+log_suffix,value.avg) if isinstance(value,AverageMeter) else (key+log_suffix,value) for key,value in self.engine.test_metrics.items()])
+        metrics = OrderedDict([(key,value.avg) if isinstance(value,AverageMeter) else (key,value) for key,value in self.engine.test_metrics.items()])
         torch.cuda.empty_cache()
         if save_pre:
             return loss_meter.avg, metrics, save_pred, save_label

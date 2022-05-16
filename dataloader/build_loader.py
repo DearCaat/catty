@@ -1,7 +1,7 @@
 from timm.data import Mixup
 from .iNet_torch import *
 
-def build_loader(is_train,config):
+def build_loader(config,is_train):
     mixup_fn = None
     mixup_active = config.AUG.MIXUP > 0 or config.AUG.CUTMIX > 0. or config.AUG.CUTMIX_MINMAX is not None
     

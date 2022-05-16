@@ -10,7 +10,7 @@ MODEL:
   NAME: swin_small_patch4_window7_224
   DROP_PATH_RATE: .1
 TRAIN:
-  EPOCHS: 50
+  EPOCHS: 2
   WARMUP_EPOCHS: 2
   WEIGHT_DECAY: 0.00005
   BASE_LR: 0.0001
@@ -27,7 +27,7 @@ TEST:
   
 THUMB_MODE: true
 MODEL_EMA: true
-EMA_FORCE_CPU: true
+EMA_FORCE_CPU: false
 
 LOG_WANDB: false
 TRAIN_MODE: train
