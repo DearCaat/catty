@@ -104,7 +104,6 @@ def load_checkpoint(config, model,optimizer=None, lr_scheduler=None,logger=None,
         msg = model.load_state_dict(checkpoint, strict=False)
         logger.info(msg)
     del checkpoint
-    torch.cuda.empty_cache()
     return max_accuracy,best_auc,best_f1
 
 def load_checkpoint_V2(config, models,optimizer=None, lr_scheduler=None,logger=None,model_ema=None):
@@ -153,7 +152,6 @@ def load_checkpoint_V2(config, models,optimizer=None, lr_scheduler=None,logger=N
         msg = models['main'].load_state_dict(checkpoint, strict=False)
         logger.info(msg)
     del checkpoint
-    torch.cuda.empty_cache()
     return best_metrics,best_metrics_ema
 
 def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,best_f1,ema,is_ema=False,best_patr90=0.0):
