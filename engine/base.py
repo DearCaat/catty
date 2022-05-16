@@ -96,7 +96,7 @@ class BaseTrainer():
                 loss,metrics_values,output = self.engine.cal_loss_func(config,models,idx,samples,targets,epoch,num_steps,criterions)
                 if isinstance(output, (tuple, list)):
                     predictions = output[0]
-
+            
             if config.TRAIN.ACCUMULATION_STEPS > 1:
                 loss = loss / config.TRAIN.ACCUMULATION_STEPS
                 if loss_scaler is not None:
@@ -124,6 +124,7 @@ class BaseTrainer():
                     # 每个iter更新
                     self.engine.update_per_iter(config,epoch,idx,output=output)
             else:
+                # with torch.autograd.detect_anomaly():
                 optimizer.zero_grad()
                 if loss_scaler is not None:
                     loss_scaler(
@@ -137,8 +138,8 @@ class BaseTrainer():
                         dispatch_clip_grad(
                             model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE),
                             value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
-                
-                optimizer.step()
+            
+                    optimizer.step()
                 if model_ema is not None:
                     model_ema.update(models['main'])
 

@@ -40,13 +40,9 @@ class INetClsEngine:
         
 
     def cal_loss_func(self,config,models,idx,samples,targets,epoch,num_steps,criterions,**kwargs):
-
+        # torch.autograd.set_detect_anomaly(True)
         predictions = models['main'](samples)
-        loss = criterions[0](predictions,targets)
-        if isnan(loss.item()):
-            print(samples)
-            print(predictions)
-            print(targets)
+        loss = criterions[0](predictions.float(),targets)
         metrics_values = OrderedDict([
         ])
 

@@ -148,7 +148,7 @@ _C.TRAIN.OPTIMIZER = CN()
  #'Lookahead_adamw'
 _C.TRAIN.OPTIMIZER.NAME =  'lookahead_adamw'
 # Optimizer Epsilon
-_C.TRAIN.OPTIMIZER.EPS = 1e-8
+_C.TRAIN.OPTIMIZER.EPS = 1e-4
 # Optimizer Betas
 _C.TRAIN.OPTIMIZER.BETAS = (0.9, 0.999)
 # SGD momentum
