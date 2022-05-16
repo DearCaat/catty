@@ -88,7 +88,6 @@ class BaseTrainer():
             if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
                 samples = samples.cuda(non_blocking=config.DATA.PIN_MEMORY)
                 targets = targets.cuda(non_blocking=config.DATA.PIN_MEMORY)
-
             # timm dataloader prefetcher will do this
             if mixup_fn is not None and not config.DATA.TIMM:
                 samples, targets = mixup_fn(samples, targets)

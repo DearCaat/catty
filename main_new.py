@@ -348,8 +348,8 @@ if __name__ == '__main__':
         elif  has_apex:
             config.APEX_AMP = True
     else:
-        config.NATIVE_AMP = True
-        config.APEX_AMP = True
+        config.NATIVE_AMP = False
+        config.APEX_AMP = False
     if config.NATIVE_AMP and has_native_amp:
         use_amp = 'native'
     elif config.APEX_AMP and has_apex:

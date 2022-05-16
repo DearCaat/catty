@@ -1,6 +1,7 @@
 from ast import Or
 from contextlib import suppress
 from distutils.command.config import config
+from math import isnan
 import time
 import numpy as np
 import datetime
@@ -42,7 +43,10 @@ class INetClsEngine:
 
         predictions = models['main'](samples)
         loss = criterions[0](predictions,targets)
-
+        if isnan(loss.item()):
+            print(samples)
+            print(predictions)
+            print(targets)
         metrics_values = OrderedDict([
         ])
 
