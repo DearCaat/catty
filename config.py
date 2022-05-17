@@ -180,8 +180,8 @@ _C.AUG.HFLIP = 0.5
 _C.AUG.VFLIP = 0.
 # Color jitter factor   0.4
 _C.AUG.COLOR_JITTER = 0.  
-# Use AutoAugment policy. "v0" or "original"
-_C.AUG.AUTO_AUGMENT = 'rand-m3-n2-mstd0.5'
+# Use AutoAugment policy. "v0" or "original" rand-m3-n2-mstd0.5
+_C.AUG.AUTO_AUGMENT = None
 # Random erase prob
 _C.AUG.REPROB = 0.   #0.25
 # Random erase mode

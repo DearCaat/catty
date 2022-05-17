@@ -254,10 +254,10 @@ def main(config):
         if model_ema is not None:
             # ema模型暂时只考虑main模型的最佳模型存储
             save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,model_ema,eval_metrics_ema,is_ema=True,best_metrics_ema=best_metrics_ema)
-        
+        eval_metrics.update(eval_metrics_ema)
         update_summary(
             epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
-            write_header=False, log_wandb=config.LOG_WANDB and has_wandb,eval_metrics_ema=eval_metrics_ema)
+            write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
 
     for bt_metric in list(best_metrics.keys()):
         logger.info(f'Best {bt_metric}: {best_metrics[bt_metric]:.2f}%\t')
