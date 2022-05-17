@@ -1,4 +1,5 @@
 import os
+from collections import OrderedDict
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import time
@@ -256,11 +257,12 @@ def main(config):
         
         update_summary(
             epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
-            write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
+            write_header=False, log_wandb=config.LOG_WANDB and has_wandb,eval_metrics_ema=eval_metrics_ema)
 
     for bt_metric in list(best_metrics.keys()):
         logger.info(f'Best {bt_metric}: {best_metrics[bt_metric]:.2f}%\t')
     if config.LOG_WANDB and has_wandb:
+        best_metrics = OrderedDict([('eval_best_'+k,v) for k,v in best_metrics.items()])
         wandb.log(best_metrics)
 
     total_time = time.time() - start_time
@@ -288,7 +290,10 @@ def main(config):
         logger.info(f"The {best_model_metirc['main']} of the network on the {len(dataset_val)} test images: {eval_metrics[best_model_metirc['main']]:.1f}% {eval_best_metric_ema:.1f}%")
 
         if config.LOG_WANDB and has_wandb:
-            wandb.log(eval_metrics.update(eval_metrics_ema))
+            eval_metrics = OrderedDict([('test_'+k,v) for k,v in eval_metrics.items()])
+            eval_metrics_ema = OrderedDict([('test_ema_'+k,v) for k,v in eval_metrics_ema.items()])
+            eval_metrics.update(eval_metrics_ema)
+            wandb.log(eval_metrics)
 
 # 此函数是为了处理ema和多模型保存而创建，ema模型的save_ckpt和正常模型流程基本一致，故将其抽象出来
 def save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,ema_model,eval_metrics,is_ema,best_metrics_ema):
