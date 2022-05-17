@@ -5,7 +5,6 @@ import numpy as np
 from numpy import ndarray
 import datetime
 from collections import OrderedDict
-from sklearn.metrics import roc_auc_score,precision_recall_curve,f1_score
 
 import torch
 from torch import Tensor

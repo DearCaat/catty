@@ -1,4 +1,4 @@
-from timm.data import create_dataset,create_loader
+from timm.data import create_loader
 import torch
 from .dataset import build_dataset
 

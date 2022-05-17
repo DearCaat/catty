@@ -1,5 +1,4 @@
 import os
-from sys import prefix
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import time
@@ -7,30 +6,25 @@ import argparse
 import datetime
 import numpy as np
 from copy import deepcopy
-import math
 
 import torch
 import torch.backends.cudnn as cudnn
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
-from torch.nn.modules import module
 
-from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 from timm.utils import *
 from timm.loss import *
-from timm.models import  model_parameters
 
 from config import get_config
-from collections import OrderedDict
 from models import build_model
 from engine import build_trainer
 from dataloader import build_loader
-from utils import ModelEmaV3, _save_checkpoint_V2, get_sigmod_num, load_best_model_V2, load_checkpoint_V2
+from utils import ModelEmaV3, _save_checkpoint_V2, load_best_model_V2, load_checkpoint_V2
 from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
 from criterion import build_criterion
 from logger import create_logger
 from utils import load_best_model, load_checkpoint, save_checkpoint, get_grad_norm,  reduce_tensor,l1_regularizer,getDataByStick,list2dict
-from sklearn.metrics import roc_auc_score,precision_recall_curve,f1_score
+
 from contextlib import suppress
 try:
     # noinspection PyUnresolvedReferences
