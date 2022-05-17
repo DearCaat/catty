@@ -9,7 +9,7 @@ MODEL:
   NUM_CLASSES: 200
   # swin_base_patch4_window12_384_in22k
   NAME: swin_base_patch4_window12_384_in22k
-  DROP_PATH_RATE: .3
+  # DROP_PATH_RATE: .3
 TRAIN:
   EPOCHS: 50
   WARMUP_EPOCHS: 3
@@ -29,4 +29,5 @@ TEST:
   BEST_METRIC: top1
 
 MODEL_EMA: true
-
+LOG_WANDB: true
+TRAIN_MODE: train
