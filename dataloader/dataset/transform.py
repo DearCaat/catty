@@ -2,12 +2,46 @@ from timm.data import create_transform
 import albumentations as A
 from torchvision import transforms
 
+def _build_transform(config,is_train,type=None):
+    _name = config.DATA.DATALOADER_NAME.lower().split('_')[2]
+    if type is None:
+        if _name == 'timm':
+            return create_transform(
+                            input_size=config.DATA.IMG_SIZE,
+                            is_training=is_train,
+                            use_prefetcher=config.TIMM_PREFETCHER,
+                            no_aug = config.AUG.NO_AUG,
+                            scale=config.AUG.SCALE,
+                            ratio=config.AUG.RATIO,
+                            hflip=config.AUG.HFLIP,
+                            vflip=config.AUG.VFLIP,
+                            color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                            auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
+                            interpolation=config.DATA.INTERPOLATION,
+                            mean=config.AUG.NORM[0],
+                            std=config.AUG.NORM[1],
+                            re_prob=config.AUG.REPROB,
+                            re_mode=config.AUG.REMODE,
+                            re_count=config.AUG.RECOUNT,
+                            crop_pct=config.TEST.CROP,
+                            )
 
-def build_transform(is_train,config):
+def build_transform(config,is_train):
+    if config.AUG.MULTI_VIEW is not None:
+        _type = _type.lower().split('_')
+
+        assert all(_t in ('strong','weak','none') for _t in _type)
+        _transforms = ()
+        for _t in _type:
+            _transforms += (_build_transform(config,is_train,_t),)
+    else:
+        _transforms = _build_transform(config,is_train)
+    
+    return _transforms
+
     if is_train:
-        #first transform
         if config.AUG.MULTI_VIEW is not None:
-            if config.AUG.TIMM_TRANS:
+            if _name == 'timm':
 
                 transform_strong = create_transform(
                                     input_size=config.DATA.IMG_SIZE,
@@ -34,7 +68,7 @@ def build_transform(is_train,config):
                                     is_training=True,
                                     no_aug = True,
                                     interpolation=config.DATA.INTERPOLATION)
-            else:
+            elif name == '':
                 transform_strong = A.Compose([
                                     #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
                                     A.RandomBrightnessContrast(p=0.7),

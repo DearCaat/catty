@@ -25,16 +25,17 @@ def _build_dataset(config,_type='train'):
     elif _type == 'test':
         split = config.DATA.TEST_SPLIT
         is_train = False
+
     if name == 'timm':
         return create_dataset(
         config.DATA.DATASET,
         root=config.DATA.DATA_PATH, split=split, is_training=is_train,
         batch_size=config.DATA.BATCH_SIZE,repeats=config.DATA.EPOCH_REPEATS)
     elif name == 'tfds':
-        transform = build_transform(is_train,config)
+        transform = build_transform(config,is_train)
         return IterableImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,split=split,gray=config.DATA.GRAY,shuffle=True,transform=transform,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,thumb=config.THUMB_MODE)
     elif name == 'multiview':
-        transform = build_transform(is_train,config)
+        transform = build_transform(config,is_train)
         return MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform,is_multi_view=config.AUG.MULTI_VIEW,size=config.DATA.IMG_SIZE,timm_trans=config.AUG.TIMM_TRANS)
 
 
