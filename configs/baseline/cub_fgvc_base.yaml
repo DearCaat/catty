@@ -1,6 +1,6 @@
 DATA:
   VAL_SPLIT: test
-  DATALOADER_NAME: timm_timm_timm
+  DATALOADER_NAME: timm_timm_pim
   IMG_SIZE: (384,384) #(384,384)
   BATCH_SIZE: 16
   VAL_BATCH_SIZE: 38
@@ -9,7 +9,7 @@ MODEL:
   NUM_CLASSES: 200
   # swin_base_patch4_window12_384_in22k
   NAME: swin_base_patch4_window12_384_in22k
-  # DROP_PATH_RATE: .3
+  DROP_PATH_RATE: .2
 TRAIN:
   EPOCHS: 50
   WARMUP_EPOCHS: 3
@@ -31,3 +31,4 @@ TEST:
 MODEL_EMA: true
 LOG_WANDB: true
 TRAIN_MODE: train
+EMA_DECAY: 0.9993

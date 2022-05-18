@@ -1,6 +1,7 @@
 from timm.data import create_transform
 import albumentations as A
 from torchvision import transforms
+import torch
 
 def _build_transform(config,is_train,type=None):
     _name = config.DATA.DATALOADER_NAME.lower().split('_')[2]
@@ -25,6 +26,35 @@ def _build_transform(config,is_train,type=None):
                             re_count=config.AUG.RECOUNT,
                             crop_pct=config.TEST.CROP,
                             )
+        elif _name == 'pim':
+            # 448:600
+            # 384:510
+            # 768:
+            if is_train:
+                # transforms.RandomApply([RandAugment(n=2, m=3, img_size=data_size)], p=0.1)
+                # RandAugment(n=2, m=3, img_size=sub_data_size)
+                return transforms.Compose([
+                            transforms.Resize((510, 510), config.DATA.INTERPOLATION),
+                            transforms.RandomCrop(config.DATA.IMG_SIZE),
+                            transforms.RandomHorizontalFlip(),
+                            transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 5))], p=0.1),
+                            transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.1),
+                            transforms.ToTensor(),
+                            transforms.Normalize(
+                                mean=torch.tensor(config.AUG.NORM[0]),
+                                std=torch.tensor(config.AUG.NORM[1])
+                            ),
+                    ])
+            else:
+                return transforms.Compose([
+                            transforms.Resize((510, 510), config.DATA.INTERPOLATION),
+                            transforms.CenterCrop(config.DATA.IMG_SIZE),
+                            transforms.ToTensor(),
+                            transforms.Normalize(
+                                mean=torch.tensor(config.AUG.NORM[0]),
+                                std=torch.tensor(config.AUG.NORM[1])
+                            ),
+                    ])
 
 def build_transform(config,is_train):
     if config.AUG.MULTI_VIEW is not None:

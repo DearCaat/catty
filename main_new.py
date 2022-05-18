@@ -254,6 +254,9 @@ def main(config):
         if model_ema is not None:
             # ema模型暂时只考虑main模型的最佳模型存储
             save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,model_ema,eval_metrics_ema,is_ema=True,best_metrics_ema=best_metrics_ema)
+
+        # log
+        eval_metrics_ema = OrderedDict([('ema_'+k,v) for k,v in eval_metrics_ema.items()])
         eval_metrics.update(eval_metrics_ema)
         update_summary(
             epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
