@@ -1,4 +1,5 @@
 from timm.data import create_transform
+from timm.data.transforms import str_to_interp_mode
 import albumentations as A
 from torchvision import transforms
 import torch
@@ -34,7 +35,7 @@ def _build_transform(config,is_train,type=None):
                 # transforms.RandomApply([RandAugment(n=2, m=3, img_size=data_size)], p=0.1)
                 # RandAugment(n=2, m=3, img_size=sub_data_size)
                 return transforms.Compose([
-                            transforms.Resize((510, 510), config.DATA.INTERPOLATION),
+                            transforms.Resize((510, 510), str_to_interp_mode(config.DATA.INTERPOLATION)),
                             transforms.RandomCrop(config.DATA.IMG_SIZE),
                             transforms.RandomHorizontalFlip(),
                             transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 5))], p=0.1),
@@ -47,7 +48,7 @@ def _build_transform(config,is_train,type=None):
                     ])
             else:
                 return transforms.Compose([
-                            transforms.Resize((510, 510), config.DATA.INTERPOLATION),
+                            transforms.Resize((510, 510), str_to_interp_mode(config.DATA.INTERPOLATION)),
                             transforms.CenterCrop(config.DATA.IMG_SIZE),
                             transforms.ToTensor(),
                             transforms.Normalize(

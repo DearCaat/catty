@@ -27,10 +27,15 @@ def _build_dataset(config,_type='train'):
         is_train = False
 
     if name == 'timm':
+        if config.DATA.DATALOADER_NAME.lower().split('_')[0] == 'timm':
+            transform = None
+        else:
+            transform = build_transform(config,is_train)
+
         return create_dataset(
         config.DATA.DATASET,
         root=config.DATA.DATA_PATH, split=split, is_training=is_train,
-        batch_size=config.DATA.BATCH_SIZE,repeats=config.DATA.EPOCH_REPEATS)
+        batch_size=config.DATA.BATCH_SIZE,repeats=config.DATA.EPOCH_REPEATS,transform=transform)
     elif name == 'tfds':
         transform = build_transform(config,is_train)
         return IterableImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,split=split,gray=config.DATA.GRAY,shuffle=True,transform=transform,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,thumb=config.THUMB_MODE)
