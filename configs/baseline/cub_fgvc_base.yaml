@@ -18,7 +18,7 @@ TRAIN:
   WARMUP_LR: 1e-9
   MIN_LR: 1e-12
   OPTIMIZER:
-    NAME: lookahead_adamw
+    NAME: sgd
 AUG:
   NO_AUG: false
   SCALE: (0.7529411764705,0.7529411764705)  # 384 / 510
