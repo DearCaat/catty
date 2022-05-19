@@ -4,7 +4,7 @@ import torch.nn as nn
 from timm.models.registry import register_model
 from .gcn_cluster import *
 from .swin import _create_swin_transformer
-from kmeans_pytorch import kmeans,kmeans_predict
+#from kmeans_pytorch import kmeans,kmeans_predict
 
 
 class RddTransformer(nn.Module):

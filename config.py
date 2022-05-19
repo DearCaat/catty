@@ -68,7 +68,7 @@ _C.DATA.CROP_SIZE=300
 # -----------------------------------------------------------------------------
 _C.MODEL = CN()
 # Model type        #swin_small_patch4_window7_224  efficientnetv2_rw_s  deit_base_patch16_224  tf_efficientnet_b3 vit_base_patch32_224
-_C.MODEL.NAME = 'deit_small_patch16_224'
+_C.MODEL.NAME = 'swin_small_patch4_window7_224'
 # Model name
 _C.MODEL.BACKBONE = ''
 # Checkpoint to resume, could be overwritten by command line argument
@@ -120,10 +120,10 @@ _C.RDD_TRANS.CLUSTER.THR = 0.75
 # -----------------------------------------------------------------------------
 _C.TRAIN = CN()
 _C.TRAIN.START_EPOCH = 0
-_C.TRAIN.EPOCHS = 10
+_C.TRAIN.EPOCHS = 30
 _C.TRAIN.WARMUP_EPOCHS = 3
 _C.TRAIN.WEIGHT_DECAY = 0
-_C.TRAIN.BASE_LR = 1e-3
+_C.TRAIN.BASE_LR = 1e-4
 _C.TRAIN.WARMUP_LR = 5e-7
 _C.TRAIN.MIN_LR = 5e-7
 # Clip gradient norm                                     
@@ -142,7 +142,7 @@ _C.TRAIN.USE_CHECKPOINT = False
 
 # LR scheduler
 _C.TRAIN.LR_SCHEDULER = CN()
-_C.TRAIN.LR_SCHEDULER.NAME = None  #'cosine'
+_C.TRAIN.LR_SCHEDULER.NAME = 'cosine'  #'cosine'
 # STEP interval to decay LR, used in flat_cosine
 _C.TRAIN.LR_SCHEDULER.DECAY_STEPS_RATIO=0.5
 # Epoch interval to decay LR, used in StepLRScheduler
@@ -153,7 +153,7 @@ _C.TRAIN.LR_SCHEDULER.DECAY_RATE = 0.1
 # Optimizer
 _C.TRAIN.OPTIMIZER = CN()
  #'Lookahead_adamw'
-_C.TRAIN.OPTIMIZER.NAME =  'adamw'
+_C.TRAIN.OPTIMIZER.NAME =  'lookahead_adamw'
 # Optimizer Epsilon
 _C.TRAIN.OPTIMIZER.EPS = 1e-8
 # Optimizer Betas
