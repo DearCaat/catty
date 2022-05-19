@@ -28,13 +28,15 @@ _C.DATA.DATA_PATH = ''
 _C.DATA.PRETRAINED_DIR = ''
 # Dataset name     tfds/cqu_bpdd  cfd crack500 cracktre200
 _C.DATA.DATASET = 'cqu_bpdd'
-# 数据集中的正常图片所在的类别索引 cqu_bpdd ：6
+
 _C.DATA.NOR_CLS_INDEX = 6
+# 数据集中的正常图片所在的类别索引 cqu_bpdd ：6
+_C.DATA.DATA_NOR_INDEX = 6
 _C.DATA.GRAY = True
 # Input image size (h,w)  cqu_bpdd (900,1200) cfd(300,450)
 _C.DATA.IMG_SIZE = (224,224)
 # Interpolation to resize image (random, bilinear, bicubic)
-_C.DATA.INTERPOLATION = 'bicubic'
+_C.DATA.INTERPOLATION = 'bilinear'
 # Use zipped dataset instead of folder dataset
 # could be overwritten by command line argument
 _C.DATA.TFRECORD_MODE = False
@@ -49,14 +51,20 @@ _C.DATA.DALI = False
 # dataset train split (default: train)
 _C.DATA.TRAIN_SPLIT = 'train'
 # dataset validation split (default: validation)
-_C.DATA.VAL_SPLIT = 'val'
+_C.DATA.VAL_SPLIT = 'test'
 # dataset test split (default: test)
 _C.DATA.TEST_SPLIT = 'test'
 # epoch repeat multiplier (number of times to repeat dataset epoch per train epoch).
 _C.DATA.EPOCH_REPEATS = 0
 # Default timm thumb image loader
-_C.DATA.TIMM = True
-_C.DATA.TIMM_PREFETCHER = True
+_C.DATA.TIMM = False
+_C.DATA.TIMM_PREFETCHER = False
+# pytorch dataloader
+_C.DATA.DROP_LAST = False
+# "dataloader_dataset_transform"  
+# transform={torch,timm,album,custom...}. The first three totally depends on the _C.AUG configs
+_C.DATA.DATALOADER_NAME = 'timm_timm_timm'
+
 
 _C.DATA.PATCH_SIZE=300
 # for cfd 150 cracktree200 150 cqu_bpdd 300
@@ -64,11 +72,17 @@ _C.DATA.STRIDE=300
 _C.DATA.CROP_SIZE=300
 
 # -----------------------------------------------------------------------------
+# Trainer settings, more settings please refer to /configs/**.yaml
+# -----------------------------------------------------------------------------
+_C.TRAINER = CN()
+_C.TRAINER.NAME = 'iNet_cls'
+
+# -----------------------------------------------------------------------------
 # Model settings
 # -----------------------------------------------------------------------------
 _C.MODEL = CN()
 # Model type        #swin_small_patch4_window7_224  efficientnetv2_rw_s  deit_base_patch16_224  tf_efficientnet_b3 vit_base_patch32_224
-_C.MODEL.NAME = 'swin_small_patch4_window7_224'
+_C.MODEL.NAME = 'rdd_trans_swin_small_patch4_window7_224'
 # Model name
 _C.MODEL.BACKBONE = ''
 # Checkpoint to resume, could be overwritten by command line argument
@@ -77,58 +91,38 @@ _C.MODEL.RESUME = ''
 _C.MODEL.NUM_CLASSES = 8
 # Dropout rate     effi-b3 0.3`
 _C.MODEL.DROP_RATE = 0
-# Drop path rate   effi-b3 0.2  swin_s 0.3
+# Drop path rate   effi-b3 0.2  swin_s 0.3 swin_b_p4w12 0.5
 _C.MODEL.DROP_PATH_RATE = 0.3
 # Label Smoothing
 #_C.MODEL.LABEL_SMOOTHING = 0.1
-_C.MODEL.LABEL_SMOOTHING = 0
+_C.MODEL.LABEL_SMOOTHING = 0.
 # Start with pretrained version of specified network (if avail)
 _C.MODEL.PRETRAINED = True
 
 _C.MODEL.NUM_PATCHES=17
 
-# -----------------------------------------------------------------------------
-# RDD_TRANS settings
-# -----------------------------------------------------------------------------
-_C.RDD_TRANS = CN()
-_C.RDD_TRANS.EMA_DECAY = 0.9997
-_C.RDD_TRANS.EMA_DECAY_SCHEDULER = None #warmup    warmup_flat
-_C.RDD_TRANS.EMA_DECAY_SCHEDULER_FLAT_RATIO = 0.01
-_C.RDD_TRANS.INIT_STAGE_EPOCH = 0
-_C.RDD_TRANS.EMA_FORCE_CPU = False
-_C.RDD_TRANS.NOR_THR = 0.05
-_C.RDD_TRANS.TEST_THR = 0.995
-_C.RDD_TRANS.INST_NUM_CLASS = 2
-_C.RDD_TRANS.NOT_INST_TEST = True
-_C.RDD_TRANS.PERSUDO_LEARNING = False
+# 在多模型训练的时候，到底哪些模型需要存放在GPU中，main始终是主模型，在最前面
+_C.MODEL.TOGPU_MODEL_NAME = ['main'] 
+# 在多模型训练的时候，到底哪些模型需要保存在checkpoint中，,除main以外
+_C.MODEL.SAVE_OTHER_MODEL_NAME = [] 
+# 在多模型训练的时候，到底哪些模型需要保留下最佳模型中，main始终是主模型，在最前面,每一个都会单独存一个文件，训练过程中也会有单独的ckpt文件
+_C.MODEL.SAVE_BEST_MODEL_NAME = ['main'] 
 
-_C.RDD_TRANS.CLUSTER = CN()  # Kmeans因为要指定簇数量，因此不适用于该方法，该方法不同类别图片的簇数量理应不相等，而且不同种类病害的簇中心也不相同
-_C.RDD_TRANS.CLUSTER.NAME='kmeans'    #kmeans gcn
-_C.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE = 'cosine'  # euclidean cosine, default cosine, it's often better
-_C.RDD_TRANS.CLUSTER.SELECT_THR = 0.5
-# kmeans paras 
-_C.RDD_TRANS.CLUSTER.NUM_CLUSTER = 4
-_C.RDD_TRANS.CLUSTER.NUM_INIT = 10    # default
-_C.RDD_TRANS.CLUSTER.INIT = 'k-means++' # default
-# gcn paras
-_C.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION = 2
-_C.RDD_TRANS.CLUSTER.IPS_K_AT_HOP = (2,0)  # 先不考虑第二跳，因为效率问题
-_C.RDD_TRANS.CLUSTER.THR = 0.75
 
 # -----------------------------------------------------------------------------
 # Training settings
 # -----------------------------------------------------------------------------
 _C.TRAIN = CN()
 _C.TRAIN.START_EPOCH = 0
-_C.TRAIN.EPOCHS = 30
+_C.TRAIN.EPOCHS = 20
 _C.TRAIN.WARMUP_EPOCHS = 3
-_C.TRAIN.WEIGHT_DECAY = 0
+_C.TRAIN.WEIGHT_DECAY = .0
 _C.TRAIN.BASE_LR = 1e-4
 _C.TRAIN.WARMUP_LR = 5e-7
 _C.TRAIN.MIN_LR = 5e-7
 # Clip gradient norm                                     
 #_C.TRAIN.CLIP_GRAD = 5.0
-_C.TRAIN.CLIP_GRAD = 0
+_C.TRAIN.CLIP_GRAD = 0.
 # Gradient clipping mode. One of ("norm", "value", "agc")                                                                                   
 _C.TRAIN.CLIP_MODE = 'norm'
 # Auto resume from latest checkpoint
@@ -155,7 +149,7 @@ _C.TRAIN.OPTIMIZER = CN()
  #'Lookahead_adamw'
 _C.TRAIN.OPTIMIZER.NAME =  'lookahead_adamw'
 # Optimizer Epsilon
-_C.TRAIN.OPTIMIZER.EPS = 1e-8
+_C.TRAIN.OPTIMIZER.EPS = 1e-4
 # Optimizer Betas
 _C.TRAIN.OPTIMIZER.BETAS = (0.9, 0.999)
 # SGD momentum
@@ -163,12 +157,15 @@ _C.TRAIN.OPTIMIZER.MOMENTUM = 0.9
 
 #Loss
 _C.TRAIN.LOSS = CN()
+_C.TRAIN.LOSS.NAME = 'crossentropy'
 _C.TRAIN.LOSS.LAMBDA_L1 = 1e-3
 
 # -----------------------------------------------------------------------------
 # Augmentation settings
 # -----------------------------------------------------------------------------
 _C.AUG = CN()
+# 在dataloader 不使用 timm的情况下，是否使用timm的transform，主要好处是可以使用randaugment
+_C.AUG.TIMM_TRANS = False
 # Norm mean and std, default is [IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD], but old wsplin model use [(0.455,0.455,0.455),(0.225,0.225,0.225)]  effi-b3 use [(0.5,0.5,0.5),(0.5,0.5,0.5)]
 _C.AUG.NORM = [IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD]
 # Disable all training augmentation, override other train aug args
@@ -182,11 +179,11 @@ _C.AUG.HFLIP = 0.5
 # Vertical flip training aug probability
 _C.AUG.VFLIP = 0.
 # Color jitter factor   0.4
-_C.AUG.COLOR_JITTER = 0  
-# Use AutoAugment policy. "v0" or "original"
-_C.AUG.AUTO_AUGMENT = 'rand-m9-n2-mstd0.5'
+_C.AUG.COLOR_JITTER = 0.  
+# Use AutoAugment policy. "v0" or "original" rand-m3-n2-mstd0.5
+_C.AUG.AUTO_AUGMENT = None
 # Random erase prob
-_C.AUG.REPROB = 0   #0.25
+_C.AUG.REPROB = 0.   #0.25
 # Random erase mode
 _C.AUG.REMODE = 'pixel'
 # Random erase count
@@ -210,13 +207,20 @@ _C.AUG.MIXUP = 0.
 _C.AUG.CUTMIX = 0.
 # Number of augmentation splits (default: 0, valid: 0 or >=2)
 _C.AUG.SPLITS=0
+# output multi-view images, "strong_weak","strong_none","weak_none"
+# "student_teacher"
+_C.AUG.MULTI_VIEW = None
 
 # -----------------------------------------------------------------------------
 # Testing settings
 # -----------------------------------------------------------------------------
 _C.TEST = CN()
 # Whether to use center crop when testing
-_C.TEST.CROP = False
+_C.TEST.CROP = 1.
+# top1 f1 auc，['model_best_save_idx','metric']
+_C.TEST.BEST_MODEL_METRIC = ['main','acc1']
+# 二分类测试
+_C.TEST.BINARY_MODE = False
 
 # -----------------------------------------------------------------------------
 # Misc
@@ -231,7 +235,9 @@ _C.NATIVE_AMP = True
 # Path to output folder, overwritten by command line argument
 _C.OUTPUT = ''
 # name of experiment, overwritten by command line argument
-_C.EXP_NAME = 'default'
+_C.EXP_NAME = "default"
+# name of project, overwritten by command line argument
+_C.PROJECT_NAME = 'default'
 # Frequency to save checkpoint
 _C.SAVE_FREQ = 1
 # Frequency to logging info
@@ -250,12 +256,17 @@ _C.LOG_WANDB = False
 _C.LOCAL_RANK = 0
 _C.DISTRIBUTED = False
 _C.WORLD_SIZE = 0
-_C.MODEL_EMA = False
-_C.TRAIN_MODE = 't_e'
 
+_C.MODEL_EMA = False
+_C.EMA_FORCE_CPU = False
+_C.EMA_DECAY = 0.9997
+
+_C.TRAIN_MODE = 't_e'
+_C.EMPTY_CACHE = False
 
 def _update_config_from_file(config, cfg_file):
     config.defrost()
+    config.set_new_allowed(True)
     with open(cfg_file, 'r') as f:
         yaml_cfg = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -270,12 +281,29 @@ def _update_config_from_file(config, cfg_file):
 
 
 def update_config(config, args):
+    if args.trainer:
+        config.TRAINER.NAME = args.trainer
+    # pth = os.path.join(os.path.abspath('.'),'configs',config.TRAINER.NAME+'.yaml')
+    # _update_config_from_file(config, pth)
+
     if args.cfg:
-        _update_config_from_file(config, args.cfg)
+        if type(args.cfg) in (tuple,list):
+            for _cfg in args.cfg:
+                _update_config_from_file(config, _cfg)
+        else:
+            _update_config_from_file(config, args.cfg)
 
     config.defrost()
     if args.opts:
-        config.merge_from_list(args.opts)
+        _opts = []
+        # 将 ['key=value']转换成['key','value']
+        if '=' in args.opts[0]:
+            for opt in args.opts:
+                k,v = opt.split('=')
+                _opts += [k,v]
+        else:
+            _opts = args.opts
+        config.merge_from_list(_opts)
 
     # merge from specific arguments
     if args.batch_size:
@@ -288,6 +316,8 @@ def update_config(config, args):
         config.DATA.TFRECORD_MODE = True
     if args.title:
         config.EXP_NAME = args.title
+    if args.project:
+        config.PROJECT_NAME = args.project
     if args.resume:
         config.MODEL.RESUME = args.resume
     if args.use_checkpoint:
@@ -303,6 +333,7 @@ def update_config(config, args):
     if args.binary_train:
         config.BINARYTRAIN_MODE = True
         config.MODEL.NUM_CLASSES = 2
+        config.TEST.BINARY_MODE = True
     if args.load_test_dir:
         config.LOAD_TEST_DIR = args.load_test_dir
     if args.epochs:
@@ -316,6 +347,11 @@ def update_config(config, args):
     if args.ema:
         config.MODEL_EMA = args.ema
 
+    # timm 暂时不支持multi_view
+    if config.AUG.MULTI_VIEW is not None:
+        config.DATA.TIMM_PREFETCHER = False
+        config.DATA.TIMM = False
+
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         config.DISTRIBUTED = int(os.environ['WORLD_SIZE']) > 1
         config.WORLD_SIZE = int(os.environ['WORLD_SIZE'])
@@ -323,7 +359,7 @@ def update_config(config, args):
     config.LOCAL_RANK = args.local_rank
 
     # output folder
-    config.OUTPUT = os.path.join(config.OUTPUT, config.EXP_NAME)
+    config.OUTPUT = os.path.join(config.OUTPUT, config.PROJECT_NAME)
 
     config.freeze()
 
@@ -332,7 +368,7 @@ def get_config(args):
     # Return a clone so that the defaults will not be altered
     # This is for the "local variable" use pattern
     config = _C.clone()
-    if not args=='':
+    if not args=='' and args is not None:
         update_config(config, args)
 
     return config

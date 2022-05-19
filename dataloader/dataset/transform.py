@@ -1,0 +1,192 @@
+from timm.data import create_transform
+from timm.data.transforms import str_to_interp_mode
+import albumentations as A
+from torchvision import transforms
+import torch
+
+def _build_transform(config,is_train,type=None):
+    _name = config.DATA.DATALOADER_NAME.lower().split('_')[2]
+    if type is None:
+        if _name == 'timm':
+            return create_transform(
+                            input_size=config.DATA.IMG_SIZE,
+                            is_training=is_train,
+                            use_prefetcher=config.TIMM_PREFETCHER,
+                            no_aug = config.AUG.NO_AUG,
+                            scale=config.AUG.SCALE,
+                            ratio=config.AUG.RATIO,
+                            hflip=config.AUG.HFLIP,
+                            vflip=config.AUG.VFLIP,
+                            color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                            auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
+                            interpolation=config.DATA.INTERPOLATION,
+                            mean=config.AUG.NORM[0],
+                            std=config.AUG.NORM[1],
+                            re_prob=config.AUG.REPROB,
+                            re_mode=config.AUG.REMODE,
+                            re_count=config.AUG.RECOUNT,
+                            crop_pct=config.TEST.CROP,
+                            )
+        elif _name == 'pim':
+            # 448:600
+            # 384:510
+            # 768:
+            if is_train:
+                # transforms.RandomApply([RandAugment(n=2, m=3, img_size=data_size)], p=0.1)
+                # RandAugment(n=2, m=3, img_size=sub_data_size)
+                return transforms.Compose([
+                            transforms.Resize((510, 510), str_to_interp_mode(config.DATA.INTERPOLATION)),
+                            transforms.RandomCrop(config.DATA.IMG_SIZE),
+                            transforms.RandomHorizontalFlip(),
+                            transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 5))], p=0.1),
+                            transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.1),
+                            transforms.ToTensor(),
+                            transforms.Normalize(
+                                mean=torch.tensor(config.AUG.NORM[0]),
+                                std=torch.tensor(config.AUG.NORM[1])
+                            ),
+                    ])
+            else:
+                return transforms.Compose([
+                            transforms.Resize((510, 510), str_to_interp_mode(config.DATA.INTERPOLATION)),
+                            transforms.CenterCrop(config.DATA.IMG_SIZE),
+                            transforms.ToTensor(),
+                            transforms.Normalize(
+                                mean=torch.tensor(config.AUG.NORM[0]),
+                                std=torch.tensor(config.AUG.NORM[1])
+                            ),
+                    ])
+
+def build_transform(config,is_train):
+    if config.AUG.MULTI_VIEW is not None:
+        _type = _type.lower().split('_')
+
+        assert all(_t in ('strong','weak','none') for _t in _type)
+        _transforms = ()
+        for _t in _type:
+            _transforms += (_build_transform(config,is_train,_t),)
+    else:
+        _transforms = _build_transform(config,is_train)
+    
+    return _transforms
+
+    if is_train:
+        if config.AUG.MULTI_VIEW is not None:
+            if _name == 'timm':
+
+                transform_strong = create_transform(
+                                    input_size=config.DATA.IMG_SIZE,
+                                    is_training=True,
+                                    no_aug = config.AUG.NO_AUG,
+                                    color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                                    auto_augment='rand-m7-n4-mstd0.5',
+                                    re_prob=config.AUG.REPROB,
+                                    re_mode=config.AUG.REMODE,
+                                    re_count=config.AUG.RECOUNT,
+                                    interpolation=config.DATA.INTERPOLATION)
+                transform_weak = create_transform(
+                                    input_size=config.DATA.IMG_SIZE,
+                                    is_training=True,
+                                    no_aug = config.AUG.NO_AUG,
+                                    color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                                    auto_augment='rand-m3-n2-mstd0.5',
+                                    re_prob=config.AUG.REPROB,
+                                    re_mode=config.AUG.REMODE,
+                                    re_count=config.AUG.RECOUNT,
+                                    interpolation=config.DATA.INTERPOLATION)
+                transform_no_aug = create_transform(
+                                    input_size=config.DATA.IMG_SIZE,
+                                    is_training=True,
+                                    no_aug = True,
+                                    interpolation=config.DATA.INTERPOLATION)
+            elif name == '':
+                transform_strong = A.Compose([
+                                    #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                                    A.RandomBrightnessContrast(p=0.7),
+                                    A.HorizontalFlip(p=0.7),
+                                    A.VerticalFlip(p=0.7),
+                                    A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                                    A.OneOf([
+                                        A.Emboss(p=1),
+                                        A.Sharpen(p=1),
+                                        A.Blur(p=1)
+                                            ], p=0.7)
+                                    ])
+                transform_weak = A.Compose([
+                                    #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                                    A.RandomBrightnessContrast(p=0.5),
+                                    A.HorizontalFlip(p=0.5),
+                                    A.VerticalFlip(p=0.5),
+                                    A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                                    #ToTensorV2()
+                                    ])
+                # A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1],interpolation=cv2.INTER_CUBIC),
+                # A.Normalize(config.AUG.NORM[0], config.AUG.NORM[1]),
+                transform_no_aug = A.Compose([
+                                    #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                                    #ToTensorV2()
+                                    ])
+            if config.AUG.MULTI_VIEW == 'strong_weak':
+                return [transform_strong,transform_weak]
+            elif config.AUG.MULTI_VIEW == 'strong_none':
+                return [transform_weak,transform_no_aug]
+            elif config.AUG.MULTI_VIEW == 'weak_none':
+                return [transform_weak,transform_no_aug]
+            else:
+                raise NotImplementedError
+        if config.AUG.TIMM_TRANS:
+            transform = create_transform(
+                                    input_size=config.DATA.IMG_SIZE,
+                                    is_training=True,
+                                    no_aug = config.AUG.NO_AUG,
+                                    color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                                    auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
+                                    re_prob=config.AUG.REPROB,
+                                    re_mode=config.AUG.REMODE,
+                                    re_count=config.AUG.RECOUNT,
+                                    interpolation=config.DATA.INTERPOLATION)
+        else:
+            if not config.AUG.NO_AUG:
+                transform = A.Compose([
+                                #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                                A.RandomBrightnessContrast(p=0.7),
+                                A.HorizontalFlip(p=0.7),
+                                A.VerticalFlip(p=0.7),
+                                A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                                A.OneOf([
+                                    A.Emboss(p=1),
+                                    A.Sharpen(p=1),
+                                    A.Blur(p=1)
+                                        ], p=0.7)
+                                ])
+            else:
+                transform = A.Compose([])
+        # transform = transforms.Compose([
+        #                 transforms.Resize((510, 510), Image.BILINEAR),
+        #                 transforms.RandomCrop(config.DATA.IMG_SIZE),
+        #                 transforms.RandomHorizontalFlip(),
+        #                 transforms.RandomApply([transforms.GaussianBlur(kernel_size=(5, 5), sigma=(0.1, 5))], p=0.1),
+        #                 transforms.RandomAdjustSharpness(sharpness_factor=1.5, p=0.1),
+        #         ])
+        #transform = A.Compose([])
+        return transform
+
+    else:
+        if config.AUG.TIMM_TRANS:
+            t2 = create_transform(
+                            input_size=config.DATA.IMG_SIZE,
+                            is_training=False,
+                            no_aug = config.AUG.NO_AUG,
+                            interpolation=config.DATA.INTERPOLATION,
+                            crop_pct=config.TEST.CROP)
+        else:
+            if config.TEST.CROP is not None and config.TEST.CROP != 1 and config.TEST.CROP != 0:
+                t2 = transforms.Compose([
+                                transforms.Resize((510, 510), Image.BILINEAR),
+                                transforms.CenterCrop(config.DATA.IMG_SIZE),
+                        ])
+            else:
+                t2 = A.Compose([
+                #A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+            ])
+        return t2

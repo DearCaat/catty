@@ -5,6 +5,7 @@
 /wandb/
 /train&eval.sh
 *.ipynb
+train.sh
 /models/__pycache__/
 /ranger/__pycache__/
 # Byte-compiled / optimized / DLL files
@@ -145,3 +146,6 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+train.sh
+train_*.sh

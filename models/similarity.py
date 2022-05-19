@@ -5,23 +5,25 @@ def similarity_matrix(data1,data2,distance,invert=False):
     '''
     invert  bool  Whether invert the result   1-result for cosine
     '''
-    if distance.lower() == 'euclidean':
-        dis_func = torch.nn.PairwiseDistance(p=2)
-    elif distance.lower() == 'cosine':
-        dis_func = torch.nn.CosineSimilarity(dim=-1)
     # B N D
     if len(data1.size()) == 2:
         data1.unsqueeze_(0)
     if len(data2.size()) == 2:
         data2.unsqueeze_(0) 
-    
-    similarity = dis_func(data1.unsqueeze(1), data2.unsqueeze(2))
-
-    if distance.lower() == 'cosine' and invert:
-        similarity = 1 - similarity
+        
+    if distance.lower() == 'euclidean':
+        similarity = torch.cdist(data1,data2)
+    elif distance.lower() == 'cosine':
+        dis_func = torch.nn.CosineSimilarity(dim=-1)
+        # 为了返回(B,N1,N2)的结果，这里torch的api没有统一不是很明白，只有自己替换了位置
+        similarity = dis_func(data2.unsqueeze(1), data1.unsqueeze(2))
+        
+        if invert:
+            similarity = 1 - similarity
     
     return similarity
 
+# euclidean_distances
 def rbf_similarity(d,gamma=1):
     return torch.exp(-gamma*(d))
 
@@ -36,9 +38,9 @@ class SimilarityMatrix(torch.nn.Module):
         keepdim (bool, optional): Determines whether or not to keep the vector dimension.
             Default: False
     Shape:
-        - Input1: :math:`(B, N, D)` where `B = batch dimension` and `D = vector dimension`
-        - Input2: :math:`(B, N, D)` same shape as the Input1
-        - Output: :math:`(B, N, N)` 
+        - Input1: :math:`(B, N1, D)` where `B = batch dimension` and `D = vector dimension`
+        - Input2: :math:`(B, N2, D)` same shape as the Input1
+        - Output: :math:`(B, N1, N2)` 
     """
     __constants__ = ['distance', 'invert']
     distance: str
