@@ -91,8 +91,8 @@ _C.MODEL.RESUME = ''
 _C.MODEL.NUM_CLASSES = 8
 # Dropout rate     effi-b3 0.3`
 _C.MODEL.DROP_RATE = 0
-# Drop path rate   effi-b3 0.2  swin_s 0.3 swin_b_p4w12 0.5
-_C.MODEL.DROP_PATH_RATE = 0.3
+# Drop path rate   effi-b3 0.2  swin_s 0.3 swin_b_p4w12 0.5 -1让timm自己处理
+_C.MODEL.DROP_PATH_RATE = -1.
 # Label Smoothing
 #_C.MODEL.LABEL_SMOOTHING = 0.1
 _C.MODEL.LABEL_SMOOTHING = 0.

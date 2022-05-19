@@ -1,20 +1,19 @@
 DATA:
   VAL_SPLIT: test
-  DATALOADER_NAME: timm_timm_pim
-  IMG_SIZE: (384,384) #(384,384)
+  DATALOADER_NAME: torch_timm_pim
+  IMG_SIZE: (448,448) 
   BATCH_SIZE: 16
-  VAL_BATCH_SIZE: 38
+  VAL_BATCH_SIZE: 48
   INTERPOLATION: bilinear
 MODEL: 
   NUM_CLASSES: 200
-  # swin_base_patch4_window12_384_in22k
-  NAME: swin_large_patch4_window12_384_in22k
-  DROP_PATH_RATE: .2
+  NAME: vit_base_patch16_224_miil_in21k
+  DROP_PATH_RATE: 0.1
 TRAIN:
   EPOCHS: 50
   WARMUP_EPOCHS: 3
-  WEIGHT_DECAY: 0.0005
-  BASE_LR: 0.0005
+  WEIGHT_DECAY: 0.
+  BASE_LR: 0.03
   WARMUP_LR: 1e-9
   MIN_LR: 1e-12
   OPTIMIZER:
@@ -25,11 +24,10 @@ AUG:
   RATIO: (1,1)
 
 TEST:
-  CROP: 0.7529411764705
+  CROP: 0.74666666667  # 448/600
   BEST_METRIC: top1
 
-MODEL_EMA: true
+MODEL_EMA: false
 LOG_WANDB: true
 TRAIN_MODE: train
 EMA_DECAY: 0.9993
-

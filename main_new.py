@@ -165,6 +165,7 @@ def main(config):
 
     # setup exponential moving average of model weights, SWA could be used here too
     model_ema = None
+    best_metrics_ema = None
     if config.MODEL_EMA:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
         model_ema = ModelEmaV3(models['main'], decay=config.EMA_DECAY, device='cpu' if config.EMA_FORCE_CPU else None)

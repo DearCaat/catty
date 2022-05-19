@@ -3,6 +3,7 @@
         "btml",
         "cuda",
         "hbtml",
+        "pretrained",
         "savez"
     ]
 }
