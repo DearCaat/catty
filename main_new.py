@@ -380,8 +380,8 @@ if __name__ == '__main__':
         logger.info('Training with a single process on 1 GPUs.')
     assert rank >= 0
     
-        
-    random_seed(config.SEED, rank)
+    if config.SEED > 0:    
+        random_seed(config.SEED, rank)
     cudnn.benchmark = True
 
     # linear scale the learning rate according to total batch size, may not be optimal
