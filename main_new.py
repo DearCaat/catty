@@ -11,6 +11,7 @@ from copy import deepcopy
 import torch
 import torch.backends.cudnn as cudnn
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
+import torch.distributed as dist
 
 from timm.utils import *
 from timm.loss import *
@@ -93,7 +94,7 @@ def parse_option():
     parser.add_argument('--binary-train', action='store_true', help='train the model with binary setting')
     parser.add_argument('--load-test-dir', type=str, metavar='PATH',help='the file of tested data')
     parser.add_argument('--pretrained-backbone', type=str, metavar='PATH',help='the file of pretrained model')
-    parser.add_argument('--train-mode', type=str, default='t_e', choices=['train', 'eval', 't-e','predict'],
+    parser.add_argument('--train-mode', type=str,  choices=['train', 'eval', 't-e','predict'],
                         help='train: only train, '
                              'eval: only test , '
                              't_e: first train the model, and use it to eval'
@@ -370,9 +371,9 @@ if __name__ == '__main__':
     if config.DISTRIBUTED:
         device = 'cuda:%d' % config.LOCAL_RANK
         torch.cuda.set_device(config.LOCAL_RANK)
-        torch.distributed.init_process_group(backend='nccl', init_method='env://')
-        world_size = torch.distributed.get_world_size()
-        rank = torch.distributed.get_rank()
+        dist.init_process_group(backend='nccl', init_method='env://')
+        world_size = dist.get_world_size()
+        rank = dist.get_rank()
         logger.info('Training in distributed mode with multiple processes, 1 GPU per process. Process %d, total %d.'
                      % (rank, world_size))
     else:
@@ -384,19 +385,19 @@ if __name__ == '__main__':
     cudnn.benchmark = True
 
     # linear scale the learning rate according to total batch size, may not be optimal
-    '''linear_scaled_lr = config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
-    linear_scaled_warmup_lr = config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
-    linear_scaled_min_lr = config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
-    # gradient accumulation also need to scale the learning rate
-    if config.TRAIN.ACCUMULATION_STEPS > 1:
-        linear_scaled_lr = linear_scaled_lr * config.TRAIN.ACCUMULATION_STEPS
-        linear_scaled_warmup_lr = linear_scaled_warmup_lr * config.TRAIN.ACCUMULATION_STEPS
-        linear_scaled_min_lr = linear_scaled_min_lr * config.TRAIN.ACCUMULATION_STEPS
-    config.defrost()
-    config.TRAIN.BASE_LR = linear_scaled_lr
-    config.TRAIN.WARMUP_LR = linear_scaled_warmup_lr
-    config.TRAIN.MIN_LR = linear_scaled_min_lr
-    config.freeze()'''
+    # linear_scaled_lr = config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
+    # linear_scaled_warmup_lr = config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
+    # linear_scaled_min_lr = config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
+    # # gradient accumulation also need to scale the learning rate
+    # if config.TRAIN.ACCUMULATION_STEPS > 1:
+    #     linear_scaled_lr = linear_scaled_lr * config.TRAIN.ACCUMULATION_STEPS
+    #     linear_scaled_warmup_lr = linear_scaled_warmup_lr * config.TRAIN.ACCUMULATION_STEPS
+    #     linear_scaled_min_lr = linear_scaled_min_lr * config.TRAIN.ACCUMULATION_STEPS
+    # config.defrost()
+    # config.TRAIN.BASE_LR = linear_scaled_lr
+    # config.TRAIN.WARMUP_LR = linear_scaled_warmup_lr
+    # config.TRAIN.MIN_LR = linear_scaled_min_lr
+    # config.freeze()
 
     if config.LOCAL_RANK == 0:
         path = os.path.join(config.OUTPUT, "config.json")

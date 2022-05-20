@@ -252,7 +252,8 @@ class BaseTrainer():
         torch.cuda.empty_cache()
 
         return save_pred,save_label
-
+   
+    @torch.no_grad()
     def validate(self, config, data_loader, models,save_pre=False,amp_autocast=suppress,criterion=None,logger=None,**kwargs):
         models['main'].eval()
         if config.EMPTY_CACHE:
@@ -267,49 +268,48 @@ class BaseTrainer():
         end = time.time()
         last_idx = len(data_loader) - 1
         
-        with torch.no_grad():
-            for idx, (images, targets) in enumerate(data_loader):
-                last_batch = idx == last_idx
-                # timm dataloader prefetcher will do this
-                if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
-                    images = images.cuda(non_blocking=True)
-                    targets = targets.cuda(non_blocking=True)
+        for idx, (images, targets) in enumerate(data_loader):
+            last_batch = idx == last_idx
+            # timm dataloader prefetcher will do this
+            if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
+                images = images.cuda(non_blocking=True)
+                targets = targets.cuda(non_blocking=True)
 
-                # compute output
-                with amp_autocast():
-                    output = models['main'](images)
-                if isinstance(output, (tuple, list)):
-                    predition = output[0]
-                else:
-                    predition = output
+            # compute output
+            with amp_autocast():
+                output = models['main'](images)
+            if isinstance(output, (tuple, list)):
+                predition = output[0]
+            else:
+                predition = output
 
-                output_soft = torch.nn.functional.softmax(predition,dim=-1)
+            output_soft = torch.nn.functional.softmax(predition,dim=-1)
 
-                loss = criterion[0](predition, targets)
-                    
-                save_pred = np.append(save_pred,output_soft.cpu().numpy())
-                save_label = np.append(save_label,targets.cpu().numpy())
+            loss = criterion[0](predition, targets)
                 
-                metrics_values,others = self.engine.measure_per_iter(config,output,targets)
+            save_pred = np.append(save_pred,output_soft.cpu().numpy())
+            save_label = np.append(save_label,targets.cpu().numpy())
+            
+            metrics_values,others = self.engine.measure_per_iter(config,output,targets)
 
-                if config.DISTRIBUTED:
-                    loss = reduce_tensor(loss)
-                loss_meter.update(loss.item(), targets.size(0))
-                update_metrics(config,self.engine.test_metrics,metrics_values,config.DISTRIBUTED)
+            if config.DISTRIBUTED:
+                loss = reduce_tensor(loss)
+            loss_meter.update(loss.item(), targets.size(0))
+            update_metrics(config,self.engine.test_metrics,metrics_values,config.DISTRIBUTED)
 
-                torch.cuda.synchronize()
-                # measure elapsed time
-                batch_time.update(time.time() - end)
-                end = time.time()
+            torch.cuda.synchronize()
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
 
-                if last_batch or idx % config.PRINT_FREQ == 0:
-                    memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
-                    logger.info(
-                        f'Test: [{idx}/{len(data_loader)}]\t'
-                        f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                        f'Loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
-                        f'Mem {memory_used:.0f}MB')
-                    log_meter(self.engine.test_metrics,self.engine.test_metrics_iter_log,logger)
+            if last_batch or idx % config.PRINT_FREQ == 0:
+                memory_used = torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+                logger.info(
+                    f'Test: [{idx}/{len(data_loader)}]\t'
+                    f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                    f'Loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
+                    f'Mem {memory_used:.0f}MB')
+                log_meter(self.engine.test_metrics,self.engine.test_metrics_iter_log,logger)
             
             save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
 

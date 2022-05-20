@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 from timm.models import create_model
-from .swin import *
 from .rdd_trans import *
 from .pvt import *
 from .pvt_v2 import *
+from ._vit import *
 
 def build_model(config):
     model_name=config.MODEL.NAME

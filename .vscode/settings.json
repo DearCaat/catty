@@ -1,9 +1,11 @@
 {
     "cSpell.words": [
+        "astype",
         "btml",
         "cuda",
         "hbtml",
         "pretrained",
-        "savez"
+        "savez",
+        "swin"
     ]
 }
