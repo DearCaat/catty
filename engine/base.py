@@ -163,7 +163,7 @@ class BaseTrainer():
 
             if last_batch or idx % config.PRINT_FREQ == 0:
                 if config.DISTRIBUTED:
-                    reduced_loss = reduce_tensor(loss.data)
+                    reduced_loss = reduce_tensor(loss.data,config.WORLD_SIZE)
                     loss_meter.update(reduced_loss.item(), targets.size(0))
                     update_metrics(config,self.engine.train_metrics,metrics_values,distributed=True)
                 #lr = optimizer.param_groups[0]['lr']
@@ -293,7 +293,7 @@ class BaseTrainer():
             metrics_values,others = self.engine.measure_per_iter(config,output,targets)
 
             if config.DISTRIBUTED:
-                loss = reduce_tensor(loss)
+                loss = reduce_tensor(loss,config.WORLD_SIZE)
             loss_meter.update(loss.item(), targets.size(0))
             update_metrics(config,self.engine.test_metrics,metrics_values,config.DISTRIBUTED)
 

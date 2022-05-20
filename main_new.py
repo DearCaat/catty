@@ -361,10 +361,12 @@ if __name__ == '__main__':
     elif config.APEX_AMP or config.NATIVE_AMP:
         logger.warning("Neither APEX or native Torch AMP is available, using float32. "
                         "Install NVIDIA apex or upgrade to PyTorch 1.6") 
-    config.freeze()
 
     if 'WORLD_SIZE' in os.environ:
         config.DISTRIBUTED = int(os.environ['WORLD_SIZE']) > 1
+
+    config.freeze()
+
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     world_size = 1
     rank = 0  # global rank
@@ -380,8 +382,13 @@ if __name__ == '__main__':
         logger.info('Training with a single process on 1 GPUs.')
     assert rank >= 0
     
-    if config.SEED > 0:    
-        random_seed(config.SEED, rank)
+    if config.SEED > 0:
+        seed = config.SEED + rank
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed()    
+        
     cudnn.benchmark = True
 
     # linear scale the learning rate according to total batch size, may not be optimal

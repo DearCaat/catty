@@ -53,8 +53,8 @@ class INetClsEngine:
         acc1,acc5 = accuracy(output, targets, topk=topk)
 
         metrics_values = OrderedDict([
-        ('acc1',(acc1,targets.size(0))),
-        ('acc5',(acc5,targets.size(0))),
+        ('acc1',[acc1,targets.size(0)]),
+        ('acc5',[acc5,targets.size(0)]),
         ])
 
         others = OrderedDict([])
