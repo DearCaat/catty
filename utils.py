@@ -1,4 +1,5 @@
 import os
+from cv2 import norm
 from sklearn import metrics
 import torch
 import torch.distributed as dist
@@ -8,6 +9,7 @@ import math
 import torch.nn.functional as F
 import torch.nn as nn
 from timm.utils.clip_grad import dispatch_clip_grad
+from torch._six import inf
 
 try:
     # noinspection PyUnresolvedReferences
@@ -426,33 +428,46 @@ class SoftTargetCrossEntropy_v2(nn.Module):
         loss = torch.sum(-F.softmax(target,dim=-1) * F.log_softmax(x, dim=-1), dim=-1)
         return loss.mean()
 
+
+# ref: https://github.com/microsoft/Swin-Transformer/blob/3b0685bf2b99b4cf5770e47260c0f0118e6ff1bb/utils.py#L195
+def ampscaler_get_grad_norm(parameters, norm_type: float = 2.0) -> torch.Tensor:
+    if isinstance(parameters, torch.Tensor):
+        parameters = [parameters]
+    parameters = [p for p in parameters if p.grad is not None]
+    norm_type = float(norm_type)
+    if len(parameters) == 0:
+        return torch.tensor(0.)
+    device = parameters[0].grad.device
+    if norm_type == inf:
+        total_norm = max(p.grad.detach().abs().max().to(device) for p in parameters)
+    else:
+        total_norm = torch.norm(torch.stack([torch.norm(p.grad.detach(),
+                                                        norm_type).to(device) for p in parameters]), norm_type)
+    return total_norm
+
 # 相较于timm的版本，我想要实现gradient accumulation，需要把梯度计算和更新参数步骤分开
+# ref: https://github.com/microsoft/Swin-Transformer/blob/3b0685bf2b99b4cf5770e47260c0f0118e6ff1bb/utils.py#L195
 class NativeScaler_V2:
     state_dict_key = "amp_scaler"
 
     def __init__(self):
         self._scaler = torch.cuda.amp.GradScaler()
 
-    def __call__(self, loss, optimizer=None, clip_grad=None, clip_mode='norm', parameters=None, create_graph=False,acc_gradient=False):
+    def __call__(self, loss, optimizer=None, clip_grad=None, clip_mode='norm', parameters=None, create_graph=False,update_grad=False):
         self._scaler.scale(loss).backward(create_graph=create_graph)
-        if not acc_gradient:
+        if update_grad:
             if clip_grad is not None:
                 assert parameters is not None
                 self._scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
                 dispatch_clip_grad(parameters, clip_grad, mode=clip_mode)
-            self._scaler.step(optimizer)
-            self._scaler.update()
-
-    def opt_step(self,optimizer,clip_grad=None, clip_mode='norm', parameters=None):
-        if clip_grad is not None:
-            assert parameters is not None
-            self._scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
-            dispatch_clip_grad(parameters, clip_grad, mode=clip_mode)
+            else:
+                self._scaler.unscale_(optimizer)
+                norm = ampscaler_get_grad_norm(parameters)
             self._scaler.step(optimizer)
             self._scaler.update()
         else:
-            self._scaler.step(optimizer)
-            self._scaler.update()
+            norm = None
+        return norm
 
     def state_dict(self):
         return self._scaler.state_dict()

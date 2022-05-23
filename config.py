@@ -123,13 +123,16 @@ _C.TRAIN.MIN_LR = 5e-7
 # Clip gradient norm                                     
 #_C.TRAIN.CLIP_GRAD = 5.0
 _C.TRAIN.CLIP_GRAD = 0.
-# Gradient clipping mode. One of ("norm", "value", "agc")                                                                                   
+# Gradient clipping mode. One of ("norm", "value", "agc")
 _C.TRAIN.CLIP_MODE = 'norm'
+# LR batch size scale Default is 512, if the value == batch_size, no scale is employed
+_C.TRAIN.LR_BS_SCALE = 512.0 
 # Auto resume from latest checkpoint
 _C.TRAIN.AUTO_RESUME = True
 # Gradient accumulation steps
-# could be overwritten by command line argument
-_C.TRAIN.ACCUMULATION_STEPS = 0
+# could be overwritten by command line argument 
+# Default is 1. new ver. 20220523
+_C.TRAIN.ACCUMULATION_STEPS = 1
 # Whether to use gradient checkpointing to save memory
 # could be overwritten by command line argument
 _C.TRAIN.USE_CHECKPOINT = False
@@ -255,7 +258,7 @@ _C.LOG_WANDB = False
 # local rank for DistributedDataParallel, given by command line argument
 _C.LOCAL_RANK = 0
 _C.DISTRIBUTED = False
-_C.WORLD_SIZE = 0
+_C.WORLD_SIZE = 1
 
 _C.MODEL_EMA = False
 _C.EMA_FORCE_CPU = False

@@ -1,13 +1,16 @@
 from contextlib import suppress
 from copy import deepcopy
 import time
+from cv2 import reduce
 import numpy as np
 from numpy import ndarray
 import datetime
 from collections import OrderedDict
 
+from ..utils import ampscaler_get_grad_norm
+
 import torch
-from torch import Tensor
+from torch import Tensor, scalar_tensor
 from timm.utils import *
 from timm.models import  model_parameters
 
@@ -75,6 +78,8 @@ class BaseTrainer():
 
         batch_time = AverageMeter()
         loss_meter = AverageMeter()
+        norm_meter = AverageMeter()
+        scaler_meter = AverageMeter()
 
         loss_rec = np.array([])
         start = time.time()
@@ -96,69 +101,46 @@ class BaseTrainer():
                 loss,metrics_values,output = self.engine.cal_loss_func(config,models,idx,samples,targets,epoch,num_steps,criterions)
                 if isinstance(output, (tuple, list)):
                     predictions = output[0]
-            
-            if config.TRAIN.ACCUMULATION_STEPS > 1:
-                loss = loss / config.TRAIN.ACCUMULATION_STEPS
-                if loss_scaler is not None:
-                    loss_scaler(
-                        loss, acc_gradient = True)
-                else:
-                    loss.backward(create_graph=second_order)
-                    if config.TRAIN.CLIP_GRAD > 0:
-                        dispatch_clip_grad(
-                            model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
-                            value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
-                    
-                if (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0:
-                    optimizer.zero_grad()
-                    
-                    if loss_scaler is not None:
-                        loss_scaler.opt_step(optimizer,
-                        clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
-                        parameters=model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE>0))
-                    else:
-                        optimizer.step()
-                    if model_ema is not None:
-                        model_ema.update(models['main'])
-                    if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
-                        lr_scheduler.step(epoch * num_steps + idx)
-                    else:
-                        lr_scheduler.step_update(epoch * num_steps + idx)
 
-                    # 每个iter更新
-                    self.engine.update_per_iter(config,epoch,idx,output=output)
+            loss = loss / config.TRAIN.ACCUMULATION_STEPS
+
+            if loss_scaler is not None:
+                grad_norm = loss_scaler(loss,optimizer,
+                    clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
+                    parameters=model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE>0), 
+                    acc_gradient = (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0)
+                loss_scale_value = loss_scaler.state_dict()["scale"]
             else:
-                # with torch.autograd.detect_anomaly():
-                optimizer.zero_grad()
-                if loss_scaler is not None:
-                    loss_scaler(
-                        loss, optimizer,
-                        clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
-                        parameters=model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
-                        create_graph=second_order)
-                else:
-                    loss.backward(create_graph=second_order)
-                    if config.TRAIN.CLIP_GRAD > 0:
-                        dispatch_clip_grad(
-                            model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE),
-                            value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
-            
+                loss.backward(create_graph=second_order)
+                if config.TRAIN.CLIP_GRAD > 0:
+                    dispatch_clip_grad(
+                        model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
+                        value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
+                grad_norm = ampscaler_get_grad_norm(model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE>0))
+                loss_scale_value = 0.
+                
+            if (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0:
+                if loss_scaler is None:
                     optimizer.step()
+
+                optimizer.zero_grad()
+
                 if model_ema is not None:
                     model_ema.update(models['main'])
-
-                if config.TRAIN.LR_SCHEDULER.NAME is not None:
-                    if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
-                        lr_scheduler.step(epoch * num_steps + idx)
-                    else:
-                        lr_scheduler.step_update(epoch * num_steps + idx)
+                if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
+                    lr_scheduler.step((epoch * num_steps + idx)// config.TRAIN.ACCUMULATION_STEPS)
+                else:
+                    lr_scheduler.step_update((epoch * num_steps + idx)// config.TRAIN.ACCUMULATION_STEPS)
 
                 # 每个iter更新
                 self.engine.update_per_iter(config,epoch,idx,output=output)
 
             torch.cuda.synchronize()
             if not config.DISTRIBUTED:
+                if grad_norm is not None:
+                    norm_meter.update(grad_norm)
                 loss_meter.update(loss.item(), targets.size(0))
+                scaler_meter.update(loss_scale_value)
                 update_metrics(config,self.engine.train_metrics,metrics_values)
 
             batch_time.update(time.time() - end)
@@ -167,8 +149,13 @@ class BaseTrainer():
 
             if last_batch or idx % config.PRINT_FREQ == 0:
                 if config.DISTRIBUTED:
+                    if grad_norm is not None:
+                        reduced_norm = reduce_tensor(grad_norm,config.WORLD_SIZE)
+                        norm_meter.update(reduced_norm)
                     reduced_loss = reduce_tensor(loss.data,config.WORLD_SIZE)
+                    reduced_scalar = reduce_tensor(loss_scale_value,config.WORLD_SIZE)
                     loss_meter.update(reduced_loss.item(), targets.size(0))
+                    scaler_meter.update(reduced_scalar)
                     update_metrics(config,self.engine.train_metrics,metrics_values,distributed=True)
                 #lr = optimizer.param_groups[0]['lr']
                 lrl = [param_group['lr'] for param_group in optimizer.param_groups]
@@ -181,6 +168,8 @@ class BaseTrainer():
                     f'eta {datetime.timedelta(seconds=int(etas))} lr {lr:.6f}\t'
                     f'time {batch_time.val:.4f} ({batch_time.avg:.4f})\t'
                     f'loss {loss_meter.val:.4f} ({loss_meter.avg:.4f})\t'
+                    f'grad_norm {norm_meter.val:.4f} ({norm_meter.avg:.4f})\t'
+                    f'loss_scale {scaler_meter.val:.4f} ({scaler_meter.avg:.4f})\t'
                     f'mem {memory_used:.0f}MB')
                 # log per iter
                 log_meter(self.engine.train_metrics,self.engine.train_metrics_iter_log,logger)

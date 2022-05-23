@@ -162,7 +162,7 @@ def main(config):
     if config.TRAIN_MODE=='eval' or config.TRAIN_MODE=='predict':
         lr_scheduler = ''
     else:
-        lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train))
+        lr_scheduler = build_scheduler(config, optimizer, len(data_loader_train) // config.TRAIN.ACCUMULATION_STEPS)
 
     # setup exponential moving average of model weights, SWA could be used here too
     model_ema = None
@@ -391,20 +391,20 @@ if __name__ == '__main__':
         
     cudnn.benchmark = True
 
-    # linear scale the learning rate according to total batch size, may not be optimal
-    # linear_scaled_lr = config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
-    # linear_scaled_warmup_lr = config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
-    # linear_scaled_min_lr = config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * dist.get_world_size() / 512.0
-    # # gradient accumulation also need to scale the learning rate
-    # if config.TRAIN.ACCUMULATION_STEPS > 1:
-    #     linear_scaled_lr = linear_scaled_lr * config.TRAIN.ACCUMULATION_STEPS
-    #     linear_scaled_warmup_lr = linear_scaled_warmup_lr * config.TRAIN.ACCUMULATION_STEPS
-    #     linear_scaled_min_lr = linear_scaled_min_lr * config.TRAIN.ACCUMULATION_STEPS
-    # config.defrost()
-    # config.TRAIN.BASE_LR = linear_scaled_lr
-    # config.TRAIN.WARMUP_LR = linear_scaled_warmup_lr
-    # config.TRAIN.MIN_LR = linear_scaled_min_lr
-    # config.freeze()
+    #linear scale the learning rate according to total batch size, may not be optimal
+    linear_scaled_lr = config.TRAIN.BASE_LR * config.DATA.BATCH_SIZE * config.WORLD_SIZE / config.TRAIN.LR_BS_SCALE
+    linear_scaled_warmup_lr = config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * config.WORLD_SIZE / config.TRAIN.LR_BS_SCALE
+    linear_scaled_min_lr = config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * config.WORLD_SIZE / config.TRAIN.LR_BS_SCALE
+    # gradient accumulation also need to scale the learning rate
+    if config.TRAIN.ACCUMULATION_STEPS > 1:
+        linear_scaled_lr = linear_scaled_lr * config.TRAIN.ACCUMULATION_STEPS
+        linear_scaled_warmup_lr = linear_scaled_warmup_lr * config.TRAIN.ACCUMULATION_STEPS
+        linear_scaled_min_lr = linear_scaled_min_lr * config.TRAIN.ACCUMULATION_STEPS
+    config.defrost()
+    config.TRAIN.BASE_LR = linear_scaled_lr
+    config.TRAIN.WARMUP_LR = linear_scaled_warmup_lr
+    config.TRAIN.MIN_LR = linear_scaled_min_lr
+    config.freeze()
 
     if config.LOCAL_RANK == 0:
         path = os.path.join(config.OUTPUT, "config.json")
