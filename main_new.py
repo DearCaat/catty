@@ -25,7 +25,7 @@ from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
 from criterion import build_criterion
 from logger import create_logger
-from utils import load_best_model, load_checkpoint, save_checkpoint, get_grad_norm,  reduce_tensor,l1_regularizer,getDataByStick,list2dict
+from utils import load_best_model, load_checkpoint, save_checkpoint, get_grad_norm,  reduce_tensor,l1_regularizer,getDataByStick,list2dict,NativeScaler_V2
 
 from contextlib import suppress
 try:
@@ -151,7 +151,7 @@ def main(config):
             logger.info('Using NVIDIA APEX AMP. Training in mixed precision.')
     elif use_amp == 'native':
         amp_autocast = torch.cuda.amp.autocast
-        loss_scaler = NativeScaler()
+        loss_scaler = NativeScaler_V2()
         if config.LOCAL_RANK == 0:
             logger.info('Using native Torch AMP. Training in mixed precision.')
     else:

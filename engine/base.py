@@ -101,19 +101,23 @@ class BaseTrainer():
                 loss = loss / config.TRAIN.ACCUMULATION_STEPS
                 if loss_scaler is not None:
                     loss_scaler(
-                        loss, optimizer,
-                        clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
-                        parameters=model_parameters(models, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
-                        create_graph=second_order)
+                        loss, acc_gradient = True)
                 else:
                     loss.backward(create_graph=second_order)
                     if config.TRAIN.CLIP_GRAD > 0:
                         dispatch_clip_grad(
                             model_parameters(models, exclude_head='agc' in config.TRAIN.CLIP_MODE>0),
                             value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
+                    
                 if (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0:
-                    optimizer.step()
                     optimizer.zero_grad()
+                    
+                    if loss_scaler is not None:
+                        loss_scaler.opt_step(optimizer,
+                        clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
+                        parameters=model_parameters(models, exclude_head='agc' in config.TRAIN.CLIP_MODE>0))
+                    else:
+                        optimizer.step()
                     if model_ema is not None:
                         model_ema.update(models[0])
                     if config.TRAIN.LR_SCHEDULER.NAME=='flat_cosine':
