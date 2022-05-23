@@ -230,7 +230,7 @@ def main(config):
     loss_rec = np.array([])
 
     # wandb log. watch, record gradient of the model training
-    if config.LOG_WANDB and has_wandb:
+    if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0:
         wandb.watch(models_without_ddp['main'], log_freq=100)
 
     for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
@@ -266,7 +266,7 @@ def main(config):
 
     for bt_metric in list(best_metrics.keys()):
         logger.info(f'Best {bt_metric}: {best_metrics[bt_metric]:.2f}%\t')
-    if config.LOG_WANDB and has_wandb:
+    if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0:
         best_metrics = OrderedDict([('eval_best_'+k,v) for k,v in best_metrics.items()])
         wandb.log(best_metrics)
 
@@ -294,7 +294,7 @@ def main(config):
         eval_best_metric_ema = eval_metrics_ema[best_model_metirc['main']] if model_ema is not None else 0.
         logger.info(f"The {best_model_metirc['main']} of the network on the {len(dataset_val)} test images: {eval_metrics[best_model_metirc['main']]:.1f}% {eval_best_metric_ema:.1f}%")
 
-        if config.LOG_WANDB and has_wandb:
+        if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0:
             eval_metrics = OrderedDict([('test_'+k,v) for k,v in eval_metrics.items()])
             eval_metrics_ema = OrderedDict([('test_ema_'+k,v) for k,v in eval_metrics_ema.items()])
             eval_metrics.update(eval_metrics_ema)
@@ -336,7 +336,7 @@ if __name__ == '__main__':
 
     logger = create_logger(output_dir=config.OUTPUT, dist_rank=config.LOCAL_RANK, name=f"{config.EXP_NAME}")
     
-    if config.LOG_WANDB:
+    if config.LOG_WANDB and config.LOCAL_RANK == 0:
         if has_wandb:
             wandb.init(project=config.PROJECT_NAME, config=config,entity="dearcat",name=config.EXP_NAME)
         else: 

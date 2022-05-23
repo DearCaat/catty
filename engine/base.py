@@ -7,7 +7,9 @@ from numpy import ndarray
 import datetime
 from collections import OrderedDict
 
-from ..utils import ampscaler_get_grad_norm
+import sys,os 
+sys.path.append(os.path.dirname(__file__) + os.sep + '../')
+from utils import ampscaler_get_grad_norm
 
 import torch
 from torch import Tensor, scalar_tensor
@@ -108,7 +110,7 @@ class BaseTrainer():
                 grad_norm = loss_scaler(loss,optimizer,
                     clip_grad=None if config.TRAIN.CLIP_GRAD == 0 else config.TRAIN.CLIP_GRAD, clip_mode=config.TRAIN.CLIP_MODE,
                     parameters=model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE>0), 
-                    acc_gradient = (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0)
+                    update_grad = (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0)
                 loss_scale_value = loss_scaler.state_dict()["scale"]
             else:
                 loss.backward(create_graph=second_order)
@@ -118,7 +120,7 @@ class BaseTrainer():
                         value=config.TRAIN.CLIP_GRAD, mode=config.TRAIN.CLIP_MODE)
                 grad_norm = ampscaler_get_grad_norm(model_parameters(models['main'], exclude_head='agc' in config.TRAIN.CLIP_MODE>0))
                 loss_scale_value = 0.
-                
+
             if (idx + 1) % config.TRAIN.ACCUMULATION_STEPS == 0:
                 if loss_scaler is None:
                     optimizer.step()
@@ -186,7 +188,7 @@ class BaseTrainer():
 
         if config.EMPTY_CACHE:
             torch.cuda.empty_cache()
-        return loss,OrderedDict([('loss', loss_meter.avg)])
+        return loss,OrderedDict([('loss', loss_meter.avg),('grad_norm',norm_meter.avg),('loss_scale',scaler_meter.avg)])
 
     def predict(config, data_loader, model,amp_autocast=suppress,logger=None):
         model.eval()
