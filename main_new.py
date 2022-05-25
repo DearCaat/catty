@@ -20,7 +20,7 @@ from config import get_config
 from models import build_model
 from engine import build_trainer
 from dataloader import build_loader
-from utils import ModelEmaV3, _save_checkpoint_V2, load_best_model_V2, load_checkpoint_V2
+from utils import ModelEmaV3, _save_checkpoint_V2, del_ckp_model, load_best_model_V2, load_checkpoint_V2
 from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
 from criterion import build_criterion
@@ -269,6 +269,11 @@ def main(config):
     if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0:
         best_metrics = OrderedDict([('eval_best_'+k,v) for k,v in best_metrics.items()])
         wandb.log(best_metrics)
+
+    # del .ckp
+    del_ckp_model(config)
+    if model_ema is not None:
+        del_ckp_model(config,True)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))

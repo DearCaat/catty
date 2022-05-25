@@ -183,7 +183,7 @@ class BaseTrainer():
                 log_meter(self.engine.train_metrics,self.engine.train_metrics_iter_log,logger)
                 # wandb log per iter
                 if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0:
-                    rowd = OrderedDict([('loss_iter',loss_meter.val),('grad_norm_iter',norm_meter.val)])
+                    rowd = OrderedDict([('loss_iter',loss_meter.val),('grad_norm_iter',norm_meter.val),('lr_iter',lr)])
                     wandb.log(rowd)
         #每一轮更新一次
         self.engine.update_per_epoch(config,epoch)

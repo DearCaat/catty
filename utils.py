@@ -16,6 +16,16 @@ try:
     from apex import amp
 except ImportError:
     amp = None
+
+def del_ckp_model(config,is_ema=False):
+    ema_prefix = '_ema' if is_ema else ''
+
+    for best_model_name in config.MODEL.SAVE_BEST_MODEL_NAME:
+        prefix = best_model_name
+        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_ckpt.pth')
+        if os.path.exists(ckpt_path):
+            os.remove(ckpt_path)
+
 def load_best_model_V2(config,models,logger,is_ema=False):
     ema_prefix = '_ema' if is_ema else ''
 
