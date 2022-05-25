@@ -12,7 +12,7 @@ def _build_transform(config,is_train,type=None):
             return create_transform(
                             input_size=config.DATA.IMG_SIZE,
                             is_training=is_train,
-                            use_prefetcher=config.TIMM_PREFETCHER,
+                            use_prefetcher=config.DATA.TIMM_PREFETCHER,
                             no_aug = config.AUG.NO_AUG,
                             scale=config.AUG.SCALE,
                             ratio=config.AUG.RATIO,
@@ -28,6 +28,40 @@ def _build_transform(config,is_train,type=None):
                             re_count=config.AUG.RECOUNT,
                             crop_pct=config.TEST.CROP,
                             )
+        elif _name == 'custom':
+            tf_timm = create_transform(
+                            input_size=config.DATA.IMG_SIZE,
+                            is_training=is_train,
+                            use_prefetcher=config.DATA.TIMM_PREFETCHER,
+                            no_aug = config.AUG.NO_AUG,
+                            scale=config.AUG.SCALE,
+                            ratio=config.AUG.RATIO,
+                            hflip=config.AUG.HFLIP,
+                            vflip=config.AUG.VFLIP,
+                            color_jitter=config.AUG.COLOR_JITTER if config.AUG.COLOR_JITTER > 0 else None,
+                            auto_augment=config.AUG.AUTO_AUGMENT if config.AUG.AUTO_AUGMENT != 'none' else None,
+                            interpolation=config.DATA.INTERPOLATION,
+                            mean=config.AUG.NORM[0],
+                            std=config.AUG.NORM[1],
+                            re_prob=config.AUG.REPROB,
+                            re_mode=config.AUG.REMODE,
+                            re_count=config.AUG.RECOUNT,
+                            crop_pct=config.TEST.CROP,
+                            separate=is_train,
+                            )
+            if is_train:
+                [_tf1,tf2,tf3] = tf_timm
+                tf1 = [transforms.Resize(list((np.array(config.DATA.IMG_SIZE) / config.TEST.CROP).astype(int)), str_to_interp_mode(config.DATA.INTERPOLATION)),
+                       transforms.RandomCrop(config.DATA.IMG_SIZE)]
+                if config.AUG.HFLIP > 0:
+                    tf1 += [transforms.RandomHorizontalFlip(config.AUG.HFLIP)]
+                if config.AUG.VFLIP:
+                    tf1 += [transforms.RandomVerticalFlip(config.AUG.VFLIP)]
+                tf1 = tf1 + tf2.transforms + tf3.transforms
+                return transforms.Compose(tf1)
+            else:
+                return tf_timm
+            
         elif _name == 'pim':
             # 448:600
             # 384:510
