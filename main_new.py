@@ -7,14 +7,14 @@ import argparse
 import datetime
 import numpy as np
 from copy import deepcopy
+import random
 
 import torch
 import torch.backends.cudnn as cudnn
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
 import torch.distributed as dist
 
-from timm.utils import *
-from timm.loss import *
+from timm.utils import ApexScaler,update_summary
 
 from config import get_config
 from models import build_model
@@ -25,7 +25,7 @@ from lr_scheduler import build_scheduler
 from optimizer import build_optimizer
 from criterion import build_criterion
 from logger import create_logger
-from utils import load_best_model, load_checkpoint, save_checkpoint, get_grad_norm,  reduce_tensor,l1_regularizer,getDataByStick,list2dict,NativeScaler_V2
+from utils import save_checkpoint, list2dict,NativeScaler_V2
 
 from contextlib import suppress
 try:
@@ -230,8 +230,8 @@ def main(config):
     loss_rec = np.array([])
 
     # wandb log. watch, record gradient of the model training
-    if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0:
-        wandb.watch(models_without_ddp['main'], log_freq=100)
+    if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0 and config.LOG_WANDB_WATCH:
+        wandb.watch(models_without_ddp['main'], log_freq=1000)
 
     for epoch in range(config.TRAIN.START_EPOCH, config.TRAIN.EPOCHS):
         if not config.DATA.TFRECORD_MODE and config.DISTRIBUTED:
@@ -268,7 +268,7 @@ def main(config):
         logger.info(f'Best {bt_metric}: {best_metrics[bt_metric]:.2f}%\t')
     if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0:
         best_metrics = OrderedDict([('eval_best_'+k,v) for k,v in best_metrics.items()])
-        wandb.log(best_metrics,step=epoch)
+        wandb.log(best_metrics)
 
     # del .ckp
     del_ckp_model(config)
@@ -303,7 +303,7 @@ def main(config):
             eval_metrics = OrderedDict([('test_'+k,v) for k,v in eval_metrics.items()])
             eval_metrics_ema = OrderedDict([('test_ema_'+k,v) for k,v in eval_metrics_ema.items()])
             eval_metrics.update(eval_metrics_ema)
-            wandb.log(eval_metrics,step=epoch)
+            wandb.log(eval_metrics)
 
 # 此函数是为了处理ema和多模型保存而创建，ema模型的save_ckpt和正常模型流程基本一致，故将其抽象出来
 def save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,ema_model,eval_metrics,is_ema,best_metrics_ema):
@@ -401,10 +401,10 @@ if __name__ == '__main__':
     linear_scaled_warmup_lr = config.TRAIN.WARMUP_LR * config.DATA.BATCH_SIZE * config.WORLD_SIZE / config.TRAIN.LR_BS_SCALE
     linear_scaled_min_lr = config.TRAIN.MIN_LR * config.DATA.BATCH_SIZE * config.WORLD_SIZE / config.TRAIN.LR_BS_SCALE
     # gradient accumulation also need to scale the learning rate
-    # if config.TRAIN.ACCUMULATION_STEPS > 1:
-    #     linear_scaled_lr = linear_scaled_lr * config.TRAIN.ACCUMULATION_STEPS
-    #     linear_scaled_warmup_lr = linear_scaled_warmup_lr * config.TRAIN.ACCUMULATION_STEPS
-    #     linear_scaled_min_lr = linear_scaled_min_lr * config.TRAIN.ACCUMULATION_STEPS
+    if config.TRAIN.ACCUMULATION_STEPS > 1:
+        linear_scaled_lr = linear_scaled_lr * config.TRAIN.ACCUMULATION_STEPS
+        linear_scaled_warmup_lr = linear_scaled_warmup_lr * config.TRAIN.ACCUMULATION_STEPS
+        linear_scaled_min_lr = linear_scaled_min_lr * config.TRAIN.ACCUMULATION_STEPS
     config.defrost()
     config.TRAIN.BASE_LR = linear_scaled_lr
     config.TRAIN.WARMUP_LR = linear_scaled_warmup_lr

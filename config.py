@@ -257,6 +257,7 @@ _C.BINARYTRAIN_MODE = False
 _C.LOAD_TEST_DIR = ''
 # log training and validation metrics to wandb
 _C.LOG_WANDB = False
+_C.LOG_WANDB_WATCH = False
 # local rank for DistributedDataParallel, given by command line argument
 _C.LOCAL_RANK = 0
 _C.DISTRIBUTED = False
