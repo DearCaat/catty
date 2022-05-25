@@ -7,7 +7,7 @@ DATA:
   INTERPOLATION: bilinear
 MODEL: 
   NUM_CLASSES: 200
-  NAME: vit_base_patch16_448_miil_in21k
+  NAME: vit_base_patch16_448_in21k
   DROP_PATH_RATE: 0.1
 TRAIN:
   EPOCHS: 50
