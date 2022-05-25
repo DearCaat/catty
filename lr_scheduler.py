@@ -7,7 +7,7 @@ import math
 
 def build_scheduler(config, optimizer, n_iter_per_epoch):
     num_steps = int(config.TRAIN.EPOCHS * n_iter_per_epoch)
-    warmup_steps = int(config.TRAIN.WARMUP_EPOCHS * n_iter_per_epoch)
+    warmup_steps = int(config.TRAIN.WARMUP_EPOCHS * n_iter_per_epoch) if int(config.TRAIN.WARMUP_STEPS) == -1 else int(config.TRAIN.WARMUP_STEPS) // config.TRAIN.ACCUMULATION_STEPS
     decay_steps = int(config.TRAIN.LR_SCHEDULER.DECAY_EPOCHS * n_iter_per_epoch)
 
     lr_scheduler = None

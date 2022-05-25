@@ -1,6 +1,6 @@
 DATA:
   VAL_SPLIT: test
-  DATALOADER_NAME: pim_timm_pim
+  DATALOADER_NAME: torch_timm_pim
   IMG_SIZE: (384,384) #(384,384)
   BATCH_SIZE: 16
   VAL_BATCH_SIZE: 38
@@ -10,10 +10,10 @@ MODEL:
   NUM_CLASSES: 200
   # swin_base_patch4_window12_384_in22k
   NAME: swin_large_patch4_window12_384_in22k
-  DROP_PATH_RATE: -1.
+  DROP_PATH_RATE: 0.2
 TRAIN:
   EPOCHS: 50
-  WARMUP_EPOCHS: 2
+  WARMUP_STEPS: 800
   WEIGHT_DECAY: 0.0005
   BASE_LR: 0.0005
   WARMUP_LR: 1e-9
@@ -33,8 +33,9 @@ TEST:
  
 MODEL_EMA: false
 LOG_WANDB: false
-TRAIN_MODE: train
+# TRAIN_MODE: train
 EMA_DECAY: 0.9993
-SEED: -1   
+SEED: -1
+PRINT_FREQ: 100   
 
 

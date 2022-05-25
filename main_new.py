@@ -268,7 +268,7 @@ def main(config):
         logger.info(f'Best {bt_metric}: {best_metrics[bt_metric]:.2f}%\t')
     if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0:
         best_metrics = OrderedDict([('eval_best_'+k,v) for k,v in best_metrics.items()])
-        wandb.log(best_metrics)
+        wandb.log(best_metrics,step=epoch)
 
     # del .ckp
     del_ckp_model(config)
@@ -303,7 +303,7 @@ def main(config):
             eval_metrics = OrderedDict([('test_'+k,v) for k,v in eval_metrics.items()])
             eval_metrics_ema = OrderedDict([('test_ema_'+k,v) for k,v in eval_metrics_ema.items()])
             eval_metrics.update(eval_metrics_ema)
-            wandb.log(eval_metrics)
+            wandb.log(eval_metrics,step=epoch)
 
 # 此函数是为了处理ema和多模型保存而创建，ema模型的save_ckpt和正常模型流程基本一致，故将其抽象出来
 def save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,ema_model,eval_metrics,is_ema,best_metrics_ema):

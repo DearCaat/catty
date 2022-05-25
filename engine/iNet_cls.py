@@ -30,6 +30,13 @@ class INetClsEngine:
             ]))
             self.test_metrics_epoch_log += ['auc','macro_f1','micro_f1']
         
+    def reset_meter(self,is_train=False):
+        if is_train:
+            for _key in self.train_metrics.keys():
+                self.train_metrics[_key].reset()
+        else:
+            for _key in self.test_metrics.keys():
+                self.test_metrics[_key].reset()
 
     def cal_loss_func(self,config,models,idx,samples,targets,epoch,num_steps,criterions,**kwargs):
         # torch.autograd.set_detect_anomaly(True)
