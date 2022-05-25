@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from timm.models import create_model
-from .rdd_trans import *
 from .pvt import *
 from .pvt_v2 import *
 from ._vit import *
@@ -46,7 +45,7 @@ def build_model(config):
             config.MODEL.NAME,
             pretrained=config.MODEL.PRETRAINED,
             num_classes=config.MODEL.NUM_CLASSES,
-            drop_rate=config.MODEL.DROP_RATE,
+            drop_rate=None if int(config.MODEL.DROP_RATE) == -1 else config.MODEL.DROP_RATE,
             drop_path_rate=None if int(config.MODEL.DROP_PATH_RATE) == -1 else config.MODEL.DROP_PATH_RATE
         )
         models = {'main':model}

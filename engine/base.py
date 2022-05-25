@@ -7,6 +7,12 @@ from numpy import ndarray
 import datetime
 from collections import OrderedDict
 
+try:
+    import wandb
+    has_wandb = True
+except ImportError: 
+    has_wandb = False
+
 import sys,os 
 sys.path.append(os.path.dirname(__file__) + os.sep + '../')
 from utils import ampscaler_get_grad_norm
@@ -104,7 +110,7 @@ class BaseTrainer():
                 if isinstance(output, (tuple, list)):
                     predictions = output[0]
 
-            loss = loss / config.TRAIN.ACCUMULATION_STEPS
+                loss = loss / config.TRAIN.ACCUMULATION_STEPS
 
             if loss_scaler is not None:
                 grad_norm = loss_scaler(loss,optimizer,
@@ -175,6 +181,10 @@ class BaseTrainer():
                     f'mem {memory_used:.0f}MB')
                 # log per iter
                 log_meter(self.engine.train_metrics,self.engine.train_metrics_iter_log,logger)
+                # wandb log per iter
+                if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0:
+                    rowd = OrderedDict([('loss_iter',loss_meter.val),('grad_norm_iter',norm_meter.val)])
+                    wandb.log(rowd)
         #每一轮更新一次
         self.engine.update_per_epoch(config,epoch)
 
@@ -188,7 +198,7 @@ class BaseTrainer():
 
         if config.EMPTY_CACHE:
             torch.cuda.empty_cache()
-        return loss,OrderedDict([('loss', loss_meter.avg),('grad_norm',norm_meter.avg),('loss_scale',scaler_meter.avg)])
+        return loss,OrderedDict([('loss_epoch', loss_meter.avg),('grad_norm_epoch',norm_meter.avg),('loss_scale_epoch',scaler_meter.avg)])
 
     def predict(config, data_loader, model,amp_autocast=suppress,logger=None):
         model.eval()

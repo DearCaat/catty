@@ -1,6 +1,6 @@
 DATA:
   VAL_SPLIT: test
-  DATALOADER_NAME: torch_timm_pim
+  DATALOADER_NAME: pim_timm_pim
   IMG_SIZE: (384,384) #(384,384)
   BATCH_SIZE: 16
   VAL_BATCH_SIZE: 38
@@ -10,7 +10,7 @@ MODEL:
   NUM_CLASSES: 200
   # swin_base_patch4_window12_384_in22k
   NAME: swin_large_patch4_window12_384_in22k
-  DROP_PATH_RATE: .2
+  DROP_PATH_RATE: -1.
 TRAIN:
   EPOCHS: 50
   WARMUP_EPOCHS: 2
@@ -20,7 +20,7 @@ TRAIN:
   MIN_LR: 1e-12
   OPTIMIZER:
     NAME: sgd
-  ACCUMULATION_STEPS: 2
+  ACCUMULATION_STEPS: 2  # this value will scale lr
   LR_BS_SCALE: 16.0
 AUG:
   NO_AUG: false

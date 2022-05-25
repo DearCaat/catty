@@ -68,7 +68,6 @@ def timm_dataloader(config,is_train):
 def pytorch_dataloader(config,is_train):
     if is_train:
         dataset_train,dataset_val = build_dataset(config,'train_val')
-
         if config.DISTRIBUTED:
             sampler=torch.utils.data.distributed.DistributedSampler(dataset_train)
             loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=config.DATA.BATCH_SIZE,num_workers=config.DATA.NUM_WORKERS,pin_memory=config.DATA.PIN_MEMORY,drop_last=config.DATA.DROP_LAST,persistent_workers=True,sampler=sampler)
