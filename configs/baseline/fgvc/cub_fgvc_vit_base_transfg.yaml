@@ -32,5 +32,5 @@ TEST:
 
 MODEL_EMA: false
 LOG_WANDB: false
-TRAIN_MODE: train
+# TRAIN_MODE: train
 EMA_DECAY: 0.9993
