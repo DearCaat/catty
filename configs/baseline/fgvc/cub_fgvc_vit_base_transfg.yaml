@@ -31,6 +31,6 @@ TEST:
   BEST_METRIC: top1
 
 MODEL_EMA: false
-LOG_WANDB: true
+LOG_WANDB: false
 TRAIN_MODE: train
 EMA_DECAY: 0.9993
