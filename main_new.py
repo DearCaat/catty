@@ -262,7 +262,7 @@ def main(config):
         eval_metrics.update(eval_metrics_ema)
         update_summary(
             epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
-            write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
+            write_header=False, log_wandb=config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0)
 
     for bt_metric in list(best_metrics.keys()):
         logger.info(f'Best {bt_metric}: {best_metrics[bt_metric]:.2f}%\t')

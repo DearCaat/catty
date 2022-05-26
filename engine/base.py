@@ -145,7 +145,16 @@ class BaseTrainer():
                 self.engine.update_per_iter(config,epoch,idx,output=output)
 
             torch.cuda.synchronize()
-            if not config.DISTRIBUTED:
+            if config.DISTRIBUTED:
+                    if grad_norm is not None:
+                        reduced_norm = reduce_tensor(grad_norm,config.WORLD_SIZE)
+                        norm_meter.update(reduced_norm)
+                    reduced_loss = reduce_tensor(loss.data,config.WORLD_SIZE)
+                    reduced_scalar = loss_scale_value
+                    loss_meter.update(reduced_loss.item(), targets.size(0))
+                    scaler_meter.update(reduced_scalar)
+                    update_metrics(config,self.engine.train_metrics,metrics_values,distributed=True)
+            else:
                 if grad_norm is not None:
                     norm_meter.update(grad_norm)
                 loss_meter.update(loss.item(), targets.size(0))
@@ -157,15 +166,6 @@ class BaseTrainer():
             end = time.time()
 
             if last_batch or idx % config.PRINT_FREQ == 0:
-                if config.DISTRIBUTED:
-                    if grad_norm is not None:
-                        reduced_norm = reduce_tensor(grad_norm,config.WORLD_SIZE)
-                        norm_meter.update(reduced_norm)
-                    reduced_loss = reduce_tensor(loss.data,config.WORLD_SIZE)
-                    reduced_scalar = reduce_tensor(loss_scale_value,config.WORLD_SIZE)
-                    loss_meter.update(reduced_loss.item(), targets.size(0))
-                    scaler_meter.update(reduced_scalar)
-                    update_metrics(config,self.engine.train_metrics,metrics_values,distributed=True)
                 #lr = optimizer.param_groups[0]['lr']
                 lrl = [param_group['lr'] for param_group in optimizer.param_groups]
                 lr = sum(lrl) / len(lrl)
