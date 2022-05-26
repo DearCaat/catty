@@ -78,8 +78,8 @@ class BaseTrainer():
 
     def train_one_epoch(self,config,models, criterions, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,logger=None,**kwargs):
         models['main'].train()
-        if config.EMPTY_CACHE:
-            torch.cuda.empty_cache()
+        # if config.EMPTY_CACHE:
+        torch.cuda.empty_cache()
         optimizer.zero_grad()
         second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
         num_steps = len(data_loader)
