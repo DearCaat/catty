@@ -9,12 +9,13 @@ MODEL:
   NUM_CLASSES: 200
   NAME: vit_base_patch16_224_in21k
   DROP_PATH_RATE: 0.1
+  DROP_RATE: 0.1
 TRAIN:
   EPOCHS: 100
   WARMUP_STEPS: 1600
   WEIGHT_DECAY: 0.05
   BASE_LR: 5e-4
-  WARMUP_LR: 1e-9
+  WARMUP_LR: 1e-6  # https://github.com/rwightman/pytorch-image-models/issues/252
   MIN_LR: 1e-12
   OPTIMIZER:
     NAME: adamw
@@ -33,4 +34,4 @@ TEST:
 MODEL_EMA: true
 LOG_WANDB: false
 # TRAIN_MODE: train
-EMA_DECAY: 0.9993
+EMA_DECAY: 0.9996  # 根据 https://github.com/rwightman/pytorch-image-models/issues/252 imagenet b288, 0.99996得出 每epoch更新尺度尽量一致
