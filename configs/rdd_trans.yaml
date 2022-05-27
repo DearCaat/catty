@@ -18,12 +18,12 @@ RDD_TRANS:
     IPS_ACTIVE_CONNECTION: 2
     IPS_K_AT_HOP: [ 2, 0 ]
     NAME: kmeans
-    NUM_CLUSTER: 3
+    NUM_CLUSTER: 5
     NUM_INIT: 10
     N_COMPOENTS: null
     RBF_DISTANCE: euclidean
     RBF_GAMMA: 0.05
-    SELECT_THR: 0.9 
+    SELECT_THR: 0.99 
     SPECTRAL_AFFINITY: rbf
     THR: 0.75
   EMA_DECAY: 0.9998
