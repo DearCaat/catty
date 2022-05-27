@@ -87,6 +87,7 @@ def parse_option():
     parser.add_argument('--output', default='output', type=str, metavar='PATH',
                         help='root of output folder, the full path is <output>/<model_name>/<tag> (default: output)')
     parser.add_argument('--model-name',  type=str, help='model name')
+    parser.add_argument('--project',  type=str, help='experiment project')
     parser.add_argument('--title',  type=str, help='experiment title')
     parser.add_argument('--throughput', action='store_true', help='Test throughput only')
     parser.add_argument('--log-wandb', action='store_true', default=False,
@@ -127,6 +128,7 @@ def main(config):
         if config.RDD_TRANS.INST_NUM_CLASS == config.MODEL.NUM_CLASSES:
             std_ins = dict([('weight',std['head.weight']),('bias',std['head.bias'])])
             model_teacher.head_instance.load_state_dict(std_ins, strict=True)
+            model_teacher.head[0].load_state_dict(std_ins, strict=True)
         model_teacher.instance_feature_extractor.load_state_dict(std, strict=False)
         logger.info(f"Teacher model inited")
     elif (config.RDD_TRANS.PERSUDO_LABEL or config.RDD_TRANS.CLUSTER.NAME=='gcn') and not config.RDD_TRANS.TEACHER_INIT and not config.THUMB_MODE:
@@ -186,72 +188,23 @@ def main(config):
     max_accuracy = 0.0
     best_auc = 0.0
     max_f1 = 0.0
+    max_patr90 = .0
     max_f1_ema = .0
     max_accuracy_ema = .0
     best_auc_ema = .0
+    max_patr90_ema = .0
 
-    if config.MODEL.RESUME:
-        criterion = torch.nn.CrossEntropyLoss()
-        criterion.cuda()
-        max_accuracy,best_auc = load_checkpoint(config, model, optimizer, lr_scheduler, logger)
-        if config.TRAIN_MODE=='eval':
-            if config.LOAD_TEST_DIR:
-                dic=np.load(config.LOAD_TEST_DIR)
-                label=dic['label']
-                pred=dic['pred']
-                if 'cqu_bpdd' in config.DATA.DATASET:
-                    for m in range(len(label)):
-                        if int(label[m])==6:
-                            label[m] = 0
-                        else:
-                            label[m] = 1
-                pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
-                if config.MODEL.NUM_CLASSES > 2:
-                    pred = 1-pred[:,6]
-                else:
-                    pred = pred[:,1]
-                precision,recall,thr=precision_recall_curve(label, pred)
-                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
-                patr=getDataByStick([precision,recall],stick)
-                logger.info(patr)
-            else:
-                acc1, acc5, loss, auc,pred,label,eval_metrics = validate(config, data_loader_test, model,save_pre=True,amp_autocast=amp_autocast,criterion=criterion)
-                logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
-                _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
-                np.savez(_save_path,pred=pred,label=label)
-                if 'cqu_bpdd' in config.DATA.DATASET:
-                    for m in range(len(label)):
-                        if int(label[m])==6:
-                            label[m] = 0
-                        else:
-                            label[m] = 1
-                pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
-                if config.MODEL.NUM_CLASSES > 2:
-                    pred = 1-pred[:,6]
-                else:
-                    pred = pred[:,1]
-                precision,recall,thr=precision_recall_curve(label, pred)
-                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
-                patr=getDataByStick([precision,recall],stick)
-                logger.info(patr)
-            return
-        elif config.TRAIN_MODE=='predict':
-            pred,label= predict(config, data_loader_test, model,amp_autocast=amp_autocast)
-            _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_predict_'+config.DATA.DATASET.split('/')[-1])+'.npz'
-            np.savez(_save_path,pred=pred,label=label)
-
-            return
     if model_teacher is not None:
         teacher_ema = ModelEmaV3(model_teacher, decay=config.RDD_TRANS.EMA_DECAY, device='cpu' if config.RDD_TRANS.EMA_FORCE_CPU else None, diff_layers=[] if config.RDD_TRANS.EMA_DIFF is None else config.RDD_TRANS.EMA_DIFF,decay_diff=config.RDD_TRANS.EMA_DECAY_DIFF)
-        if config.MODEL.RESUME:
-            load_checkpoint(config, teacher_ema.module, optimizer, lr_scheduler, logger)
+        # if config.MODEL.RESUME:
+         #    load_checkpoint(config, teacher_ema.module, optimizer, lr_scheduler, logger)
     else:
         teacher_ema = None
     model_ema = None
     if config.MODEL_EMA:    
         model_ema = ModelEmaV3(model, decay=config.EMA_DECAY, device='cpu' if config.EMA_FORCE_CPU else None)
-        if config.MODEL.RESUME:
-            load_checkpoint(config, model_ema.module, optimizer, lr_scheduler, logger)
+        #if config.MODEL.RESUME:
+            #load_checkpoint(config, model_ema.module, optimizer, lr_scheduler, logger)
     # setup exponential moving average of model weights, SWA could be used here too
     '''model_ema = None
     if args.model_ema:
@@ -276,7 +229,6 @@ def main(config):
         # NOTE: EMA model does not need to be wrapped by DDP
     else:
         model_without_ddp = model
-
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info(f"number of params: {n_parameters}")
     if hasattr(model_without_ddp, 'flops'):
@@ -292,6 +244,117 @@ def main(config):
     else:
         criterion = torch.nn.CrossEntropyLoss()
     criterion.cuda()
+
+    if config.MODEL.RESUME:
+        if config.MODEL.RESUME.lower() == 'auto':
+            load_best_model(config, model_without_ddp, logger)
+            acc1, acc5, loss, auc,pred,label,eval_metrics = validate(config, data_loader_test, model_without_ddp,save_pre=True,amp_autocast=amp_autocast,criterion=criterion)
+            logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
+            _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
+            np.savez(_save_path,pred=pred,label=label)
+            if 'cqu_bpdd' in config.DATA.DATASET:
+                for m in range(len(label)):
+                    if int(label[m])==6:
+                        label[m] = 0
+                    else:
+                        label[m] = 1
+            pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
+            if config.MODEL.NUM_CLASSES > 2:
+                pred = 1-pred[:,6]
+            else:
+                pred = pred[:,1]
+            
+            precision,recall,thr=precision_recall_curve(label, pred)
+            stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+            patr=getDataByStick([precision,recall],stick)
+            logger.info(patr)
+
+            acc1_ema,auc_ema,eval_metrics_ema,patr_ema = 0,0,None,None
+            #ema
+            if model_ema is not None or teacher_ema is not None:
+                load_best_model(config, model_ema.module if model_ema is not None else teacher_ema.module, logger,is_ema=True)
+                
+                acc1_ema, acc5_ema,loss_ema,auc_ema,pred,label,eval_metrics_ema = validate(config, data_loader_test, model_ema.module if model_ema is not None else teacher_ema.module,amp_autocast=amp_autocast,criterion=criterion,save_pre=True)
+                
+                logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1_ema:.2f}% {auc_ema:.2f}%")
+                _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_ema_'+config.DATA.DATASET.split('/')[-1])+'.npz'
+                np.savez(_save_path,pred=pred,label=label)
+                if 'cqu_bpdd' in config.DATA.DATASET:
+                    for m in range(len(label)):
+                        if int(label[m])==6:
+                            label[m] = 0
+                        else:
+                            label[m] = 1
+                pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
+                if config.MODEL.NUM_CLASSES > 2:
+                    pred = 1-pred[:,6]
+                else:
+                    pred = pred[:,1]
+                precision,recall,thr=precision_recall_curve(label, pred)
+                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+                patr_ema=getDataByStick([precision,recall],stick)
+                logger.info(patr_ema)
+            
+            if config.LOG_WANDB and has_wandb:
+                _summary = OrderedDict([('test_top1',acc1),
+                                        ('test_f1',eval_metrics['macro_f1']),
+                                        ('test_auc',auc),
+                                        ('test_patr90',patr[1][0] if patr else 0),
+                                        ('test_ema_top1',acc1_ema),
+                                        ('test_ema_f1',eval_metrics_ema['macro_f1'] if eval_metrics else 0),
+                                        ('test_ema_auc',auc_ema),
+                                        ('test_ema_patr90',patr_ema[1][0] if patr_ema else 0),])
+                wandb.log(_summary)
+            return
+        else:
+            max_accuracy,best_auc, best_f1 = load_checkpoint(config, model, optimizer, lr_scheduler, logger)
+            if config.TRAIN_MODE=='eval':
+                if config.LOAD_TEST_DIR:
+                    dic=np.load(config.LOAD_TEST_DIR)
+                    label=dic['label']
+                    pred=dic['pred']
+                    #if 'cqu_bpdd' in config.DATA.DATASET:
+                    for m in range(len(label)):
+                        if int(label[m])==config.DATA.DATA_NOR_INDEX:
+                            label[m] = 0
+                        else:
+                            label[m] = 1
+                    pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
+                    if config.MODEL.NUM_CLASSES > 2:
+                        pred = 1-pred[:,6]
+                    else:
+                        pred = pred[:,1]
+                    precision,recall,thr=precision_recall_curve(label, pred)
+                    stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+                    patr=getDataByStick([precision,recall],stick)
+                    logger.info(patr)
+                else:
+                    acc1, acc5, loss, auc,pred,label,eval_metrics = validate(config, data_loader_test, model,save_pre=True,amp_autocast=amp_autocast,criterion=criterion)
+                    logger.info(f"Accuracy of the network on the {len(dataset_test)} test images: {acc1:.2f}% {auc:.2f}%")
+                    _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_'+config.DATA.DATASET.split('/')[-1])+'.npz'
+                    np.savez(_save_path,pred=pred,label=label)
+                    #if 'cqu_bpdd' in config.DATA.DATASET:
+                    for m in range(len(label)):
+                        if int(label[m])==config.DATA.DATA_NOR_INDEX:
+                            label[m] = 0
+                        else:
+                            label[m] = 1
+                    pred=pred.reshape((-1,config.MODEL.NUM_CLASSES))
+                    if config.MODEL.NUM_CLASSES > 2:
+                        pred = 1-pred[:,6]
+                    else:
+                        pred = pred[:,1]
+                    precision,recall,thr=precision_recall_curve(label, pred)
+                    stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.99]  
+                    patr=getDataByStick([precision,recall],stick)
+                    logger.info(patr)
+                return
+            elif config.TRAIN_MODE=='predict':
+                pred,label= predict(config, data_loader_test, model,amp_autocast=amp_autocast)
+                _save_path = os.path.join(config.OUTPUT,'result',config.EXP_NAME+'_predict_'+config.DATA.DATASET.split('/')[-1])+'.npz'
+                np.savez(_save_path,pred=pred,label=label)
+
+                return
 
     logger.info("Start training")
     start_time = time.time()
@@ -322,22 +385,30 @@ def main(config):
         # save the ema checkpoint
         if model_ema is not None or teacher_ema is not None:
             f1_ema = eval_metrics_ema['macro_f1']
+            patr90_ema = eval_metrics_ema['p@r90']
             if config.TEST.BEST_METRIC.lower() == 'auc':
                 is_best_ema = (auc_ema > best_auc_ema) and epoch>0
             elif config.TEST.BEST_METRIC.lower() == 'top1':
                 is_best_ema = (acc1_ema > max_accuracy_ema) and epoch>0
             elif config.TEST.BEST_METRIC.lower() == 'f1':
                 is_best_ema = (f1_ema > max_f1_ema) and epoch>0
+            elif config.TEST.BEST_METRIC.lower() == 'p@r90':
+                is_best_ema = (patr90_ema > max_patr90_ema) and epoch>0
             else:
                 raise AttributeError
+
             max_accuracy_ema = max(max_accuracy_ema, acc1_ema) if epoch > 0 else 0
             best_auc_ema = max(best_auc_ema,auc_ema) if epoch > 0 else 0
             max_f1_ema = max(max_f1_ema,f1_ema)
+            max_patr90_ema = max(max_patr90_ema,patr90_ema)
+
             if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-                save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,None,is_ema=True)
+                save_checkpoint(config, epoch, model_ema.module if model_ema is not None else teacher_ema.module, max_accuracy_ema, optimizer, lr_scheduler, logger,is_best_ema,best_auc_ema,max_f1_ema,None,is_ema=True,best_patr90=max_patr90_ema)
         else:
             eval_metrics_ema = None
+
         f1 = eval_metrics['macro_f1']
+        patr90 = eval_metrics['p@r90']
 
         if config.TEST.BEST_METRIC.lower() == 'auc':
             is_best = (auc > best_auc) and epoch>0
@@ -345,13 +416,16 @@ def main(config):
             is_best = (acc1 > max_accuracy) and epoch>0
         elif config.TEST.BEST_METRIC.lower() == 'f1':
             is_best = (f1 > max_f1) and epoch>0
+        elif config.TEST.BEST_METRIC.lower() == 'p@r90':
+            is_best = (patr90 > max_patr90) and epoch>0
         else:
             raise AttributeError
 
         max_accuracy = max(max_accuracy, acc1) if epoch > 0 else 0
         best_auc = max(best_auc,auc) if epoch > 0 else 0
         max_f1 = max(max_f1,f1)
-        
+        max_patr90 = max(max_patr90,patr90)
+
         if eval_metrics_ema is not None:
             eval_metrics.update(eval_metrics_ema)
         update_summary(
@@ -359,7 +433,7 @@ def main(config):
                     write_header=False, log_wandb=config.LOG_WANDB and has_wandb)
 
         if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
-            save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,model_ema)
+            save_checkpoint(config, epoch, model_without_ddp, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,max_f1,model_ema,best_patr90=max_patr90)
 
     logger.info(f'Max accuracy: {max_accuracy:.2f}%\t'
                 f'Max f1: {max_f1:.2f}%\t'
@@ -369,6 +443,7 @@ def main(config):
         _summary = OrderedDict([('best_top1',max_accuracy),
                                 ('best_f1',max_f1),
                                 ('best_auc',best_auc),
+                                ('p@r90',max_patr90),
                                 ('best_ema_top1',max_accuracy_ema),
                                 ('best_ema_f1',max_f1_ema),
                                 ('best_ema_auc',best_auc_ema)])
@@ -434,11 +509,11 @@ def main(config):
             _summary = OrderedDict([('test_top1',acc1),
                                     ('test_f1',eval_metrics['macro_f1']),
                                     ('test_auc',auc),
-                                    ('test_patr90',patr[3][0] if patr else 0),
+                                    ('test_patr90',patr[1][0] if patr else 0),
                                     ('test_ema_top1',acc1_ema),
                                     ('test_ema_f1',eval_metrics_ema['macro_f1'] if eval_metrics else 0),
                                     ('test_ema_auc',auc_ema),
-                                    ('test_ema_patr90',patr_ema[-2][0] if patr_ema else 0),])
+                                    ('test_ema_patr90',patr_ema[1][0] if patr_ema else 0),])
             wandb.log(_summary)
 
 def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixup_fn=None, lr_scheduler=None,amp_autocast=suppress,loss_scaler=None,model_ema=None,teacher_ema=None, thr_list=[]):
@@ -486,8 +561,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         # 当伪标签为二分类时或二分类训练时，需要二分类标签进行loss计算
         if config.BINARYTRAIN_MODE or (not config.THUMB_MODE and config.RDD_TRANS.INST_NUM_CLASS):
             targets_bin = targets.clone()
-            targets_bin[targets==6] = 0
-            targets_bin[targets!=6] = 1
+            targets_bin[targets==config.DATA.DATA_NOR_INDEX] = 0
+            targets_bin[targets!=config.DATA.DATA_NOR_INDEX] = 1
         
         # timm dataloader prefetcher will do this
         if mixup_fn is not None and ((not config.DATA.TIMM_PREFETCHER and config.DATA.TIMM) or not config.DATA.TIMM):
@@ -592,8 +667,9 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                         thr_min_dis_conf = 0.5 + (epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) / (config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) *0.499
                     # sigmod函数来保证前期增加速率远远高于后期，优于线性增长
                     elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_iter':
-                        thr_min_conf = get_sigmod_num(0.9,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
-                        thr_min_dis_conf = get_sigmod_num(0.5,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS * num_steps))
+                        thr_min_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_NOR_LOW,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps,end=config.RDD_TRANS.THR_ABS_NOR_HIGH)
+                        thr_min_dis_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_DIS_LOW,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps,end=config.RDD_TRANS.THR_ABS_DIS_HIGH)
+                        thr_min_nor_conf = get_sigmod_num(config.RDD_TRANS.THR_FIL_NOR_LOW,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps,end=config.RDD_TRANS.THR_FIL_NOR_HIGH,alph=5)
                     elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_epoch':
                         thr_min_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_NOR_LOW,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=config.RDD_TRANS.THR_ABS_NOR_HIGH)
 
@@ -615,7 +691,10 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                             else:
                                 mask_ins_abs = (output_bag_label >= thr_min_dis_conf)
                         if config.RDD_TRANS.THR_REL_:
-                            mask_ins = ps_mask_dis & (mask_ins_abs | (output_bag_label >= min_nor_thr))
+                            if mask_ins_abs is not None:
+                                mask_ins = ps_mask_dis & (mask_ins_abs | (output_bag_label >= min_nor_thr))
+                            else:
+                                mask_ins = ps_mask_dis &  (output_bag_label >= min_nor_thr)
                         else:
                             mask_ins = ps_mask_dis & mask_ins_abs
                         # 只要相对阈值
@@ -891,18 +970,72 @@ def predict(config, data_loader, model,amp_autocast=suppress, log_suffix=''):
             #if config.EVAL_MODE:
             targets_bin = targets.clone()
 
-            if 'cqu_bpdd' in config.DATA.DATASET:
-                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+            #if 'cqu_bpdd' in config.DATA.DATASET:
+            targets_bin[targets==config.DATA.DATA_NOR_INDEX] = 0
+            targets_bin[targets!=config.DATA.DATA_NOR_INDEX] = 1
             # compute output
             with amp_autocast():
                 output = model(images)
             if isinstance(output, (tuple, list)):
-                index = 0 if config.THUMB_MODE or config.RDD_TRANS.NOT_INST_TEST else 1
-
-                output = output[index]
-
+                if config.RDD_TRANS.PERSUDO_LEARNING:
+                    output_ins = output[1]
+                    cluster_num = output[-1]
+                    output_soft_ins = torch.nn.functional.softmax(output_ins,dim=-1)
+                    output = output[0]
+                else:
+                    index = 0 
+                    cluster_num = output[-1]
+                    output = output[index]
             output_soft = torch.nn.functional.softmax(output,dim=-1)
+            
+            if not config.THUMB_MODE and config.RDD_TRANS.INST_TEST and config.RDD_TRANS.PERSUDO_LEARNING:
+                #使用max-pool来测试
+                print('das')
+                b,p,cls = output_ins.shape
+                max_score,max_index_cls = torch.max(output_soft_ins,dim=-1)  # B P
+                # 实例中最大的病害类别置信度大于阈值 
+                mask = (max_score - config.RDD_TRANS.TEST_THR > 0) & (max_index_cls - config.DATA.NOR_CLS_INDEX != 0)
+                mask_max_nor = max_index_cls == config.DATA.NOR_CLS_INDEX
+                max_index = []
+                for i in range(b):
+                    # 如果包中有任一实例满足该条件,找出满足要求的最大置信度实例作为包的预测值
+                    if mask[i].any()==True:
+                        score_tmp = max_score[i,mask[i]]  # B
+                        _,max_inx_tmp = torch.max(score_tmp,dim=-1)
+                        max_index.append(torch.nonzero(mask[i])[max_inx_tmp,0].tolist())
+                    
+                    else:
+                        # 如果包中没有任一实例满足，则认为其为负样本包
+                        # 取所有图块中得分最大的图块的置信度
+                        if config.RDD_TRANS.TEST_MAX_POOL:
+                            _,index = torch.max(max_score[i],dim=-1)
+                        else:
+                        # 取所有图块中正常类得分最大的图块的置信度
+                            _,index = torch.max(output_soft_ins[i,:,config.DATA.NOR_CLS_INDEX],dim=-1)
+                        max_index.append(index)
+
+                output_ins = output_ins[[i for i in range(b)],max_index,:]
+                output_soft_ins = output_soft_ins[[i for i in range(b)],max_index,:]
+
+                del max_score,mask
+
+                if config.RDD_TRANS.BAG_TEST and not config.RDD_TRANS.INST_TEST:
+                    output = output
+                elif config.RDD_TRANS.INST_TEST and not config.RDD_TRANS.BAG_TEST:
+                    output = output_ins
+                    output_soft = output_soft_ins
+                    del output_ins,output_soft_ins
+                # 如果两种测试都用，则相加再除二
+                elif config.RDD_TRANS.INST_TEST and config.RDD_TRANS.BAG_TEST:
+                    if config.RDD_TRANS.INST_NUM_CLASS != config.MODEL.NUM_CLASSES:
+                        output = (output_ins[:,:7] + output) / 2
+                        output_soft = (output_soft + output_soft_ins[:,:7]) / 2
+                    else:
+                        output = (output_ins + output) / 2
+                        output_soft = (output_soft + output_soft_ins) / 2
+                    del output_ins,output_soft_ins
+
+            #output_soft = torch.nn.functional.softmax(output,dim=-1)
     
             save_pred = np.append(save_pred,output_soft.cpu().numpy())
             save_label = np.append(save_label,targets.cpu().numpy())
@@ -957,9 +1090,9 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             if config.BINARYTRAIN_MODE:
                 topk = (1,1)
             m = 0
-            if 'cqu_bpdd' in config.DATA.DATASET:
-                targets_bin[targets==6] = 0
-                targets_bin[targets!=6] = 1
+            # if 'cqu_bpdd' in config.DATA.DATASET:
+            targets_bin[targets==config.DATA.DATA_NOR_INDEX] = 0
+            targets_bin[targets!=config.DATA.DATA_NOR_INDEX] = 1
 
             # compute output
             with amp_autocast():
@@ -992,7 +1125,8 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                         max_index.append(torch.nonzero(mask[i])[max_inx_tmp,0].tolist())
                     
                     else:
-                        # 如果包中没有任一实例满足，则认为其为负样本包，取所有图块中得分最大的图块的置信度
+                        # 如果包中没有任一实例满足，则认为其为负样本包
+                        # 取所有图块中得分最大的图块的置信度
                         if config.RDD_TRANS.TEST_MAX_POOL:
                             _,index = torch.max(max_score[i],dim=-1)
                         else:
@@ -1009,6 +1143,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                     output = output
                 elif config.RDD_TRANS.INST_TEST and not config.RDD_TRANS.BAG_TEST:
                     output = output_ins
+                    output_soft = output_soft_ins
                     del output_ins,output_soft_ins
                 # 如果两种测试都用，则相加再除二
                 elif config.RDD_TRANS.INST_TEST and config.RDD_TRANS.BAG_TEST:
@@ -1024,8 +1159,11 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                 loss = criterion(output, targets_bin)
             else:
                 loss = criterion(output, targets)
-
-            #output_soft = torch.nn.functional.softmax(output,dim=-1)
+                
+            # mean-->softmax  or  softmax-->mean  ?
+            if config.RDD_TRANS.TEST_FIRST_MEAN:
+                del output_soft
+                output_soft = torch.nn.functional.softmax(output,dim=-1)
 
             save_pred = np.append(save_pred,output_soft.cpu().numpy())
             save_label = np.append(save_label,targets.cpu().numpy())
@@ -1076,24 +1214,30 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
         save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
         auc = 0
         if config.BINARYTRAIN_MODE:
-            ma_f1 = f1_score(np.array(save_label!=6,dtype=int),np.argmax(save_pred,axis=1),average='binary')
+            ma_f1 = f1_score(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int),np.argmax(save_pred,axis=1),average='binary')
             mi_f1 = ma_f1
             try:
-                auc = roc_auc_score(np.array(save_label!=6,dtype=int), save_pred[:,1])
+                auc = roc_auc_score(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int), save_pred[:,1])
+                precision,recall,thr=precision_recall_curve(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int), save_pred[:,1])
+                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+                patr=getDataByStick([precision,recall],stick)
             except:
                 print(save_pred)
         else:
             ma_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='macro')
             mi_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='micro')
             try:
-                auc = roc_auc_score(np.array(save_label!=6,dtype=int), 1-save_pred[:,6])
+                auc = roc_auc_score(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int), 1-save_pred[:,6])
+                precision,recall,thr=precision_recall_curve(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int), save_pred[:,1])
+                stick = [0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95]  
+                patr=getDataByStick([precision,recall],stick)
             except:
                 print(save_pred)
         
         #if config.BINARYTRAIN_MODE:
         
-        logger.info(f' * Acc@1 {acc1_meter.avg:.3f} Acc@5 {acc5_meter.avg:.3f} AUC {auc*100:.3f} F1@Macro {ma_f1*100:.3f} F1@Micro {mi_f1*100:.3f}')
-    metrics = OrderedDict([('loss', loss_meter.avg), ('top1', acc1_meter.avg), ('top5', acc5_meter.avg),('auc',auc),('macro_f1',ma_f1),('micro_f1',mi_f1)])
+        logger.info(f' * Acc@1 {acc1_meter.avg:.3f} Acc@5 {acc5_meter.avg:.3f} AUC {auc*100:.3f} F1@Macro {ma_f1*100:.3f} F1@Micro {mi_f1*100:.3f} P@R90 {patr[1][0]:.3f}')
+    metrics = OrderedDict([('loss', loss_meter.avg), ('top1', acc1_meter.avg), ('top5', acc5_meter.avg),('auc',auc),('p@r90',patr[1][0]),('macro_f1',ma_f1),('micro_f1',mi_f1)])
     torch.cuda.empty_cache()
     if save_pre:
         return acc1_meter.avg, acc5_meter.avg, loss_meter.avg, auc,save_pred,save_label,metrics
@@ -1113,7 +1257,7 @@ if __name__ == '__main__':
     
     if config.LOG_WANDB:
         if has_wandb:
-            wandb.init(project=config.EXP_NAME, config=config,entity="dearcat")
+            wandb.init(project=config.PROJECT_NAME, config=config,entity="dearcat",name=config.EXP_NAME)
         else: 
             logger.warning("You've requested to log metrics to wandb but package not found. "
                             "Metrics not being logged to wandb, try `pip install wandb`")
@@ -1126,6 +1270,9 @@ if __name__ == '__main__':
             config.NATIVE_AMP = True
         elif  has_apex:
             config.APEX_AMP = True
+    else:
+        config.NATIVE_AMP = False
+        config.APEX_AMP = False
     if config.NATIVE_AMP and has_native_amp:
         use_amp = 'native'
     elif config.APEX_AMP and has_apex:

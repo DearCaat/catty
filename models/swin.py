@@ -514,21 +514,26 @@ class SwinTransformer(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x):
-        x = self.patch_embed(x)
+    def forward_features(self, _x):
+        x = self.patch_embed(_x)
+
         if self.absolute_pos_embed is not None:
             x = x + self.absolute_pos_embed
+
         x = self.pos_drop(x)
+
         x = self.layers(x)
+
         _,_,dim = x.shape
         x = self.norm(x)  # B L C
-        f = self.avgpool(x.transpose(1, 2))  # B C 1
-        f = torch.flatten(f, 1)
-        return f,x
+        x = self.avgpool(x.transpose(1, 2))  # B C 1
+        x = torch.flatten(x, 1)
+        return x
     
     def forward(self, x):
-        x,_ = self.forward_features(x)
+        x = self.forward_features(x)
         x = self.head(x)
+
         return x
 
 def _create_swin_transformer(variant, pretrained=False, default_cfg=None, **kwargs):

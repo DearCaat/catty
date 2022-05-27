@@ -1,3 +1,6 @@
+## 20220319 好像阈值策略跟初始化模型强相关，没有标准的best参数
+
+
 TEST:
   BEST_METRIC: f1
   CROP: 0.
@@ -23,7 +26,11 @@ RDD_TRANS:
     N_COMPOENTS: null
     RBF_DISTANCE: euclidean
     RBF_GAMMA: 0.05
+<<<<<<< HEAD
     SELECT_THR: 0.99 # 0.99要更好点 
+=======
+    SELECT_THR: 0.99 
+>>>>>>> 72a6c7a2879ea526e6d8334def8231d15e5f0012
     SPECTRAL_AFFINITY: rbf
     THR: 0.75
   EMA_DECAY: 0.9998
@@ -34,7 +41,7 @@ RDD_TRANS:
   EMA_FORCE_CPU: false
   INST_NUM_CLASS: 8
   NOR_THR: 0.05
-  INST_TEST: true
+  INST_TEST: false
   BAG_TEST: true
   PERSUDO_LEARNING: true
   PERSUDO_LABEL: true
@@ -60,7 +67,7 @@ RDD_TRANS:
   THR_FIL_DIS: 0.5
   THR_FIL_NOR_LOW: 0.5
   THR_FIL_NOR_HIGH: 0.95
-  THR_ABS_DIS_: true
+  THR_ABS_DIS_: false        #这俩都存在的情况有待讨论，MM这文章，目前不考虑这个情况
   THR_ABS_NOR_: true
   THR_REL_: true
 

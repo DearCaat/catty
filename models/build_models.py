@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 from timm.models import create_model
-from .swin import *
-from .rdd_trans import *
+from .pvt import *
+from .pvt_v2 import *
+# from ._vit import *
 
 def build_model(config):
     model_name=config.MODEL.NAME
@@ -26,14 +27,17 @@ def build_model(config):
             cluster_rbf_distance = config.RDD_TRANS.CLUSTER.RBF_DISTANCE,
             cluster_rbf_gamma = config.RDD_TRANS.CLUSTER.RBF_GAMMA,
             cluster_n_compoents = config.RDD_TRANS.CLUSTER.N_COMPOENTS,
-            persistent_center = config.RDD_TRANS.CLUSTER.PERSISTENT_CENTER
+            persistent_center = config.RDD_TRANS.CLUSTER.PERSISTENT_CENTER,
+            cluster_flip_sel = config.RDD_TRANS.TEST_CLU_FLIP_SEL
         )
+        models = {'main':model}
     elif model_name.startswith('vgg'):
         model = create_model(
             config.MODEL.NAME,
             pretrained=config.MODEL.PRETRAINED,
             num_classes=config.MODEL.NUM_CLASSES,
         )
+        models = {'main':model}
     else:
         # drop_rate=config.MODEL.DROP_RATE,
         # drop_path_rate=config.MODEL.DROP_PATH_RATE
@@ -41,7 +45,9 @@ def build_model(config):
             config.MODEL.NAME,
             pretrained=config.MODEL.PRETRAINED,
             num_classes=config.MODEL.NUM_CLASSES,
-            drop_rate=config.MODEL.DROP_RATE,
-            drop_path_rate=config.MODEL.DROP_PATH_RATE
+            drop_rate=None if int(config.MODEL.DROP_RATE) == -1 else config.MODEL.DROP_RATE,
+            drop_path_rate=None if int(config.MODEL.DROP_PATH_RATE) == -1 else config.MODEL.DROP_PATH_RATE,
+            img_size = config.DATA.IMG_SIZE[0]
         )
-    return model
+        models = {'main':model}
+    return models

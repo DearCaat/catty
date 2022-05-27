@@ -28,8 +28,10 @@ _C.DATA.DATA_PATH = ''
 _C.DATA.PRETRAINED_DIR = ''
 # Dataset name     tfds/cqu_bpdd  cfd crack500 cracktre200
 _C.DATA.DATASET = 'cqu_bpdd'
-# 数据集中的正常图片所在的类别索引 cqu_bpdd ：6
+
 _C.DATA.NOR_CLS_INDEX = 6
+# 数据集中的正常图片所在的类别索引 cqu_bpdd ：6
+_C.DATA.DATA_NOR_INDEX = 6
 _C.DATA.GRAY = True
 # Input image size (h,w)  cqu_bpdd (900,1200) cfd(300,450)
 _C.DATA.IMG_SIZE = (224,224)
@@ -49,7 +51,7 @@ _C.DATA.DALI = False
 # dataset train split (default: train)
 _C.DATA.TRAIN_SPLIT = 'train'
 # dataset validation split (default: validation)
-_C.DATA.VAL_SPLIT = 'val'
+_C.DATA.VAL_SPLIT = 'test'
 # dataset test split (default: test)
 _C.DATA.TEST_SPLIT = 'test'
 # epoch repeat multiplier (number of times to repeat dataset epoch per train epoch).
@@ -59,6 +61,9 @@ _C.DATA.TIMM = False
 _C.DATA.TIMM_PREFETCHER = False
 # pytorch dataloader
 _C.DATA.DROP_LAST = False
+# "dataloader_dataset_transform"  
+# transform={torch,timm,album,custom...}. The first three totally depends on the _C.AUG configs
+_C.DATA.DATALOADER_NAME = 'timm_timm_timm'
 
 
 _C.DATA.PATCH_SIZE=300
@@ -70,7 +75,7 @@ _C.DATA.CROP_SIZE=300
 # Trainer settings, more settings please refer to /configs/**.yaml
 # -----------------------------------------------------------------------------
 _C.TRAINER = CN()
-_C.TRAINER.NAME = 'rdd_trans'
+_C.TRAINER.NAME = 'iNet_cls'
 
 # -----------------------------------------------------------------------------
 # Model settings
@@ -85,9 +90,9 @@ _C.MODEL.RESUME = ''
 # Number of classes, overwritten in data preparation
 _C.MODEL.NUM_CLASSES = 8
 # Dropout rate     effi-b3 0.3`
-_C.MODEL.DROP_RATE = 0
-# Drop path rate   effi-b3 0.2  swin_s 0.3 swin_b_p4w12 0.5
-_C.MODEL.DROP_PATH_RATE = 0.3
+_C.MODEL.DROP_RATE = -1.
+# Drop path rate   effi-b3 0.2  swin_s 0.3 swin_b_p4w12 0.5 -1让timm自己处理
+_C.MODEL.DROP_PATH_RATE = -1.
 # Label Smoothing
 #_C.MODEL.LABEL_SMOOTHING = 0.1
 _C.MODEL.LABEL_SMOOTHING = 0.
@@ -96,6 +101,14 @@ _C.MODEL.PRETRAINED = True
 
 _C.MODEL.NUM_PATCHES=17
 
+# 在多模型训练的时候，到底哪些模型需要存放在GPU中，main始终是主模型，在最前面
+_C.MODEL.TOGPU_MODEL_NAME = ['main'] 
+# 在多模型训练的时候，到底哪些模型需要保存在checkpoint中，,除main以外
+_C.MODEL.SAVE_OTHER_MODEL_NAME = [] 
+# 在多模型训练的时候，到底哪些模型需要保留下最佳模型中，main始终是主模型，在最前面,每一个都会单独存一个文件，训练过程中也会有单独的ckpt文件
+_C.MODEL.SAVE_BEST_MODEL_NAME = ['main'] 
+
+
 # -----------------------------------------------------------------------------
 # Training settings
 # -----------------------------------------------------------------------------
@@ -103,6 +116,8 @@ _C.TRAIN = CN()
 _C.TRAIN.START_EPOCH = 0
 _C.TRAIN.EPOCHS = 20
 _C.TRAIN.WARMUP_EPOCHS = 3
+# 更高的优先级相较于EPOCHS来说
+_C.TRAIN.WARMUP_STEPS = -1
 _C.TRAIN.WEIGHT_DECAY = .0
 _C.TRAIN.BASE_LR = 1e-4
 _C.TRAIN.WARMUP_LR = 5e-7
@@ -110,13 +125,16 @@ _C.TRAIN.MIN_LR = 5e-7
 # Clip gradient norm                                     
 #_C.TRAIN.CLIP_GRAD = 5.0
 _C.TRAIN.CLIP_GRAD = 0.
-# Gradient clipping mode. One of ("norm", "value", "agc")                                                                                   
+# Gradient clipping mode. One of ("norm", "value", "agc")
 _C.TRAIN.CLIP_MODE = 'norm'
+# LR batch size scale Default is 512, if the value == batch_size, no scale is employed
+_C.TRAIN.LR_BS_SCALE = 512.0 
 # Auto resume from latest checkpoint
 _C.TRAIN.AUTO_RESUME = True
 # Gradient accumulation steps
-# could be overwritten by command line argument
-_C.TRAIN.ACCUMULATION_STEPS = 0
+# could be overwritten by command line argument 
+# Default is 1. new ver. 20220523
+_C.TRAIN.ACCUMULATION_STEPS = 1
 # Whether to use gradient checkpointing to save memory
 # could be overwritten by command line argument
 _C.TRAIN.USE_CHECKPOINT = False
@@ -136,7 +154,7 @@ _C.TRAIN.OPTIMIZER = CN()
  #'Lookahead_adamw'
 _C.TRAIN.OPTIMIZER.NAME =  'lookahead_adamw'
 # Optimizer Epsilon
-_C.TRAIN.OPTIMIZER.EPS = 1e-8
+_C.TRAIN.OPTIMIZER.EPS = 1e-4
 # Optimizer Betas
 _C.TRAIN.OPTIMIZER.BETAS = (0.9, 0.999)
 # SGD momentum
@@ -144,6 +162,7 @@ _C.TRAIN.OPTIMIZER.MOMENTUM = 0.9
 
 #Loss
 _C.TRAIN.LOSS = CN()
+_C.TRAIN.LOSS.NAME = 'crossentropy'
 _C.TRAIN.LOSS.LAMBDA_L1 = 1e-3
 
 # -----------------------------------------------------------------------------
@@ -166,8 +185,8 @@ _C.AUG.HFLIP = 0.5
 _C.AUG.VFLIP = 0.
 # Color jitter factor   0.4
 _C.AUG.COLOR_JITTER = 0.  
-# Use AutoAugment policy. "v0" or "original"
-_C.AUG.AUTO_AUGMENT = 'rand-m3-n2-mstd0.5'
+# Use AutoAugment policy. "v0" or "original" rand-m3-n2-mstd0.5
+_C.AUG.AUTO_AUGMENT = None
 # Random erase prob
 _C.AUG.REPROB = 0.   #0.25
 # Random erase mode
@@ -203,8 +222,10 @@ _C.AUG.MULTI_VIEW = None
 _C.TEST = CN()
 # Whether to use center crop when testing
 _C.TEST.CROP = 1.
-# top1 f1 auc
-_C.TEST.BEST_METRIC = 'top1'
+# top1 f1 auc，['model_best_save_idx','metric']
+_C.TEST.BEST_MODEL_METRIC = ['main','acc1']
+# 二分类测试
+_C.TEST.BINARY_MODE = False
 
 # -----------------------------------------------------------------------------
 # Misc
@@ -219,7 +240,9 @@ _C.NATIVE_AMP = True
 # Path to output folder, overwritten by command line argument
 _C.OUTPUT = ''
 # name of experiment, overwritten by command line argument
-_C.EXP_NAME = 'default'
+_C.EXP_NAME = "default"
+# name of project, overwritten by command line argument
+_C.PROJECT_NAME = 'default'
 # Frequency to save checkpoint
 _C.SAVE_FREQ = 1
 # Frequency to logging info
@@ -234,17 +257,18 @@ _C.BINARYTRAIN_MODE = False
 _C.LOAD_TEST_DIR = ''
 # log training and validation metrics to wandb
 _C.LOG_WANDB = False
+_C.LOG_WANDB_WATCH = False
 # local rank for DistributedDataParallel, given by command line argument
 _C.LOCAL_RANK = 0
 _C.DISTRIBUTED = False
-_C.WORLD_SIZE = 0
+_C.WORLD_SIZE = 1
 
 _C.MODEL_EMA = False
 _C.EMA_FORCE_CPU = False
 _C.EMA_DECAY = 0.9997
 
 _C.TRAIN_MODE = 't_e'
-
+_C.EMPTY_CACHE = False
 
 def _update_config_from_file(config, cfg_file):
     config.defrost()
@@ -265,8 +289,8 @@ def _update_config_from_file(config, cfg_file):
 def update_config(config, args):
     if args.trainer:
         config.TRAINER.NAME = args.trainer
-    pth = os.path.join(os.path.abspath('.'),'configs',config.TRAINER.NAME+'.yaml')
-    _update_config_from_file(config, pth)
+    # pth = os.path.join(os.path.abspath('.'),'configs',config.TRAINER.NAME+'.yaml')
+    # _update_config_from_file(config, pth)
 
     if args.cfg:
         if type(args.cfg) in (tuple,list):
@@ -298,6 +322,8 @@ def update_config(config, args):
         config.DATA.TFRECORD_MODE = True
     if args.title:
         config.EXP_NAME = args.title
+    if args.project:
+        config.PROJECT_NAME = args.project
     if args.resume:
         config.MODEL.RESUME = args.resume
     if args.use_checkpoint:
@@ -313,6 +339,7 @@ def update_config(config, args):
     if args.binary_train:
         config.BINARYTRAIN_MODE = True
         config.MODEL.NUM_CLASSES = 2
+        config.TEST.BINARY_MODE = True
     if args.load_test_dir:
         config.LOAD_TEST_DIR = args.load_test_dir
     if args.epochs:
@@ -338,7 +365,7 @@ def update_config(config, args):
     config.LOCAL_RANK = args.local_rank
 
     # output folder
-    config.OUTPUT = os.path.join(config.OUTPUT, config.EXP_NAME)
+    config.OUTPUT = os.path.join(config.OUTPUT, config.PROJECT_NAME)
 
     config.freeze()
 

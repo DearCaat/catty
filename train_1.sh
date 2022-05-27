@@ -1,3 +1,0 @@
-CUDA_VISIBLE_DEVICES=1 python3 main.py --data-path=/home/tangwenhao/data/cub/data/ --title=cub_swin_clu --cfg=/home/tangwenhao/rdd_code/rdd_transformer/configs/cub_fgvc_trans.yaml --opts RDD_TRANS.CLUSTER.NUM_CLUSTER 2
-CUDA_VISIBLE_DEVICES=1 python3 main.py --data-path=/home/tangwenhao/data/cub/data/ --title=cub_swin_clu --cfg=/home/tangwenhao/rdd_code/rdd_transformer/configs/cub_fgvc_trans.yaml --opts RDD_TRANS.CLUSTER.NUM_CLUSTER 3
-CUDA_VISIBLE_DEVICES=1 python3 main.py --data-path=/home/tangwenhao/data/cub/data/ --title=cub_swin_clu --cfg=/home/tangwenhao/rdd_code/rdd_transformer/configs/cub_fgvc_trans.yaml --opts RDD_TRANS.CLUSTER.NUM_CLUSTER 5

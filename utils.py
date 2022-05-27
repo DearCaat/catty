@@ -1,4 +1,6 @@
 import os
+from cv2 import norm
+from sklearn import metrics
 import torch
 import torch.distributed as dist
 import shutil
@@ -7,32 +9,74 @@ import math
 import torch.nn.functional as F
 import torch.nn as nn
 from timm.utils.clip_grad import dispatch_clip_grad
+from torch._six import inf
 
 try:
     # noinspection PyUnresolvedReferences
     from apex import amp
 except ImportError:
     amp = None
-def load_best_model(config,model,logger,is_ema=False):
+
+def del_ckp_model(config,is_ema=False):
+    ema_prefix = '_ema' if is_ema else ''
+
+    for best_model_name in config.MODEL.SAVE_BEST_MODEL_NAME:
+        prefix = best_model_name
+        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_ckpt.pth')
+        if os.path.exists(ckpt_path):
+            os.remove(ckpt_path)
+
+def load_best_model_V2(config,models,logger,is_ema=False):
+    ema_prefix = '_ema' if is_ema else ''
+
+    for best_model_name in config.MODEL.SAVE_BEST_MODEL_NAME:
+        prefix = best_model_name
+        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_ckpt.pth')
+        if os.path.exists(ckpt_path):
+            os.remove(ckpt_path)
+
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_btml.pth')
+
+        logger.info(f"==============> Loading the best {prefix} {ema_prefix} model....................")
+        checkpoint = torch.load(best_path, map_location='cpu')
+
+        if 'epoch' in checkpoint:
+            logger.info(f"==============> Epoch {checkpoint['epoch']}....................")
+
+        if best_model_name == 'main':
+            msg = models[best_model_name].load_state_dict(checkpoint['state_dict'], strict=False)
+            if config.APEX_AMP and checkpoint['config'].APEX_AMP:
+                amp.initialize(models['main'], opt_level='O1')
+        else:
+            msg = models[best_model_name].load_state_dict(checkpoint['other_models'][best_model_name], strict=False)
+
+        logger.info(f"{prefix}: {msg}")
+
+        if is_ema:
+            return
+
+def load_best_model(config,models,logger,is_ema=False):
+
     if is_ema:
-        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_ckpt.pth')
+        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_ckpt.pth')
     else:
-        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ckpt.pth')
+        ckpt_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ckpt.pth')
     if os.path.exists(ckpt_path):
         os.remove(ckpt_path)
     if is_ema:
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_best_model.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_best_model.pth')
     else:
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_best_model.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_best_model.pth')
     logger.info(f"==============> Loading the best model....................")
     checkpoint = torch.load(best_path, map_location='cpu')
-    logger.info(f"==============> Epoch {checkpoint['epoch']}....................")
-    msg = model.load_state_dict(checkpoint['state_dict'], strict=False)
+    if 'epoch' in checkpoint:
+        logger.info(f"==============> Epoch {checkpoint['epoch']}....................")
+    msg = models['main'].load_state_dict(checkpoint['state_dict'], strict=False)
     logger.info(msg)
     if config.APEX_AMP and checkpoint['config'].APEX_AMP:
-        amp.initialize(model, opt_level='O1')
+        amp.initialize(models['main'], opt_level='O1')
 
-def load_checkpoint(config, model, optimizer, lr_scheduler, logger,is_ema=False):
+def load_checkpoint(config, model,optimizer=None, lr_scheduler=None,logger=None,is_ema=False):
     logger.info(f"==============> Resuming form {config.MODEL.RESUME}....................")
     if config.MODEL.RESUME.startswith('https'):
         checkpoint = torch.hub.load_state_dict_from_url(
@@ -50,6 +94,7 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger,is_ema=False)
         logger.info(msg)
         max_accuracy = 0.0
         best_auc = 0.0
+        best_f1 = 0.0
         if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e' :
             if 'lr_scheduler' in checkpoint:
                 lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
@@ -65,21 +110,79 @@ def load_checkpoint(config, model, optimizer, lr_scheduler, logger,is_ema=False)
                 if 'max_accuracy' in checkpoint and 'best_auc' in checkpoint:
                     max_accuracy = checkpoint['max_accuracy']
                     best_auc = checkpoint['best_auc']
+                if 'best_f1' in checkpoint:
+                    best_f1 = checkpoint['best_f1']
     else:
         msg = model.load_state_dict(checkpoint, strict=False)
         logger.info(msg)
     del checkpoint
-    torch.cuda.empty_cache()
-    return max_accuracy,best_auc
+    return max_accuracy,best_auc,best_f1
 
-def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,ema,is_ema=False):
+def load_checkpoint_V2(config, models,optimizer=None, lr_scheduler=None,logger=None,model_ema=None):
+    logger.info(f"==============> Resuming form {config.MODEL.RESUME}....................")
+    if config.MODEL.RESUME.startswith('https'):
+        checkpoint = torch.hub.load_state_dict_from_url(
+            config.MODEL.RESUME, map_location='cpu', check_hash=True)
+    else:
+        checkpoint = torch.load(config.MODEL.RESUME, map_location='cpu')
+    
+    # 是否只读取模型
+    if 'state_dict' in checkpoint:
+        config.defrost()
+        msg = models['main'].load_state_dict(checkpoint['state_dict'], strict=False)
+        logger.info(f"main: {msg}")
+        if 'ema' in checkpoint and model_ema is not None:
+            msg = model_ema.load_state_dict(checkpoint['ema'], strict=False)
+            logger.info(f"ema: {msg}")
+
+        if 'other_models' in checkpoint:
+            other_models = checkpoint['other_models']
+            config.MODEL.SAVE_OTHER_MODEL_NAME = list(other_models.keys())
+            for model_prefix in config.MODEL.SAVE_OTHER_MODEL_NAME:
+                msg = models[model_prefix].load_state_dict(other_models[model_prefix])
+                logger.info(f"{model_prefix}: {msg}")
+
+        best_metrics = None
+        best_metrics_ema = None
+
+        if config.TRAIN_MODE=='train' or config.TRAIN_MODE=='t_e':
+            if 'lr_scheduler' in checkpoint:
+                lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+            if 'optimizer' in checkpoint and 'epoch' in checkpoint:
+                optimizer.load_state_dict(checkpoint['optimizer'])
+                config.TRAIN.START_EPOCH = checkpoint['epoch'] + 1
+                if 'amp' in checkpoint and config.APEX_AMP and checkpoint['config'].APEX_AMP:
+                    amp.initialize(models['main'], opt_level='O1')
+                    amp.load_state_dict(checkpoint['amp'])
+                logger.info(f"=> loaded successfully '{config.MODEL.RESUME}' (epoch {checkpoint['epoch']})")
+                if 'best_metrics' in checkpoint:
+                    best_metrics = checkpoint['best_metrics']
+                if 'best_metrics_ema' in checkpoint:
+                    best_metrics_ema = checkpoint['best_metrics_ema']
+            config.freeze()
+    else:
+        msg = models['main'].load_state_dict(checkpoint, strict=False)
+        logger.info(msg)
+    del checkpoint
+    return best_metrics,best_metrics_ema
+
+def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler, logger,is_best,best_auc,best_f1,ema,is_ema=False,best_patr90=0.0):
     save_state = {'state_dict': model.state_dict(),
                   'optimizer': optimizer.state_dict(),
                   'max_accuracy': max_accuracy,
                   'best_auc': best_auc,
+                  'best_f1': best_f1,
+                  'p@r90':best_patr90,
                   'epoch': epoch,
                   'config': config,
                   'ema':ema.module.state_dict() if ema is not None else None}
+    save_state_best = {'state_dict': model.state_dict(),
+                        'max_accuracy': max_accuracy,
+                        'best_auc': best_auc,
+                        'best_f1': best_f1,
+                        'p@r90':best_patr90,
+                        'epoch': epoch,
+                        'config': config}
     if config.TRAIN.LR_SCHEDULER.NAME is not None:
         save_state['lr_scheduler'] = lr_scheduler.state_dict()
     if config.APEX_AMP:
@@ -87,15 +190,107 @@ def save_checkpoint(config, epoch, model, max_accuracy, optimizer, lr_scheduler,
         save_state['amp'] = amp.state_dict()
 
     if is_ema:
-        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_ckpt.pth')
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ema_best_model.pth')
+        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_ckpt.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ema_best_model.pth')
+        history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_his_ema_best_model.pth')
     else:
-        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_ckpt.pth')
-        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_best_model.pth')
+        save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_ckpt.pth')
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+config.EXP_NAME+f'_best_model.pth')
+        history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f'_his_best_model.pth')
     logger.info(f"{save_path} saving......")
     torch.save(save_state, save_path)
+    
     if is_best:
-        shutil.copyfile(save_path, best_path)
+        torch.save(save_state_best, best_path)
+        # shutil.copyfile(save_path, best_path)
+    if epoch == config.TRAIN.EPOCHS - 1:
+        if os.path.exists(history_best_path):
+            checkpoint = torch.load(best_path, map_location='cpu')
+            checkpoint_his = torch.load(history_best_path, map_location='cpu')
+            if config.TEST.BEST_MODEL_METRIC.lower() == 'f1':
+                if 'best_f1' in checkpoint_his:
+                    if checkpoint['best_f1'] > checkpoint_his['best_f1']:
+                        shutil.copyfile(best_path, history_best_path)
+                else:
+                    shutil.copyfile(best_path, history_best_path)
+            elif config.TEST.BEST_MODEL_METRIC.lower() == 'p@r90':
+                if 'p@r90' in checkpoint_his:
+                    if checkpoint['p@r90'] > checkpoint_his['p@r90']:
+                        shutil.copyfile(best_path, history_best_path)
+                else:
+                    shutil.copyfile(best_path, history_best_path)
+            elif config.TEST.BEST_MODEL_METRIC.lower() == 'top1':
+                if checkpoint['max_accuracy'] > checkpoint_his['max_accuracy']:
+                    shutil.copyfile(best_path, history_best_path)
+            elif config.TEST.BEST_MODEL_METRIC.lower() == 'auc':
+                if checkpoint['best_auc'] > checkpoint_his['best_auc']:
+                    shutil.copyfile(best_path, history_best_path)
+        else:
+            shutil.copyfile(best_path, history_best_path)
+
+    logger.info(f"{save_path} saved !!!")
+
+
+def _save_checkpoint_V2(config, epoch, models, best_metrics,optimizer, lr_scheduler, logger,is_best,ema,prefix='',best_model_name='main',is_ema=False,best_metrics_ema=None):
+    ema_prefix = '_ema' if is_ema else ''
+    other_models_sd = {}
+    for m in config.MODEL.SAVE_OTHER_MODEL_NAME:
+        if str(m).lower() == 'main':
+            continue
+        else:
+            other_models_sd[str(m)] = models[m].state_dict()
+    save_state = {'state_dict': models['main'].state_dict(),
+                  'optimizer': optimizer.state_dict(),
+                  'best_metrics':best_metrics,
+                  'epoch': epoch,
+                  'config': config,
+                  'other_models':other_models_sd,
+                  'ema':ema.module.state_dict() if ema is not None else None,
+                  'best_metrics_ema': best_metrics_ema}
+    # 全部保存占用空间太大，最佳模型只保存部分模型信息              
+    best_state = {
+        'state_dict': ema.module.state_dict() if is_ema else models['main'].state_dict(),
+        'config': config,
+        'best_metrics': best_metrics_ema if is_ema else best_metrics,
+    }
+
+    if config.TRAIN.LR_SCHEDULER.NAME is not None:
+        save_state['lr_scheduler'] = lr_scheduler.state_dict()
+    if config.APEX_AMP:
+        amp.initialize(models['main'], opt_level='O1')
+        save_state['amp'] = amp.state_dict()
+
+    # get the saved filename
+    save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_ckpt.pth')
+
+    logger.info(f"{save_path} saving......")
+    torch.save(save_state, save_path)
+    
+    if is_best:
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_btml.pth')
+        torch.save(best_state, best_path)
+        # shutil.copyfile(save_path, best_path)
+    if epoch == config.TRAIN.EPOCHS - 1:
+        # 多次实验留下的最佳
+        best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_btml.pth')
+        history_best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{prefix}"+f"{ema_prefix}"+'_hbtml.pth')
+        best_model_metirc = list2dict(config.TEST.BEST_MODEL_METRIC)
+        if os.path.exists(history_best_path):
+            checkpoint = torch.load(best_path, map_location='cpu')
+            checkpoint_his = torch.load(history_best_path, map_location='cpu')
+
+            metrics = checkpoint['best_metrics']
+            metrics_his = checkpoint_his['best_metrics']
+            best_metric_name = best_model_metirc[str(best_model_name)].lower()
+
+            if best_metric_name in metrics_his:
+                if metrics[best_metric_name] > metrics_his[best_metric_name]:
+                    shutil.copyfile(best_path, history_best_path)
+            else:
+                shutil.copyfile(best_path, history_best_path)
+        else:
+            shutil.copyfile(best_path, history_best_path)
+
     logger.info(f"{save_path} saved !!!")
 
 def get_grad_norm(parameters, norm_type=2):
@@ -132,6 +327,14 @@ def decimal_num(number):
         while number * 10 ** num != int(number * 10 ** num ):
             num += 1
         return num
+
+def list2dict(_list):
+    # [key,value,key2,value2,...] --> {key:value,key2:value2}
+    assert len(_list) % 2 == 0
+    _dict = {}
+    for i in range(0,len(_list),2):
+        _dict.update({_list[i]:_list[i+1]})
+    return _dict
    
 def getDataByStick(data,stick):
     '''
@@ -163,6 +366,7 @@ def get_sigmod_num(start=0,curr_step=0,all_step=0,end=0.999,alph=10):
     '''
     thr_min_conf = start + (round((1 / (1+math.exp(-alph*(curr_step / all_step)))-0.5 )*2,3)) * (end-start)
     return thr_min_conf
+
 class ModelEmaV3(torch.nn.Module):
     """ Model Exponential Moving Average V2
 
@@ -234,33 +438,47 @@ class SoftTargetCrossEntropy_v2(nn.Module):
         loss = torch.sum(-F.softmax(target,dim=-1) * F.log_softmax(x, dim=-1), dim=-1)
         return loss.mean()
 
+
+# ref: https://github.com/microsoft/Swin-Transformer/blob/3b0685bf2b99b4cf5770e47260c0f0118e6ff1bb/utils.py#L195
+def ampscaler_get_grad_norm(parameters, norm_type: float = 2.0) -> torch.Tensor:
+    if isinstance(parameters, torch.Tensor):
+        parameters = [parameters]
+    parameters = [p for p in parameters if p.grad is not None]
+    norm_type = float(norm_type)
+    if len(parameters) == 0:
+        return torch.tensor(0.)
+    device = parameters[0].grad.device
+    if norm_type == inf:
+        total_norm = max(p.grad.detach().abs().max().to(device) for p in parameters)
+    else:
+        total_norm = torch.norm(torch.stack([torch.norm(p.grad.detach(),
+                                                        norm_type).to(device) for p in parameters]), norm_type)
+    return total_norm
+
 # 相较于timm的版本，我想要实现gradient accumulation，需要把梯度计算和更新参数步骤分开
+# ref: https://github.com/microsoft/Swin-Transformer/blob/3b0685bf2b99b4cf5770e47260c0f0118e6ff1bb/utils.py#L195
 class NativeScaler_V2:
     state_dict_key = "amp_scaler"
 
     def __init__(self):
         self._scaler = torch.cuda.amp.GradScaler()
 
-    def __call__(self, loss, optimizer=None, clip_grad=None, clip_mode='norm', parameters=None, create_graph=False,acc_gradient=False):
+    def __call__(self, loss, optimizer=None, clip_grad=None, clip_mode='norm', parameters=None, create_graph=False,update_grad=False):
         self._scaler.scale(loss).backward(create_graph=create_graph)
-        if not acc_gradient:
+        if update_grad:
             if clip_grad is not None:
                 assert parameters is not None
                 self._scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
-                dispatch_clip_grad(parameters, clip_grad, mode=clip_mode)
-            self._scaler.step(optimizer)
-            self._scaler.update()
-
-    def opt_step(self,optimizer,clip_grad=None, clip_mode='norm', parameters=None):
-        if clip_grad is not None:
-            assert parameters is not None
-            self._scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
-            dispatch_clip_grad(parameters, clip_grad, mode=clip_mode)
+                # dispatch_clip_grad(parameters, clip_grad, mode=clip_mode)
+                norm = torch.nn.utils.clip_grad_norm_(parameters, clip_grad)
+            else:
+                self._scaler.unscale_(optimizer)
+                norm = ampscaler_get_grad_norm(parameters)
             self._scaler.step(optimizer)
             self._scaler.update()
         else:
-            self._scaler.step(optimizer)
-            self._scaler.update()
+            norm = None
+        return norm
 
     def state_dict(self):
         return self._scaler.state_dict()

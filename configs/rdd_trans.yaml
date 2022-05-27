@@ -67,3 +67,7 @@ RDD_TRANS:
   CENTER: null
   SHARPEN_TEACHER: null
   SHARPEN_STUDENT: null
+
+  TEST_FIRST_MEAN: false   # 之前的模型都是false,20220316 12:54
+
+  TEST_CLU_FLIP_SEL: true  # 之前的模型都是false, 为了测试这个东西的影响，设此参数

@@ -6,7 +6,7 @@ from timm.models.registry import register_model
 from .gcn_cluster import *
 from .spectral_clustering import *
 from .swin import _create_swin_transformer
-from kmeans_pytorch import kmeans,kmeans_predict
+# from kmeans_pytorch import kmeans,kmeans_predict
 
 class Attention(nn.Module):
     def __init__(self,classes,in_dim=1536,out_dim=384):
@@ -52,6 +52,7 @@ class RddTransformer(nn.Module):
         self.cluster_distance = kwargs['cluster_distance']
         self.nor_index = kwargs['nor_index']
         self.cluster_num = None
+        self.cluster_flip_sel = kwargs['cluster_flip_sel']
         if type(cluster)==GCN:
             self.graph = kwargs['graph']
             self.clustre_thr = kwargs['cluster_thr']
@@ -163,7 +164,7 @@ class RddTransformer(nn.Module):
             max_clu_index = torch.argmax(scores,dim=1).view(B,1)
             mask_max = mask_max.scatter_(1,max_clu_index,1) == 1
             # 在测试阶段，如果最高病害置信度小于一定值，那我认为它是正常包，使用置信度最低的一个簇
-            if not self.training and self.nor_index >= 0:
+            if not self.training and self.nor_index >= 0 and self.cluster_flip_sel:
                 mask_min = scores.clone() 
                 mask_min[:,:] = 0
                 min_clu_index = torch.argmin(scores,dim=1).view(B,1)
@@ -178,7 +179,7 @@ class RddTransformer(nn.Module):
             for b in range(B):
                 max_clu_index = torch.argmax(scores[j:j+clusters_num[b]])
                 # 在测试阶段，如果最高病害置信度小于一定值，那我认为它是正常包，使用置信度最低的一个簇
-                if not self.training and scores[j+max_clu_index] < thr and self.nor_index >= 0:
+                if not self.training and scores[j+max_clu_index] < thr and self.nor_index >= 0 and self.cluster_flip_sel:
                     max_clu_index = torch.argmin(scores[j:j+clusters_num[b]])
                 if b == 0:
                     feats = feats_tmp[j:j+clusters_num[b]][max_clu_index]
@@ -233,7 +234,7 @@ class RddTransformer(nn.Module):
         return clusters_idcs,clusters_mask
 
 
-    def forward(self,x,is_teacher=False):
+    def forward(self,x,is_teacher=False,return_inst=False):
         # step 1, get the instance feat by backbone Network
         avg_bag_feature, inst_feature=self.instance_feature_extractor.forward_features(x) #B*N*D
         B,N,D = inst_feature.shape
@@ -274,7 +275,7 @@ class RddTransformer(nn.Module):
             # find cluster features
             clusters_idcs,clusters_mask = self.sklearn_cluster(inst_feature)
             clusters_feat = inst_feature
-        else:
+        elif type(self.cluster_model) == Attention:
             self.cluster_model()
         # 分簇包分类
         if self.cluster_model is not None:
@@ -293,6 +294,7 @@ class RddTransformer(nn.Module):
 
         # step 3 classify
         # instance classify
+        #if self.training or return_inst:
         logits_inst = self.head_instance(inst_feature.view(-1,D))
         logits_inst = logits_inst.view(B,N,-1)
         #score_inst = self.soft_max(logits_inst)
@@ -306,7 +308,7 @@ class RddTransformer(nn.Module):
         #     np.savez('/mnt/d/wsl/output/test.npz',mask=clusters_mask.cpu().numpy(),idcs=clusters_idcs.cpu().numpy())
         if type(self.cluster_model) == GCN:
             return logits_bag, logits_inst,logits_edge,h1_mask, clusters_num
-        if self.training:
+        if self.training or return_inst:
             #return logits_bag, logits_inst, score_inst,clusters_num
             return logits_bag, logits_inst,clusters_num
             #return logits_bag, None, None,clusters_num

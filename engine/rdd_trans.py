@@ -14,7 +14,6 @@ from torch import Tensor
 from timm.utils import *
 from timm.models import  model_parameters
 
-
 class RddTransTrainer:
     def __init__(self,**kwargs):
         self.thr_list,self.dis_ratio_list,self.criterion_teacher = kwargs['thr_list'],kwargs['dis_ratio_list'],kwargs['criterion_teacher']
