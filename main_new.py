@@ -245,11 +245,13 @@ def main(config):
         if model_ema is not None:
             loss_ema,eval_metrics_ema = validate(config, data_loader_val, models_without_ddp_ema,amp_autocast=amp_autocast,criterion=criterions,logger=logger)
 
+        # 存储最佳模型metric的名字
         best_model_metirc = list2dict(config.TEST.BEST_MODEL_METRIC) 
+        # 最重要metric下，ema模型的指标
         eval_best_metric_ema = eval_metrics_ema[best_model_metirc['main']] if model_ema is not None else 0.
         logger.info(f"The {best_model_metirc['main']} of the network on the {len(dataset_val)} test images: {eval_metrics[best_model_metirc['main']]:.2f}% {eval_best_metric_ema:.2f}%")
 
-        # save the checkpoint
+        # save the checkpoint and update the best metrics
         save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,model_ema,eval_metrics,is_ema=False,best_metrics_ema=best_metrics_ema)
         
         # save the ema checkpoint
@@ -264,6 +266,9 @@ def main(config):
             epoch, train_metrics, eval_metrics, os.path.join(config.OUTPUT, 'summary.csv'),
             write_header=False, log_wandb=config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0)
 
+    if model_ema is not None:
+        best_metrics_ema = OrderedDict([('ema_'+k,v) for k,v in best_metrics_ema.items()])
+        best_metrics.update(best_metrics_ema)
     for bt_metric in list(best_metrics.keys()):
         logger.info(f'Best {bt_metric}: {best_metrics[bt_metric]:.2f}%\t')
     if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0:
@@ -318,7 +323,8 @@ def save_checkpoint(config,epoch,models_without_ddp,best_metrics,optimizer,lr_sc
         best_metric_name = best_model_metirc[best_model_name].lower()
 
         is_best = eval_metrics[best_metric_name] > _best_metrics[best_metric_name]
-        _best_metrics[best_metric_name] = max(_best_metrics[best_metric_name],eval_metrics[best_metric_name])
+        # 下面统一更新
+        # _best_metrics[best_metric_name] = max(_best_metrics[best_metric_name],eval_metrics[best_metric_name])
       
         if config.LOCAL_RANK == 0 and (epoch % config.SAVE_FREQ == 0 or epoch == (config.TRAIN.EPOCHS - 1)):
             _save_checkpoint_V2(config,epoch,models_without_ddp,best_metrics,optimizer,lr_scheduler,logger,is_best,ema_model,prefix,best_model_name,is_ema,best_metrics_ema)
