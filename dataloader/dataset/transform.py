@@ -4,6 +4,7 @@ import albumentations as A
 from torchvision import transforms
 import torch
 import numpy as np
+from .tranfg_autoda import AutoAugImageNetPolicy
 
 def _build_transform(config,is_train,type=None):
     _name = config.DATA.DATALOADER_NAME.lower().split('_')[2]
