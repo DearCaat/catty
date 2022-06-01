@@ -1,6 +1,6 @@
 DATA:
   VAL_SPLIT: test
-  DATALOADER_NAME: torch_timm_pim
+  DATALOADER_NAME: torch_timm_custom
   IMG_SIZE: (448,448) 
   BATCH_SIZE: 16
   VAL_BATCH_SIZE: 128
