@@ -58,6 +58,8 @@ def _build_transform(config,is_train,type=None):
                     tf1 += [transforms.RandomHorizontalFlip(config.AUG.HFLIP)]
                 if config.AUG.VFLIP:
                     tf1 += [transforms.RandomVerticalFlip(config.AUG.VFLIP)]
+                if config.AUG.TRANSFG_AA:
+                    tf1 += [AutoAugImageNetPolicy()]
                 tf1 = tf1 + tf2.transforms + tf3.transforms
                 return transforms.Compose(tf1)
             else:

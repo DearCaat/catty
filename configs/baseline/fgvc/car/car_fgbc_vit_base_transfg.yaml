@@ -26,7 +26,7 @@ AUG:
   NO_AUG: false
   SCALE: (0.7466666666,0.7466666666)  # 448/600
   RATIO: (1,1)
-
+  TRANSFG_AA: true
 TEST:
   CROP: 0.7466666666  # 448/600 一定不能取更大，因为是向下取整
   BEST_METRIC: top1
