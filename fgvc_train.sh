@@ -28,7 +28,7 @@ while true ; do
           -m|--multi-gpu)
                case "$2" in
                     "") CONN_MULTI_GPU=1 ; shift 2 ;;
-                    *)  CONN_MULTI_GPU="$2" ; shift 2 ;;
+                    *)  CONN_MULTI_GPU=$2 ; shift 2 ;;
                esac ;;
           -l|--log-wandb) CONN_LOG_WANDB=true ; shift ;;
           # --opt 
@@ -95,4 +95,4 @@ else
     opt_str='--opt '$opt
 fi
 
-python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config --title=$CONN_TITLE $log_wandb_str --opt $opt
+python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config --title=$CONN_TITLE $log_wandb_str $opt_str
