@@ -88,4 +88,11 @@ case "$CONN_HOST" in
     *) echo "Error Host!"; exit ;;
 esac
 
+# 处理--opt
+if [ -z $opt ]; then
+    opt_str=''
+else
+    opt_str='--opt '$opt
+fi
+
 python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config --title=$CONN_TITLE $log_wandb_str --opt $opt
