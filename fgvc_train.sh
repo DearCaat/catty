@@ -1,0 +1,103 @@
+#!/bin/bash
+
+# 使用 `"$@"' 来让每个命令行参数扩展为一个单独的单词。 `$@' 周围的引号是必不可少的！
+# 使用 getopt 整理参数
+ARGS=$(getopt -o 'h:p:t:d:c:m::lo:' -l 'host:,project:,title:,dataset:,config:,multi-gpu::,log-wandb,option:' -- "$@")
+
+if [ $? != 0 ] ; then echo "Parse error! Terminating..." >&2 ; exit 1 ; fi
+
+# 将参数设置为 getopt 整理后的参数
+# $ARGS 需要用引号包围
+eval set -- "$ARGS"
+
+# 循环解析参数
+while true ; do
+     # 从第一个参数开始解析
+     case "$1" in
+          # 用户名，需要带参数值，所以通过 $2 取得参数值，获取后通过 shift 清理已获取的参数
+          -h|--host) CONN_HOST="$2" ; shift 2 ;;
+          # 密码，获取规则同上
+          -p|--project) CONN_PROJECT="$2" ; shift 2 ;;
+          # 端口，获取规则同上
+          -t|--title) CONN_TITLE="$2" ; shift 2 ;;
+          # 端口，获取规则同上
+          -d|--dataset) CONN_DATASET="$2" ; shift 2 ;;
+          # 端口，获取规则同上
+          -c|--config) CONN_CONFIG+=("$2") ; shift 2 ;;
+          # 是否显示详情，开关型参数，带上该选项则执行此分支
+          -m|--multi-gpu)
+               case "$2" in
+                    "") CONN_MULTI_GPU=1 ; shift 2 ;;
+                    *)  CONN_MULTI_GPU="$2" ; shift 2 ;;
+               esac ;;
+          -l|--log-wandb) CONN_LOG_WANDB=true ; shift ;;
+        #   # 日志级别，默认值参数
+        #   # 短格式：-l3
+        #   # 长格式：--log-level=3
+        #   -l|--log-level)
+        #        # 如指定了参数项，未指定参数值，则默认得到空字符串，可以根据此规则使用默认值
+        #        # 如果指定了参数值，则使用参数值
+        #        case "$2" in
+        #             "") CONN_LOG_LEVEL=1 ; shift 2 ;;
+        #             *)  CONN_LOG_LEVEL="$2" ; shift 2 ;;
+        #        esac ;;
+        #   --) shift ; break ;;
+          -o|--option) CONN_OPT="$*" ; shift 2 ;;
+          --) shift ; break ;;
+          *) echo "$2" ; shift 2 ;;
+     esac
+done
+
+# # 通过第一个无名称参数获取 主机
+# CONN_HOST="$1"
+
+func_list2str(){
+    local _arr
+    local _str
+    _str=''
+    _arr=($(echo "$@"))
+    for _i in ${_arr[@]};do
+        _str=$_str' '$_i;
+    done
+    echo "$_str"
+}
+
+arr_opt=($CONN_OPT)
+unset arr_opt[0]
+unset arr_opt[2]
+for s in ${CONN_CONFIG[@]};do
+    echo "$s"
+done
+opt=$(func_list2str ${arr_opt[*]})
+config=$(func_list2str ${CONN_CONFIG[*]})
+
+# 显示获取参数结果
+# echo '用户名：    '  "$CONN_USERNAME"
+echo 'host：      '  "$CONN_HOST"
+echo 'project：   '  "$CONN_PROJECT"
+echo 'title：     '  "$CONN_TITLE"
+echo 'dataset：   '  "$CONN_DATASET"
+echo 'multi-gpu： '  "$CONN_MULTI_GPU"
+echo 'log-wandb： '  "$CONN_LOG_WANDB"
+echo 'configs：   '  "$config"
+echo 'options:     ' "$opt"
+
+# 处理True\False的选项
+if [ $CONN_LOG_WANDB ]; then
+    log_wandb_str="--log-wandb"
+else
+    log_wandb_str=""
+fi
+case "$CONN_MULTI_GPU" in
+    1) multi_gpu_str='';;
+    *) multi_gpu_str="-m torch.distributed.launch --nproc_per_node="$CONN_MULTI_GPU
+esac
+
+# 根据不同主机，处理不同的数据集文件夹和输出文件夹
+case "$CONN_HOST" in
+    "3090") data_path="/data/tangwenhao/fgvc/"; output_path="/data/tangwenhao/output/";;
+    "DGX") data_path="/data/tangwenhao/fgvc/"; output_path="/nas/zhangxiaoxian/output/";;
+    "amax") data_path="/raid/Data/zhangyi/fgvc/"; output_path="/raid/Data/zhangyi/output/";;
+esac
+
+python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config --title=$CONN_TITLE $log_wandb_str --opt $opt
