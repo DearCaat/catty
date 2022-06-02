@@ -83,8 +83,8 @@ esac
 # 根据不同主机，处理不同的数据集文件夹和输出文件夹
 case "$CONN_HOST" in
     "3090") data_path="/data/tangwenhao/fgvc/"; output_path="/data/tangwenhao/output/";;
-    "DGX") data_path="/data/tangwenhao/fgvc/"; output_path="/nas/zhangxiaoxian/output/";;
-    "amax") data_path="/raid/Data/zhangyi/fgvc/"; output_path="/raid/Data/zhangyi/output/";;
+    "amax") data_path="/data/tangwenhao/fgvc/"; output_path="/nas/zhangxiaoxian/output/";;
+    "DGX") data_path="/raid/Data/zhangyi/fgvc/"; output_path="/raid/Data/zhangyi/output/";;
     *) echo "Error Host!"; exit ;;
 esac
 
