@@ -14,42 +14,29 @@ eval set -- "$ARGS"
 while true ; do
      # 从第一个参数开始解析
      case "$1" in
-          # 用户名，需要带参数值，所以通过 $2 取得参数值，获取后通过 shift 清理已获取的参数
+          # 主机
           -h|--host) CONN_HOST="$2" ; shift 2 ;;
-          # 密码，获取规则同上
+          # project
           -p|--project) CONN_PROJECT="$2" ; shift 2 ;;
-          # 端口，获取规则同上
+          # title
           -t|--title) CONN_TITLE="$2" ; shift 2 ;;
-          # 端口，获取规则同上
+          # 数据集名称
           -d|--dataset) CONN_DATASET="$2" ; shift 2 ;;
-          # 端口，获取规则同上
+          # 配置文件，多个config，多次-c
           -c|--config) CONN_CONFIG+=("$2") ; shift 2 ;;
-          # 是否显示详情，开关型参数，带上该选项则执行此分支
+          # 多GPU,默认为单GPU，如使用多GPU，则指定GPU数目
           -m|--multi-gpu)
                case "$2" in
                     "") CONN_MULTI_GPU=1 ; shift 2 ;;
                     *)  CONN_MULTI_GPU="$2" ; shift 2 ;;
                esac ;;
           -l|--log-wandb) CONN_LOG_WANDB=true ; shift ;;
-        #   # 日志级别，默认值参数
-        #   # 短格式：-l3
-        #   # 长格式：--log-level=3
-        #   -l|--log-level)
-        #        # 如指定了参数项，未指定参数值，则默认得到空字符串，可以根据此规则使用默认值
-        #        # 如果指定了参数值，则使用参数值
-        #        case "$2" in
-        #             "") CONN_LOG_LEVEL=1 ; shift 2 ;;
-        #             *)  CONN_LOG_LEVEL="$2" ; shift 2 ;;
-        #        esac ;;
-        #   --) shift ; break ;;
+          # --opt 
           -o|--option) CONN_OPT="$*" ; shift 2 ;;
           --) shift ; break ;;
           *) echo "$2" ; shift 2 ;;
      esac
 done
-
-# # 通过第一个无名称参数获取 主机
-# CONN_HOST="$1"
 
 func_list2str(){
     local _arr
@@ -73,13 +60,13 @@ config=$(func_list2str ${CONN_CONFIG[*]})
 
 # 显示获取参数结果
 # echo '用户名：    '  "$CONN_USERNAME"
-echo 'host：      '  "$CONN_HOST"
-echo 'project：   '  "$CONN_PROJECT"
-echo 'title：     '  "$CONN_TITLE"
-echo 'dataset：   '  "$CONN_DATASET"
-echo 'multi-gpu： '  "$CONN_MULTI_GPU"
-echo 'log-wandb： '  "$CONN_LOG_WANDB"
-echo 'configs：   '  "$config"
+echo 'host:       '  "$CONN_HOST"
+echo 'project:    '  "$CONN_PROJECT"
+echo 'title:      '  "$CONN_TITLE"
+echo 'dataset:    '  "$CONN_DATASET"
+echo 'multi-gpu:  '  "$CONN_MULTI_GPU"
+echo 'log-wandb:  '  "$CONN_LOG_WANDB"
+echo 'configs:    '  "$config"
 echo 'options:     ' "$opt"
 
 # 处理True\False的选项
@@ -98,6 +85,7 @@ case "$CONN_HOST" in
     "3090") data_path="/data/tangwenhao/fgvc/"; output_path="/data/tangwenhao/output/";;
     "DGX") data_path="/data/tangwenhao/fgvc/"; output_path="/nas/zhangxiaoxian/output/";;
     "amax") data_path="/raid/Data/zhangyi/fgvc/"; output_path="/raid/Data/zhangyi/output/";;
+    *) echo "Error Host!"; exit ;;
 esac
 
 python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config --title=$CONN_TITLE $log_wandb_str --opt $opt
