@@ -102,6 +102,7 @@ case "$CONN_HOST" in
     "3090") data_path="/data/tangwenhao/fgvc/"; output_path="/data/tangwenhao/output/";;
     "amax") data_path="/data/zhangxiaoxian/"; output_path="/nas/zhangxiaoxian/output/"; extra_opt="DATA.VAL_BATCH_SIZE 64";;
     "DGX") data_path="/raid/Data/zhangyi/fgvc/"; output_path="/raid/Data/zhangyi/output/";;
+    "3060") data_path="/home/public531/tangwenhao/dataset/"; output_path="/mnt/data/tangwenhao/output/";extra_opt="DATA.VAL_BATCH_SIZE 64";;
     *) echo "Error Host!"; exit ;;
 esac
 
