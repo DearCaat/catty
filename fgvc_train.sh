@@ -106,10 +106,12 @@ case "$CONN_HOST" in
 esac
 
 # 处理--opt
-if [ -z $opt ]; then
+if [ -z $opt -a -z $extra_opt ]; then
     opt_str=''
 else
-    opt_str='--opt '$opt' '$extra_opt
+    opt=' '$opt
+    extra_opt=' '$extra_opt
+    opt_str='--opt'$opt$extra_opt
 fi
 
 python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config $bs_str --title=$CONN_TITLE $log_wandb_str $ema_str $opt_str
