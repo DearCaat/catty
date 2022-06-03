@@ -107,7 +107,7 @@ case "$CONN_HOST" in
 esac
 
 # 处理--opt
-if [ [-z $opt] -a [-z $extra_opt] ]; then
+if [[ -z $opt ] -a [ -z $extra_opt ]]; then
     opt_str=''
 else
     opt=' '$opt
