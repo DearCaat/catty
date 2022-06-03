@@ -10,6 +10,7 @@ if [ $? != 0 ] ; then echo "Parse error! Terminating..." >&2 ; exit 1 ; fi
 # $ARGS 需要用引号包围
 eval set -- "$ARGS"
 CONN_BATCH_SIZE=''
+CONN_MULTI_GPU=1
 # 循环解析参数
 while true ; do
      # 从第一个参数开始解析
@@ -80,6 +81,7 @@ else
 fi
 case "$CONN_MULTI_GPU" in
     1) multi_gpu_str='';;
+    '') multi_gpu_str='';;
     *) multi_gpu_str="-m torch.distributed.launch --nproc_per_node="$CONN_MULTI_GPU
 esac
 
