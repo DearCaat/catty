@@ -9,7 +9,7 @@ if [ $? != 0 ] ; then echo "Parse error! Terminating..." >&2 ; exit 1 ; fi
 # 将参数设置为 getopt 整理后的参数
 # $ARGS 需要用引号包围
 eval set -- "$ARGS"
-
+CONN_BATCH_SIZE=''
 # 循环解析参数
 while true ; do
      # 从第一个参数开始解析
@@ -59,7 +59,7 @@ for s in ${CONN_CONFIG[@]};do
 done
 opt=$(func_list2str ${arr_opt[*]})
 config=$(func_list2str ${CONN_CONFIG[*]})
-CONN_BATCH_SIZE=''
+
 # 显示获取参数结果
 # echo '用户名：    '  "$CONN_USERNAME"
 echo 'host:       '  "$CONN_HOST"
