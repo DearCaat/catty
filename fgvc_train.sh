@@ -87,7 +87,7 @@ if [ -z $CONN_BATCH_SIZE ];then
     bs_str=''
 else
     bs_str='--batch-size='$CONN_BATCH_SIZE
-
+fi
 # 根据不同主机，处理不同的数据集文件夹和输出文件夹
 case "$CONN_HOST" in
     "3090") data_path="/data/tangwenhao/fgvc/"; output_path="/data/tangwenhao/output/";;
