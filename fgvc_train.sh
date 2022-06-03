@@ -59,7 +59,7 @@ for s in ${CONN_CONFIG[@]};do
 done
 opt=$(func_list2str ${arr_opt[*]})
 config=$(func_list2str ${CONN_CONFIG[*]})
-
+CONN_BATCH_SIZE=''
 # 显示获取参数结果
 # echo '用户名：    '  "$CONN_USERNAME"
 echo 'host:       '  "$CONN_HOST"
@@ -83,6 +83,11 @@ case "$CONN_MULTI_GPU" in
     *) multi_gpu_str="-m torch.distributed.launch --nproc_per_node="$CONN_MULTI_GPU
 esac
 
+if [ -z $CONN_BATCH_SIZE ];then
+    bs_str=''
+else
+    bs_str='--batch-size='$CONN_BATCH_SIZE
+
 # 根据不同主机，处理不同的数据集文件夹和输出文件夹
 case "$CONN_HOST" in
     "3090") data_path="/data/tangwenhao/fgvc/"; output_path="/data/tangwenhao/output/";;
@@ -98,4 +103,4 @@ else
     opt_str='--opt '$opt' '$extra_opt
 fi
 
-python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config --batch-sze=$CONN_BATCH_SIZE --title=$CONN_TITLE $log_wandb_str $opt_str
+python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config $bs_str --title=$CONN_TITLE $log_wandb_str $opt_str
