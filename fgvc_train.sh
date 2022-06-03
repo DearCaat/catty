@@ -115,4 +115,6 @@ else
     opt_str='--opt'$opt$extra_opt
 fi
 
+git pull origin master
+
 python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config $bs_str --title=$CONN_TITLE $log_wandb_str $ema_str $opt_str
