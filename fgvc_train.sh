@@ -2,7 +2,7 @@
 
 # 使用 `"$@"' 来让每个命令行参数扩展为一个单独的单词。 `$@' 周围的引号是必不可少的！
 # 使用 getopt 整理参数
-ARGS=$(getopt -o 'h:p:t:d:c:m::lo:' -l 'host:,project:,title:,dataset:,config:,multi-gpu::,log-wandb,option:' -- "$@")
+ARGS=$(getopt -o 'h:p:t:d:c:b:m::lo:' -l 'host:,project:,title:,dataset:,config:,batch-size:,multi-gpu::,log-wandb,option:' -- "$@")
 
 if [ $? != 0 ] ; then echo "Parse error! Terminating..." >&2 ; exit 1 ; fi
 
@@ -24,6 +24,8 @@ while true ; do
           -d|--dataset) CONN_DATASET="$2" ; shift 2 ;;
           # 配置文件，多个config，多次-c
           -c|--config) CONN_CONFIG+=("$2") ; shift 2 ;;
+          # 单GPU的BS
+          -b|--batch-size) CONN_BATCH_SIZE="$2" ; shift 2 ;;
           # 多GPU,默认为单GPU，如使用多GPU，则指定GPU数目
           -m|--multi-gpu)
                case "$2" in
@@ -67,6 +69,7 @@ echo 'dataset:    '  "$CONN_DATASET"
 echo 'multi-gpu:  '  "$CONN_MULTI_GPU"
 echo 'log-wandb:  '  "$CONN_LOG_WANDB"
 echo 'configs:    '  "$config"
+echo 'batch-size: '  "$CONN_BATCH_SIZE"
 echo 'options:     ' "$opt"
 
 # 处理True\False的选项
@@ -83,7 +86,7 @@ esac
 # 根据不同主机，处理不同的数据集文件夹和输出文件夹
 case "$CONN_HOST" in
     "3090") data_path="/data/tangwenhao/fgvc/"; output_path="/data/tangwenhao/output/";;
-    "amax") data_path="/data/zhangxiaoxian/"; output_path="/nas/zhangxiaoxian/output/";;
+    "amax") data_path="/data/zhangxiaoxian/"; output_path="/nas/zhangxiaoxian/output/"; extra_opt="DATA.VAL_BATCH_SIZE 64";;
     "DGX") data_path="/raid/Data/zhangyi/fgvc/"; output_path="/raid/Data/zhangyi/output/";;
     *) echo "Error Host!"; exit ;;
 esac
@@ -92,7 +95,7 @@ esac
 if [ -z $opt ]; then
     opt_str=''
 else
-    opt_str='--opt '$opt
+    opt_str='--opt '$opt' '$extra_opt
 fi
 
-python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config --title=$CONN_TITLE $log_wandb_str $opt_str
+python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config --batch-sze=$CONN_BATCH_SIZE --title=$CONN_TITLE $log_wandb_str $opt_str
