@@ -31,7 +31,7 @@ TEST:
   CROP: 0.7466666666  # 448/600 一定不能取更大，因为是向下取整
   BEST_METRIC: top1
 
-MODEL_EMA: true
+MODEL_EMA: false
 LOG_WANDB: false
 # TRAIN_MODE: train
 EMA_DECAY: 0.9996

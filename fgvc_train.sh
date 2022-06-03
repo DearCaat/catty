@@ -2,7 +2,7 @@
 
 # 使用 `"$@"' 来让每个命令行参数扩展为一个单独的单词。 `$@' 周围的引号是必不可少的！
 # 使用 getopt 整理参数
-ARGS=$(getopt -o 'h:p:t:d:c:b:m::lo:' -l 'host:,project:,title:,dataset:,config:,batch-size:,multi-gpu::,log-wandb,option:' -- "$@")
+ARGS=$(getopt -o 'h:p:t:d:c:b:m::leo:' -l 'host:,project:,title:,dataset:,config:,batch-size:,multi-gpu::,log-wandb,ema,option:' -- "$@")
 
 if [ $? != 0 ] ; then echo "Parse error! Terminating..." >&2 ; exit 1 ; fi
 
@@ -34,6 +34,7 @@ while true ; do
                     *)  CONN_MULTI_GPU=$2 ; shift 2 ;;
                esac ;;
           -l|--log-wandb) CONN_LOG_WANDB=true ; shift ;;
+          -e|--ema) CONN_EMA=true ; shift ;;
           # --opt 
           -o|--option) CONN_OPT="$*" ; shift 2 ;;
           --) shift ; break ;;
@@ -69,6 +70,7 @@ echo 'title:      '  "$CONN_TITLE"
 echo 'dataset:    '  "$CONN_DATASET"
 echo 'multi-gpu:  '  "$CONN_MULTI_GPU"
 echo 'log-wandb:  '  "$CONN_LOG_WANDB"
+echo 'log-wandb:  '  "$CONN_EMA"
 echo 'configs:    '  "$config"
 echo 'batch-size: '  "$CONN_BATCH_SIZE"
 echo 'options:     ' "$opt"
@@ -78,6 +80,11 @@ if [ $CONN_LOG_WANDB ]; then
     log_wandb_str="--log-wandb"
 else
     log_wandb_str=""
+fi
+if [ $CONN_EMA ]; then
+    ema_str="--ema"
+else
+    ema_str=""
 fi
 case "$CONN_MULTI_GPU" in
     1) multi_gpu_str='';;
@@ -105,4 +112,4 @@ else
     opt_str='--opt '$opt' '$extra_opt
 fi
 
-python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config $bs_str --title=$CONN_TITLE $log_wandb_str $opt_str
+python3 $multi_gpu_str main_new.py --data-path=$data_path$CONN_DATASET"/data/" --output=$output_path --project=$CONN_PROJECT --cfg $config $bs_str --title=$CONN_TITLE $log_wandb_str $ema_str $opt_str
