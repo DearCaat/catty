@@ -215,7 +215,7 @@ _C.AUG.SPLITS=0
 # output multi-view images, "strong_weak","strong_none","weak_none"
 # "student_teacher"
 _C.AUG.MULTI_VIEW = None
-_C.TRANSFG_AA = False
+_C.AUG.TRANSFG_AA = False
 # -----------------------------------------------------------------------------
 # Testing settings
 # -----------------------------------------------------------------------------
