@@ -1,7 +1,7 @@
 MODEL: 
   NUM_CLASSES: 120
   DATALOADER_NAME: torch_timm_custom
-  LABEL_SMOOTHING: 0.1
+  # LABEL_SMOOTHING: 0.1
   
 AUG:
   TRANSFG_AA: true
