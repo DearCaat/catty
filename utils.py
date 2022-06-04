@@ -264,11 +264,17 @@ def _save_checkpoint_V2(config, epoch, models, best_metrics,optimizer, lr_schedu
     save_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_ckpt.pth')
 
     logger.info(f"{save_path} saving......")
-    torch.save(save_state, save_path)
+    try:
+        torch.save(save_state, save_path)
+    except Exception as e:
+        logger.info(f"{repr(e)}")
     
     if is_best:
         best_path = os.path.join(config.OUTPUT, 'model',config.MODEL.NAME+f"_{config.EXP_NAME}"+f"_{prefix}"+f"{ema_prefix}"+'_btml.pth')
-        torch.save(best_state, best_path)
+        try:
+            torch.save(best_state, best_path)
+        except Exception as e:
+            logger.info(f"{repr(e)}")
         # shutil.copyfile(save_path, best_path)
     if epoch == config.TRAIN.EPOCHS - 1:
         # 多次实验留下的最佳
@@ -285,11 +291,20 @@ def _save_checkpoint_V2(config, epoch, models, best_metrics,optimizer, lr_schedu
 
             if best_metric_name in metrics_his:
                 if metrics[best_metric_name] > metrics_his[best_metric_name]:
-                    shutil.copyfile(best_path, history_best_path)
+                    try:
+                        shutil.copyfile(best_path, history_best_path)
+                    except Exception as e:
+                        logger.info(f"{repr(e)}")
             else:
-                shutil.copyfile(best_path, history_best_path)
+                try:
+                    shutil.copyfile(best_path, history_best_path)
+                except Exception as e:
+                        logger.info(f"{repr(e)}")
         else:
-            shutil.copyfile(best_path, history_best_path)
+            try:
+                shutil.copyfile(best_path, history_best_path)
+            except Exception as e:
+                    logger.info(f"{repr(e)}")
 
     logger.info(f"{save_path} saved !!!")
 
