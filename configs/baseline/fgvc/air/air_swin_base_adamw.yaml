@@ -15,5 +15,5 @@ TRAIN:
     NAME: adam
   
 TRAIN_MODE: train
-
+EMPTY_CACHE: true
 

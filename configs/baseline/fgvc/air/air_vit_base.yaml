@@ -13,5 +13,5 @@ TRAIN:
   CLIP_GRAD: 0.
   
 TRAIN_MODE: train
-
+EMPTY_CACHE: true
 
