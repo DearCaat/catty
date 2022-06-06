@@ -159,7 +159,8 @@ _C.TRAIN.OPTIMIZER.EPS = 1e-4
 _C.TRAIN.OPTIMIZER.BETAS = (0.9, 0.999)
 # SGD momentum
 _C.TRAIN.OPTIMIZER.MOMENTUM = 0.9
-
+# Accurate lr scale setting, default is true
+_C.TRAIN.AS_LR_SCALE = True
 #Loss
 _C.TRAIN.LOSS = CN()
 _C.TRAIN.LOSS.NAME = 'crossentropy'
