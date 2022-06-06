@@ -347,12 +347,6 @@ if __name__ == '__main__':
 
     logger = create_logger(output_dir=config.OUTPUT, dist_rank=config.LOCAL_RANK, name=f"{config.EXP_NAME}")
     
-    if config.LOG_WANDB and config.LOCAL_RANK == 0:
-        if has_wandb:
-            wandb.init(project=config.PROJECT_NAME, config=config,entity="dearcat",name=config.EXP_NAME)
-        else: 
-            logger.warning("You've requested to log metrics to wandb but package not found. "
-                            "Metrics not being logged to wandb, try `pip install wandb`")
     # resolve AMP arguments based on PyTorch / Apex availability
     config.defrost()
     use_amp = None
@@ -422,7 +416,13 @@ if __name__ == '__main__':
         with open(path, "w") as f:
             f.write(config.dump())
         logger.info(f"Full config saved to {path}")
-
+        
+    if config.LOG_WANDB and config.LOCAL_RANK == 0:
+        if has_wandb:
+            wandb.init(project=config.PROJECT_NAME, config=config,entity="dearcat",name=config.EXP_NAME)
+        else: 
+            logger.warning("You've requested to log metrics to wandb but package not found. "
+                            "Metrics not being logged to wandb, try `pip install wandb`")
     # print config
     #logger.info(config.dump())
 
