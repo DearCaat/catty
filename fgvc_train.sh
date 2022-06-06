@@ -100,9 +100,11 @@ fi
 # 根据不同主机，处理不同的数据集文件夹和输出文件夹
 case "$CONN_HOST" in
     "3090") data_path="/data/tangwenhao/fgvc/"; output_path="/data/tangwenhao/output/";;
-    "amax") data_path="/data/zhangxiaoxian/"; output_path="/nas/zhangxiaoxian/output/"; extra_opt="DATA.VAL_BATCH_SIZE 64";;
+    "amax") data_path="/data/zhangxiaoxian/fgvc/"; output_path="/nas/zhangxiaoxian/output/"; extra_opt="DATA.VAL_BATCH_SIZE 64";;
     "DGX") data_path="/raid/Data/zhangyi/fgvc/"; output_path="/raid/Data/zhangyi/output/";;
     "3060") data_path="/home/public531/tangwenhao/dataset/"; output_path="/mnt/data/tangwenhao/output/";extra_opt="DATA.VAL_BATCH_SIZE 64";;
+    "3090_1") data_path="/home/tangwenhao/dataset/fgvc/"; output_path="/data/tangwenhao/output/";;
+    "2080") data_path="/home/tangwenhao/data/fgvc/"; output_path="/home/tangwenhao/output/"; extra_opt="DATA.VAL_BATCH_SIZE 64";;
     *) echo "Error Host!"; exit ;;
 esac
 
