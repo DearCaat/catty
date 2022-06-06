@@ -1,16 +1,17 @@
 MODEL: 
   NUM_CLASSES: 100
-  DATALOADER_NAME: torch_timm_pim
-  LABEL_SMOOTHING: 0.1
+  DATALOADER_NAME: torch_timm_custom
+  LABEL_SMOOTHING: 0.
 DATA:
-  VAL_SPLIT: val
+  VAL_SPLIT: test
 # AUG:
 #   TRANSFG_AA: true
 TRAIN:
   EPOCHS: 100
   WARMUP_STEPS: 1600
   # WARMUP_EPOCHS: 2
+  CLIP_GRAD: 0.
   
-TRAIN_MODE: t_e
+TRAIN_MODE: train
 
 

@@ -18,7 +18,7 @@ TRAIN:
   WARMUP_LR: 1e-6  # https://github.com/rwightman/pytorch-image-models/issues/252
   MIN_LR: 1e-12
   OPTIMIZER:
-    NAME: adamw
+    NAME: adam
   CLIP_GRAD: 1.0
   LR_BS_SCALE: 512.0
 
