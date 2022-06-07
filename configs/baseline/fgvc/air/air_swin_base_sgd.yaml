@@ -5,7 +5,7 @@ TRAIN:
   EPOCHS: 100
   WARMUP_STEPS: 1600
   
-DATA:
+# DATA:
   # VAL_SPLIT: val
 
 # TRAIN_MODE: t_e
