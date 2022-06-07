@@ -353,7 +353,8 @@ def update_config(config, args):
         config.TRAIN_MODE = args.train_mode
     if args.ema:
         config.MODEL_EMA = args.ema
-
+    if args.pin_memory:
+        config.DATA.PIN_MEMORY = args.pin_memory
     # timm 暂时不支持multi_view
     if config.AUG.MULTI_VIEW is not None:
         config.DATA.TIMM_PREFETCHER = False

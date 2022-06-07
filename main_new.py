@@ -91,6 +91,7 @@ def parse_option():
                         help='log training and validation metrics to wandb')
     parser.add_argument('--thumb', action='store_true', help='Use thumb data')
     parser.add_argument('--ema', action='store_true', help='Use thumb data')
+    parser.add_argument('--pin-memory', action='store_true', help='Use thumb data')
     parser.add_argument('--binary-train', action='store_true', help='train the model with binary setting')
     parser.add_argument('--load-test-dir', type=str, metavar='PATH',help='the file of tested data')
     parser.add_argument('--pretrained-backbone', type=str, metavar='PATH',help='the file of pretrained model')
@@ -416,7 +417,7 @@ if __name__ == '__main__':
         with open(path, "w") as f:
             f.write(config.dump())
         logger.info(f"Full config saved to {path}")
-        
+
     if config.LOG_WANDB and config.LOCAL_RANK == 0:
         if has_wandb:
             wandb.init(project=config.PROJECT_NAME, config=config,entity="dearcat",name=config.EXP_NAME)
