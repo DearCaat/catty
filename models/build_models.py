@@ -3,6 +3,7 @@ import torch.nn as nn
 from timm.models import create_model
 from .pvt import *
 from .pvt_v2 import *
+from .cswin import *
 # from ._vit import *
 
 def build_model(config):
