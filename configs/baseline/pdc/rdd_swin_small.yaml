@@ -13,7 +13,7 @@ TRAIN:
   WARMUP_EPOCHS: 2
   MIN_LR : 5e-6           # 这是swin的参数， 5e-6，5e-7。config文件里是cub的参数，swinpim那个文章给的
   WARMUP_LR: 5e-7
-  LR_BS_SCALE: 32 
+  LR_BS_SCALE: 32.0 
 AUG:
   MULTI_VIEW: None
   NO_AUG: true
