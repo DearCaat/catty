@@ -21,7 +21,7 @@ TEST:
   BEST_METRIC: f1     
   
 # THUMB_MODE: true
-MODEL_EMA: true
+MODEL_EMA: false
 #LOG_WANDB: true
 #BINARYTRAIN_MODE: true
 TRAINER:
