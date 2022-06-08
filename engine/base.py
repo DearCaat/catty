@@ -325,9 +325,9 @@ class BaseTrainer():
             
             save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
 
-            metrics_values_epoch,others_epoch = self.engine.measure_per_epoch(config,others=others,label=save_label,pred=save_pred)
-            update_metrics(config,self.engine.test_metrics,metrics_values_epoch)
-            log_meter(metrics_values_epoch,self.engine.test_metrics_epoch_log,logger)
+        metrics_values_epoch,others_epoch = self.engine.measure_per_epoch(config,others=others,label=save_label,pred=save_pred)
+        update_metrics(config,self.engine.test_metrics,metrics_values_epoch)
+        log_meter(metrics_values_epoch,self.engine.test_metrics_epoch_log,logger)
 
         metrics = OrderedDict([(key,value.avg) if isinstance(value,AverageMeter) else (key,value) for key,value in self.engine.test_metrics.items()])
         if config.EMPTY_CACHE:
