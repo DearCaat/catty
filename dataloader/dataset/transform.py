@@ -100,27 +100,24 @@ def _build_transform(config,is_train,type=None):
                     ])
         
         elif _name == 'pict':
-            if is_train:
-                return A.Compose([
-                            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
-                            A.RandomBrightnessContrast(p=0.7),
-                            A.HorizontalFlip(p=0.7),
-                            A.VerticalFlip(p=0.7),
-                            A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
-                            A.OneOf([
-                                A.Emboss(p=1),
-                                A.Sharpen(p=1),
-                                A.Blur(p=1)
-                                    ], p=0.7),
-                            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-                            ToTensorV2(),
-                            ])
+            t1 = [A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1])]
+            if is_train and not config.AUG.NO_AUG:
+                t2 = [
+                        A.RandomBrightnessContrast(p=0.7),
+                        A.HorizontalFlip(p=0.7),
+                        A.VerticalFlip(p=0.7),
+                        A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                        A.OneOf([
+                            A.Emboss(p=1),
+                            A.Sharpen(p=1),
+                            A.Blur(p=1)
+                                ], p=0.7),
+                    ]
             else:
-                return A.Compose([
-                            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
-                            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-                            ToTensorV2(),
-                            ])
+                t2=[]
+            t3 = [A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                ToTensorV2()]
+            return A.Compose(t1+t2+t3)
                         
 def build_transform(config,is_train):
     if config.AUG.MULTI_VIEW is not None:
