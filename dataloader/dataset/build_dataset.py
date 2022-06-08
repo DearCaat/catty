@@ -8,6 +8,7 @@ from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 import numpy as np
 import torch
 from PIL import Image
+import os 
 
 _logger = logging.getLogger(__name__)
 _ERROR_RETRY = 50
@@ -26,23 +27,25 @@ def _build_dataset(config,_type='train'):
         split = config.DATA.TEST_SPLIT
         is_train = False
 
+    transform = build_transform(config,is_train)
+
     if name == 'timm':
         if config.DATA.DATALOADER_NAME.lower().split('_')[0] == 'timm':
             transform = None
-        else:
-            transform = build_transform(config,is_train)
 
         return create_dataset(
         config.DATA.DATASET,
         root=config.DATA.DATA_PATH, split=split, is_training=is_train,
         batch_size=config.DATA.BATCH_SIZE,repeats=config.DATA.EPOCH_REPEATS,transform=transform)
     elif name == 'tfds':
-        transform = build_transform(config,is_train)
         return IterableImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,split=split,gray=config.DATA.GRAY,shuffle=True,transform=transform,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,thumb=config.THUMB_MODE)
     elif name == 'multiview':
-        transform = build_transform(config,is_train)
         return MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform,is_multi_view=config.AUG.MULTI_VIEW,size=config.DATA.IMG_SIZE,timm_trans=config.AUG.TIMM_TRANS)
-
+    elif name == 'album':
+        if os.path.isdir(config.DATA.DATA_PATH):
+            # look for split specific sub-folder in root
+            root = _search_split(config.DATA.DATA_PATH, split)
+        return ALImageDataset(root, parser=config.DATA.DATASET.lower(), class_map=None, transform=transform)
 
 def build_dataset(config,_type='train_val'):
     
@@ -306,3 +309,51 @@ class IterableImageDataset(data.IterableDataset):
     def filenames(self, basename=False, absolute=False):
         return self.parser.filenames(basename, absolute)
 
+class ALImageDataset(data.Dataset):
+    
+    def __init__(
+            self,
+            root,
+            parser=None,
+            class_map=None,
+            load_bytes=False,
+            transform=None,
+            target_transform=None,
+    ):
+        if parser is None or isinstance(parser, str):
+            parser = create_parser(parser or '', root=root, class_map=class_map)
+        self.parser = parser
+        self.load_bytes = load_bytes
+        self.transform = transform
+        self.target_transform = target_transform
+        self._consecutive_errors = 0
+
+    def __getitem__(self, index):
+        img, target = self.parser[index]
+        try:
+            img = img.read() if self.load_bytes else Image.open(img).convert('RGB')
+        except Exception as e:
+            _logger.warning(f'Skipped sample (index {index}, file {self.parser.filename(index)}). {str(e)}')
+            self._consecutive_errors += 1
+            if self._consecutive_errors < _ERROR_RETRY:
+                return self.__getitem__((index + 1) % len(self.parser))
+            else:
+                raise e
+        self._consecutive_errors = 0
+        if self.transform is not None:
+            # for albumentations 
+            img = self.transform(image=img)['image']
+        if target is None:
+            target = -1
+        elif self.target_transform is not None:
+            target = self.target_transform(target)
+        return img, target
+
+    def __len__(self):
+        return len(self.parser)
+
+    def filename(self, index, basename=False, absolute=False):
+        return self.parser.filename(index, basename, absolute)
+
+    def filenames(self, basename=False, absolute=False):
+        return self.parser.filenames(basename, absolute)

@@ -4,7 +4,7 @@ from sklearn.metrics import roc_auc_score,precision_recall_curve,f1_score
 
 from timm.utils import *
 
-class INetClsEngine:
+class MIMEngine:
     def __init__(self,config,**kwargs):
         # 除了主损失以外的metric，主损失会每个iter进行log
         # 每个iter更新的指标需要初始化成AverageMeter
@@ -31,7 +31,6 @@ class INetClsEngine:
             self.test_metrics_epoch_log += ['auc','macro_f1','micro_f1']
         
     def cal_loss_func(self,config,models,idx,samples,targets,epoch,num_steps,criterions,**kwargs):
-        # torch.autograd.set_detect_anomaly(True)
         predictions = models['main'](samples)
         loss = criterions[0](predictions,targets)
         metrics_values = OrderedDict([

@@ -68,6 +68,10 @@ def log_meter(metrics,log_list,logger):
         if len(log_str) != 0:
             logger.info(log_str)
 
+def reset_meter(metrics):
+    for _key in metrics.keys():
+        metrics[_key].reset()
+
 class BaseTrainer():
     def __init__(self,engine,**kwargs):
         self.engine = engine
@@ -88,7 +92,7 @@ class BaseTrainer():
         loss_meter = AverageMeter()
         norm_meter = AverageMeter()
         scaler_meter = AverageMeter()
-        self.engine.reset_meter(is_train=True)
+        reset_meter(self.engine.train_metrics)
 
         loss_rec = np.array([])
         start = time.time()
@@ -267,7 +271,7 @@ class BaseTrainer():
 
         batch_time = AverageMeter()
         loss_meter = AverageMeter()
-        self.engine.reset_meter(is_train=False)
+        reset_meter(self.engine.test_metrics)
 
         save_pred = np.array([])
         save_label = np.array([])

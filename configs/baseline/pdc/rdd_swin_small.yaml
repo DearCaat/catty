@@ -1,5 +1,5 @@
 DATA:
-  TIMM: false
+  DATALOADER_NAME: torch_album_pict
   IMG_SIZE: (224,224) #(384,384)
   BATCH_SIZE: 32
   VAL_BATCH_SIZE: 96
@@ -20,9 +20,9 @@ TEST:
   CROP: 0.
   BEST_METRIC: f1     
   
-THUMB_MODE: true
+# THUMB_MODE: true
 MODEL_EMA: true
 #LOG_WANDB: true
 #BINARYTRAIN_MODE: true
 TRAINER:
-  NAME: none
+  NAME: iNet_cls

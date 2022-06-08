@@ -1,6 +1,7 @@
 from timm.data import create_transform
 from timm.data.transforms import str_to_interp_mode
 import albumentations as A
+from albumentations.pytorch import ToTensorV2
 from torchvision import transforms
 import torch
 import numpy as np
@@ -52,8 +53,11 @@ def _build_transform(config,is_train,type=None):
                             )
             if is_train:
                 [_tf1,tf2,tf3] = tf_timm
-                tf1 = [transforms.Resize(list((np.array(config.DATA.IMG_SIZE) / config.TEST.CROP).astype(int)), str_to_interp_mode(config.DATA.INTERPOLATION)),
-                       transforms.RandomCrop(config.DATA.IMG_SIZE)]
+                if config.TEST.CROP != 1.0 and config.TEST.CROP != 0.:
+                    tf1 = [transforms.Resize(list((np.array(config.DATA.IMG_SIZE) / config.TEST.CROP).astype(int)), str_to_interp_mode(config.DATA.INTERPOLATION)),
+                        transforms.RandomCrop(config.DATA.IMG_SIZE)]
+                else:
+                    tf1 = [transforms.Resize(config.DATA.IMG_SIZE)]
                 if config.AUG.HFLIP > 0:
                     tf1 += [transforms.RandomHorizontalFlip(config.AUG.HFLIP)]
                 if config.AUG.VFLIP:
@@ -94,7 +98,30 @@ def _build_transform(config,is_train,type=None):
                                 std=torch.tensor(config.AUG.NORM[1])
                             ),
                     ])
-
+        
+        elif _name == 'pict':
+            if is_train:
+                return A.Compose([
+                            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                            A.RandomBrightnessContrast(p=0.7),
+                            A.HorizontalFlip(p=0.7),
+                            A.VerticalFlip(p=0.7),
+                            A.ShiftScaleRotate(rotate_limit=15.0, p=0.7),
+                            A.OneOf([
+                                A.Emboss(p=1),
+                                A.Sharpen(p=1),
+                                A.Blur(p=1)
+                                    ], p=0.7),
+                            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                            ToTensorV2(),
+                            ])
+            else:
+                return A.Compose([
+                            A.Resize(height=config.DATA.IMG_SIZE[0],width=config.DATA.IMG_SIZE[1]),
+                            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                            ToTensorV2(),
+                            ])
+                        
 def build_transform(config,is_train):
     if config.AUG.MULTI_VIEW is not None:
         _type = _type.lower().split('_')
