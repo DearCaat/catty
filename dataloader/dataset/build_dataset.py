@@ -342,7 +342,8 @@ class ALImageDataset(data.Dataset):
         self._consecutive_errors = 0
         if self.transform is not None:
             # for albumentations 
-            img = self.transform(image=img)['image']
+
+            img = self.transform(image=np.asarray(img))['image']
         if target is None:
             target = -1
         elif self.target_transform is not None:
