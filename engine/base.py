@@ -70,7 +70,8 @@ def log_meter(metrics,log_list,logger):
 
 def reset_meter(metrics):
     for _key in metrics.keys():
-        metrics[_key].reset()
+        if isinstance(metrics[_key],AverageMeter):
+            metrics[_key].reset()
 
 class BaseTrainer():
     def __init__(self,engine,**kwargs):
