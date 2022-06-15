@@ -11,10 +11,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_
-
-from .swin_transformer import SwinTransformer
-from .vision_transformer import VisionTransformer
-
+from mim_backbone import *
+from timm.models.swin_transformer import SwinTransformer
+from timm.models.vision_transformer import VisionTransformer
+from timm.models import create_model
 
 class SwinTransformerForSimMIM(SwinTransformer):
     def __init__(self, **kwargs):
@@ -94,13 +94,41 @@ class VisionTransformerForSimMIM(VisionTransformer):
         x = x.permute(0, 2, 1).reshape(B, C, H, W)
         return x
 
+def patchify(self, imgs):
+        """
+        imgs: (N, 3, H, W)
+        x: (N, L, patch_size**2 *3)
+        """
+        p = self.patch_embed.patch_size[0]
+        assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
 
-class SimMIM(nn.Module):
-    def __init__(self, encoder, encoder_stride):
+        h = w = imgs.shape[2] // p
+        x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
+        x = torch.einsum('nchpwq->nhwpqc', x)
+        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
+        return x
+
+def unpatchify(self, x):
+    """
+    x: (N, L, patch_size**2 *3)
+    imgs: (N, 3, H, W)
+    """
+    p = self.patch_embed.patch_size[0]
+    h = w = int(x.shape[1]**.5)
+    assert h * w == x.shape[1]
+    
+    x = x.reshape(shape=(x.shape[0], h, w, p, p, 3))
+    x = torch.einsum('nhwpqc->nchpwq', x)
+    imgs = x.reshape(shape=(x.shape[0], 3, h * p, h * p))
+    return imgs
+
+class MIM(nn.Module):
+    def __init__(self, encoder, encoder_stride,use_mae=False,norm_pix_loss=False):
         super().__init__()
         self.encoder = encoder
         self.encoder_stride = encoder_stride
-
+        # we take the mask_token out of encoder and decoder since the the mask_token will not be fed into the encoder in mae 
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, self.encoder.embed_dim))
         self.decoder = nn.Sequential(
             nn.Conv2d(
                 in_channels=self.encoder.num_features,
@@ -111,14 +139,29 @@ class SimMIM(nn.Module):
         self.in_chans = self.encoder.in_chans
         self.patch_size = self.encoder.patch_size
 
-    def forward(self, x, mask):
-        z = self.encoder(x, mask)
+        self.use_mae = use_mae
+        self.norm_pix_loss = norm_pix_loss
+
+    def forward(self, x):
+        z,logits,mask,ids_restore = self.encoder(x)
         x_rec = self.decoder(z)
 
-        mask = mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()
-        loss_recon = F.l1_loss(x, x_rec, reduction='none')
-        loss = (loss_recon * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
-        return loss
+        target = patchify(x)
+        if self.norm_pix_loss:
+            mean = target.mean(dim=-1, keepdim=True)
+            var = target.var(dim=-1, keepdim=True)
+            target = (target - mean) / (var + 1.e-6)**.5
+
+        if self.use_mae:
+            loss_mim = (z - target) ** 2
+            loss_mim = loss_mim.mean(dim=-1)  # [N, L], mean loss per patch
+
+            loss_mim = (loss_mim * mask).sum() / mask.sum()  # mean loss on removed patches
+        else:
+            mask = mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()
+            loss_mim = F.l1_loss(target, x_rec, reduction='none')
+            loss_mim = (loss_mim * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
+        return logits,loss_mim
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -133,7 +176,7 @@ class SimMIM(nn.Module):
         return {}
 
 
-def build_simmim(config):
+def build_mim(config):
     model_type = config.MODEL.TYPE
     if model_type == 'swin':
         encoder = SwinTransformerForSimMIM(
@@ -177,6 +220,6 @@ def build_simmim(config):
     else:
         raise NotImplementedError(f"Unknown pre-train model: {model_type}")
 
-    model = SimMIM(encoder=encoder, encoder_stride=encoder_stride)
+    model = MIM(encoder=encoder, encoder_stride=encoder_stride)
 
     return model

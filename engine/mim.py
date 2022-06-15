@@ -11,9 +11,10 @@ class MIMEngine:
         self.train_metrics = OrderedDict([
         ('acc1',AverageMeter()),
         ('acc5',AverageMeter()),
+        ('loss_mim',AverageMeter()),
         ])
         self.train_metrics_epoch_log =[]
-        self.train_metrics_iter_log =[]
+        self.train_metrics_iter_log =['loss_mim']
 
         self.test_metrics = OrderedDict([
         ('acc1',AverageMeter()),
@@ -31,9 +32,12 @@ class MIMEngine:
             self.test_metrics_epoch_log += ['auc','macro_f1','micro_f1']
         
     def cal_loss_func(self,config,models,idx,samples,targets,epoch,num_steps,criterions,**kwargs):
-        predictions = models['main'](samples)
-        loss = criterions[0](predictions,targets)
+        predictions,loss_mim = models['main'](samples)
+        loss_cls = criterions[0](predictions,targets)
+        loss = loss_cls + config.MIM.LOSS_ALPHA * loss_mim
+
         metrics_values = OrderedDict([
+            ('loss_mim',loss_mim.data),
         ])
 
         return loss,metrics_values,OrderedDict([])

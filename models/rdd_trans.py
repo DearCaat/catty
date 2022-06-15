@@ -5,7 +5,7 @@ import torch.nn as nn
 from timm.models.registry import register_model
 from .gcn_cluster import *
 from .spectral_clustering import *
-from .swin import _create_swin_transformer
+from timm.models.swin_transformer import _create_swin_transformer
 # from kmeans_pytorch import kmeans,kmeans_predict
 
 class Attention(nn.Module):
