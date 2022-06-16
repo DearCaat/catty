@@ -4,6 +4,7 @@ from timm.models import create_model
 from .pvt import *
 from .pvt_v2 import *
 from .cswin import *
+from .mim import *
 # from ._vit import *
 
 def build_model(config):
@@ -37,6 +38,18 @@ def build_model(config):
             config.MODEL.NAME,
             pretrained=config.MODEL.PRETRAINED,
             num_classes=config.MODEL.NUM_CLASSES,
+        )
+        models = {'main':model}
+    elif model_name.startswith('mim'):
+        model = create_model(
+            config.MODEL.NAME,
+            pretrained=config.MODEL.PRETRAINED,
+            num_classes=config.MODEL.NUM_CLASSES,
+            drop_rate=None if int(config.MODEL.DROP_RATE) == -1 else config.MODEL.DROP_RATE,
+            drop_path_rate=None if int(config.MODEL.DROP_PATH_RATE) == -1 else config.MODEL.DROP_PATH_RATE,
+            img_size = config.DATA.IMG_SIZE[0],
+            use_mae = config.MIM.USE_MAE,
+            norm_pix_loss = config.MIM.NORM_PIX_LOSS
         )
         models = {'main':model}
     else:

@@ -11,10 +11,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_
-from mim_backbone import *
 from timm.models.swin_transformer import SwinTransformer
 from timm.models.vision_transformer import VisionTransformer
 from timm.models import create_model
+from timm.models.registry import register_model
+
+from .mim_backbone import *
+from .utils import patchify,unpatchify
+
 
 class SwinTransformerForSimMIM(SwinTransformer):
     def __init__(self, **kwargs):
@@ -94,34 +98,6 @@ class VisionTransformerForSimMIM(VisionTransformer):
         x = x.permute(0, 2, 1).reshape(B, C, H, W)
         return x
 
-def patchify(self, imgs):
-        """
-        imgs: (N, 3, H, W)
-        x: (N, L, patch_size**2 *3)
-        """
-        p = self.patch_embed.patch_size[0]
-        assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
-
-        h = w = imgs.shape[2] // p
-        x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
-        x = torch.einsum('nchpwq->nhwpqc', x)
-        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
-        return x
-
-def unpatchify(self, x):
-    """
-    x: (N, L, patch_size**2 *3)
-    imgs: (N, 3, H, W)
-    """
-    p = self.patch_embed.patch_size[0]
-    h = w = int(x.shape[1]**.5)
-    assert h * w == x.shape[1]
-    
-    x = x.reshape(shape=(x.shape[0], h, w, p, p, 3))
-    x = torch.einsum('nhwpqc->nchpwq', x)
-    imgs = x.reshape(shape=(x.shape[0], 3, h * p, h * p))
-    return imgs
-
 class MIM(nn.Module):
     def __init__(self, encoder, encoder_stride,use_mae=False,norm_pix_loss=False):
         super().__init__()
@@ -143,10 +119,17 @@ class MIM(nn.Module):
         self.norm_pix_loss = norm_pix_loss
 
     def forward(self, x):
-        z,logits,mask,ids_restore = self.encoder(x)
-        x_rec = self.decoder(z)
+        z,logits,mask = self.encoder(x)
 
-        target = patchify(x)
+        z = z.transpose(1, 2)
+        B, C, L = z.shape
+        H = W = int(L ** 0.5)
+        z = z.reshape(B, C, H, W)
+        x_rec = self.decoder(z)
+        # print(x_rec.size())
+        #x_rec = self.decoder(unpatchify(z,self.encoder.patch_size))
+
+        target = patchify(x,self.encoder_stride)
         if self.norm_pix_loss:
             mean = target.mean(dim=-1, keepdim=True)
             var = target.var(dim=-1, keepdim=True)
@@ -159,6 +142,7 @@ class MIM(nn.Module):
             loss_mim = (loss_mim * mask).sum() / mask.sum()  # mean loss on removed patches
         else:
             mask = mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()
+            target = unpatchify(target,self.encoder_stride)
             loss_mim = F.l1_loss(target, x_rec, reduction='none')
             loss_mim = (loss_mim * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
         return logits,loss_mim
@@ -175,6 +159,14 @@ class MIM(nn.Module):
             return {'encoder.' + i for i in self.encoder.no_weight_decay_keywords()}
         return {}
 
+@register_model
+def mim_swin_base_patch4_window12_384_in22k(pretrained=False, **kwargs):
+    encoder = create_model(
+        model_name='swin_mim_base_patch4_window12_384_in22k',
+        pretrained=pretrained,
+        **kwargs
+    )
+    return MIM(encoder,32,use_mae=kwargs['use_mae'],norm_pix_loss=kwargs['norm_pix_loss'])
 
 def build_mim(config):
     model_type = config.MODEL.TYPE

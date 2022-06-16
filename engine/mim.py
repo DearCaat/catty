@@ -12,6 +12,7 @@ class MIMEngine:
         ('acc1',AverageMeter()),
         ('acc5',AverageMeter()),
         ('loss_mim',AverageMeter()),
+        ('loss_cls',AverageMeter()),
         ])
         self.train_metrics_epoch_log =[]
         self.train_metrics_iter_log =['loss_mim']
@@ -35,9 +36,9 @@ class MIMEngine:
         predictions,loss_mim = models['main'](samples)
         loss_cls = criterions[0](predictions,targets)
         loss = loss_cls + config.MIM.LOSS_ALPHA * loss_mim
-
         metrics_values = OrderedDict([
-            ('loss_mim',loss_mim.data),
+            ('loss_mim',[loss_mim,targets.size(0)]),
+            ('loss_cls',[loss_cls,targets.size(0)]),
         ])
 
         return loss,metrics_values,OrderedDict([])
@@ -52,7 +53,7 @@ class MIMEngine:
         topk = (1,1) if config.MODEL.NUM_CLASSES < 5 else (1,5)
 
         # topk acc cls
-        acc1,acc5 = accuracy(output, targets, topk=topk)
+        acc1,acc5 = accuracy(output[0], targets, topk=topk)
 
         metrics_values = OrderedDict([
         ('acc1',[acc1,targets.size(0)]),

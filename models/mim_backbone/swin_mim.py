@@ -26,11 +26,12 @@ import torch.utils.checkpoint as checkpoint
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 from timm.models.fx_features import register_notrace_function
-from timm.models.helpers import build_model_with_cfg
+from timm.models.helpers import build_model_with_cfg,overlay_external_default_cfg
 from timm.models.layers import PatchEmbed, Mlp, DropPath, to_2tuple, trunc_normal_, to_ntuple,_assert
 from timm.models.registry import register_model
 from timm.models.vision_transformer import checkpoint_filter_fn, _init_vit_weights
 
+from ..utils import MaskGenerator,checkpoint_seq
 
 _logger = logging.getLogger(__name__)
 
@@ -447,7 +448,7 @@ class SwinTransformer(nn.Module):
             embed_dim=96, depths=(2, 2, 6, 2), num_heads=(3, 6, 12, 24), head_dim=None,
             window_size=7, mlp_ratio=4., qkv_bias=True,
             drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
-            norm_layer=nn.LayerNorm, ape=False, patch_norm=True, weight_init='', use_mae=False,mask_ratio=0.6,mask_token=None, **kwargs):
+            norm_layer=nn.LayerNorm, ape=False, patch_norm=True, weight_init='', use_mae=False,mask_ratio=0.6,mask_token=None,mask_patch_size=32, **kwargs):
         super().__init__()
         assert global_pool in ('', 'avg')
         self.num_classes = num_classes
@@ -502,7 +503,11 @@ class SwinTransformer(nn.Module):
         self.mask_token = mask_token
         self.use_mae = use_mae
         self.mask_ratio = mask_ratio
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim)) if use_mae else None
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim)) if not use_mae else None
+        self.in_chans = in_chans
+        self.patch_size = patch_size
+        self.mask_patch_size = mask_patch_size
+        self.random_masking = MaskGenerator(img_size,self.mask_patch_size,self.patch_size,self.mask_ratio,self.use_mae)
 
         if weight_init != 'skip':
             self.init_weights(weight_init)
@@ -564,42 +569,6 @@ class SwinTransformer(nn.Module):
             self.global_pool = global_pool
         self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
 
-    def random_masking(self, x, mask_ratio):
-        """
-        Perform per-sample random masking by per-sample shuffling.
-        Per-sample shuffling is done by argsort random noise.
-        x: [N, L, D], sequence
-
-        original copyright/license mae, thanks to the authors
-        """
-        N, L, D = x.shape  # batch, length, dim
-        len_keep = int(L * (1 - mask_ratio))
-        
-        noise = torch.rand(N, L, device=x.device)  # noise in [0, 1]
-        
-        # sort noise for each sample
-        ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
-        ids_restore = torch.argsort(ids_shuffle, dim=1)
-
-        # keep the first subset
-        ids_keep = ids_shuffle[:, :len_keep]
-
-        # generate the binary mask: 0 is keep, 1 is remove
-        mask = torch.ones([N, L], device=x.device)
-        mask[:, :len_keep] = 0
-        # unshuffle to get the binary mask
-        mask = torch.gather(mask, dim=1, index=ids_restore)
-
-        # the mae only fed the unmasked patch to encoder, but simmim use the all.
-        if self.use_mae:
-            x_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
-        else:
-            mask_token = self.mask_token.expand(N, L, -1)
-            w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
-            x_masked = x * (1 - w) + mask_token * w
-
-        return x_masked, mask, ids_restore
-
     def forward_features(self, x):
         x = self.patch_embed(x)
 
@@ -608,16 +577,16 @@ class SwinTransformer(nn.Module):
             if self.absolute_pos_embed is not None:
                 x = x + self.absolute_pos_embed
             x = self.pos_drop(x)
-            x, mask, ids_restore = self.random_masking(x, self.mask_ratio)
+            x, mask = self.random_masking(x)
         else:
-            x, mask, ids_restore = self.random_masking(x, self.mask_ratio)
+            x, mask = self.random_masking(x)
             if self.absolute_pos_embed is not None:
                 x = x + self.absolute_pos_embed
             x = self.pos_drop(x)
 
         x = self.layers(x)
         x = self.norm(x)  # B L C
-        return x,mask,ids_restore
+        return x,mask
 
     def forward_head(self, x, pre_logits: bool = False):
         if self.global_pool == 'avg':
@@ -625,14 +594,28 @@ class SwinTransformer(nn.Module):
         return x if pre_logits else self.head(x)
 
     def forward(self, x):
-        z,mask,ids_restore = self.forward_features(x)
+        z,mask = self.forward_features(x)
         x = self.forward_head(z)
-        return z,x,mask,ids_restore
+        return z,x,mask
 
 
-def _create_swin_transformer(variant, pretrained=False, **kwargs):
+def _create_swin_transformer(variant, pretrained=False,default_cfg=None, **kwargs):
+    if default_cfg is None:
+        default_cfg = deepcopy(default_cfgs[variant])
+    overlay_external_default_cfg(default_cfg, kwargs)
+    default_num_classes = default_cfg['num_classes']
+    default_img_size = default_cfg['input_size'][-2:]
+
+    num_classes = kwargs.pop('num_classes', default_num_classes)
+    img_size = kwargs.pop('img_size', default_img_size)
+    if kwargs.get('features_only', None):
+        raise RuntimeError('features_only not implemented for Vision Transformer models.')
+
     model = build_model_with_cfg(
         SwinTransformer, variant, pretrained,
+        default_cfg=default_cfg,
+        img_size=img_size,
+        num_classes=num_classes,
         pretrained_filter_fn=checkpoint_filter_fn,
         **kwargs)
 
