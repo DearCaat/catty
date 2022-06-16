@@ -15,7 +15,7 @@ class MIMEngine:
         ('loss_cls',AverageMeter()),
         ])
         self.train_metrics_epoch_log =[]
-        self.train_metrics_iter_log =['loss_mim']
+        self.train_metrics_iter_log =['loss_mim','loss_cls']
 
         self.test_metrics = OrderedDict([
         ('acc1',AverageMeter()),
