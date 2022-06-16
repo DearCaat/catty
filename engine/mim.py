@@ -18,18 +18,18 @@ class MIMEngine:
 
         self.test_metrics = OrderedDict([
         ('acc1',AverageMeter()),
-        ('acc5',AverageMeter()),])
+        ('acc5',AverageMeter()),
+        ('macro_f1',.0),
+        ('micro_f1',.0),])
 
-        self.test_metrics_epoch_log =[]
+        self.test_metrics_epoch_log =['macro_f1','micro_f1']
         self.test_metrics_iter_log =['acc1','acc5']
 
         if config.TEST.BINARY_MODE:
             self.test_metrics.update(OrderedDict([
                 ('auc',.0),
-                ('macro_f1',.0),
-                ('micro_f1',.0),
             ]))
-            self.test_metrics_epoch_log += ['auc','macro_f1','micro_f1']
+            self.test_metrics_epoch_log += ['auc']
         
     def cal_loss_func(self,config,models,idx,samples,targets,epoch,num_steps,criterions,**kwargs):
         predictions,loss_mim = models['main'](samples)
@@ -64,10 +64,14 @@ class MIMEngine:
         return metrics_values,others
     def measure_per_epoch(self,config,**kwargs):
         metrics_values = OrderedDict([])
+        label = kwargs['label']
+        pred = kwargs['pred']
+
+        ma_f1 = f1_score(label,np.argmax(pred,axis=1),average='macro')
+        mi_f1 = f1_score(label,np.argmax(pred,axis=1),average='micro')
+        
         if config.TEST.BINARY_MODE:
             auc = 0
-            label = kwargs['label']
-            pred = kwargs['pred']
             if config.BINARYTRAIN_MODE:
                 ma_f1 = f1_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int),np.argmax(pred,axis=1),average='binary')
                 mi_f1 = ma_f1
@@ -75,16 +79,14 @@ class MIMEngine:
                 auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), pred[:,1])
 
             else:
-                ma_f1 = f1_score(label,np.argmax(pred,axis=1),average='macro')
-                mi_f1 = f1_score(label,np.argmax(pred,axis=1),average='micro')
-
                 auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), 1-pred[:,config.DATA.NOR_CLS_INDEX])
 
-            metrics_values.update(OrderedDict([
-            ('auc',auc),
-            ('macro_f1',ma_f1),
-            ('micro_f1',mi_f1)
-            ]))
+            metrics_values.update(OrderedDict([('auc',auc),]))
+        
+        metrics_values.update(OrderedDict([
+        ('macro_f1',ma_f1),
+        ('micro_f1',mi_f1)
+        ]))
         others = OrderedDict([
         ])
 

@@ -1,0 +1,8 @@
+TRAINER:
+  NAME: mim
+MIM:
+  LOSS_ALPHA: 1.
+  MASK_RATIO: 0.6
+  MASK_PATCH_SIZE: 32
+  USE_MAE: false
+  

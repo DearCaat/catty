@@ -4,6 +4,7 @@ from .rdd_trans import *
 from .ts_cam import *
 from .wsplin import *
 from .ioplin import *
+from .mim import *
 
 def build_trainer(config):
     if config.TRAINER.NAME.lower() == 'rdd_trans':
@@ -15,5 +16,7 @@ def build_trainer(config):
         )
     elif config.TRAINER.NAME.lower() == 'inet_cls':
         engine = INetClsEngine(config)
+    elif config.TRAINER.NAME.lower() == 'mim':
+        engine = MIMEngine(config)
     base = BaseTrainer(engine=engine)
     return base.train_one_epoch,base.predict,base.validate,base.best_metrics
