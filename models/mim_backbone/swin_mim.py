@@ -578,9 +578,13 @@ class SwinTransformer(nn.Module):
             x = self.pos_drop(x)
             if self.training:
                 x, mask = self.random_masking(x)
+            else:
+                mask = None
         else:
             if self.training:
                 x, mask = self.random_masking(x,self.mask_token)
+            else:
+                mask = None
             if self.absolute_pos_embed is not None:
                 x = x + self.absolute_pos_embed
             x = self.pos_drop(x)
