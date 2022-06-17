@@ -46,7 +46,7 @@ class MaskGenerator:
         self.mask_token_count = int(self.rand_size ** 2)
         self.mask_count = int(np.ceil(self.mask_token_count * mask_ratio))
         self.keep_count = self.mask_token_count - self.mask_count
-    def __call__(self,x):
+    def __call__(self,x,mask_token=None):
         N, L, D = x.shape
 
         noise = torch.rand(N,self.mask_token_count,device=x.device)
@@ -66,7 +66,9 @@ class MaskGenerator:
         if self.use_mae:
             x_masked = x[(mask == 0).flatten(1)].view(N,-1,D)
         else:
-            x_masked = x
+            mask_token = mask_token.expand(N, L, -1)
+            w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
+            x_masked = x * (1 - w) + mask_token * w
         return x_masked,mask
 
 def random_masking(x,mask_token,mask_patch_size,model_patch_size,mask_ratio,use_mae):
