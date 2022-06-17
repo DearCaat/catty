@@ -136,23 +136,25 @@ class MIM(nn.Module):
         x_rec = self.decoder(z)
         # print(x_rec.size())
         #x_rec = self.decoder(unpatchify(z,self.encoder.patch_size))
+        if self.training:
+            target = patchify(x,self.encoder_stride)
+            if self.norm_pix_loss:
+                mean = target.mean(dim=-1, keepdim=True)
+                var = target.var(dim=-1, keepdim=True)
+                target = (target - mean) / (var + 1.e-6)**.5
 
-        target = patchify(x,self.encoder_stride)
-        if self.norm_pix_loss:
-            mean = target.mean(dim=-1, keepdim=True)
-            var = target.var(dim=-1, keepdim=True)
-            target = (target - mean) / (var + 1.e-6)**.5
+            if self.use_mae:
+                loss_mim = (z - target) ** 2
+                loss_mim = loss_mim.mean(dim=-1)  # [N, L], mean loss per patch
 
-        if self.use_mae:
-            loss_mim = (z - target) ** 2
-            loss_mim = loss_mim.mean(dim=-1)  # [N, L], mean loss per patch
-
-            loss_mim = (loss_mim * mask).sum() / mask.sum()  # mean loss on removed patches
+                loss_mim = (loss_mim * mask).sum() / mask.sum()  # mean loss on removed patches
+            else:
+                mask = mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()
+                target = unpatchify(target,self.encoder_stride)
+                loss_mim = F.l1_loss(target, x_rec, reduction='none')
+                loss_mim = (loss_mim * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
         else:
-            mask = mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()
-            target = unpatchify(target,self.encoder_stride)
-            loss_mim = F.l1_loss(target, x_rec, reduction='none')
-            loss_mim = (loss_mim * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
+            loss_mim = 0.
         if return_img_rec:
             return logits,loss_mim,x_rec
         else:
