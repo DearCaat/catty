@@ -216,7 +216,9 @@ class BaseTrainer():
 
         if config.EMPTY_CACHE:
             torch.cuda.empty_cache()
-        return loss,OrderedDict([('loss', loss_meter.avg),('grad_norm',norm_meter.avg),('loss_scale',scaler_meter.avg)]).update(wandb_dic_epoch)
+        return_train_metrics = OrderedDict([('loss', loss_meter.avg),('grad_norm',norm_meter.avg),('loss_scale',scaler_meter.avg)])
+        return_train_metrics.update(wandb_dic_epoch)
+        return loss,return_train_metrics
 
     def predict(config, data_loader, model,amp_autocast=suppress,logger=None):
         model.eval()
