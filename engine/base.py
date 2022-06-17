@@ -7,6 +7,8 @@ from numpy import ndarray
 import datetime
 from collections import OrderedDict
 
+from pyparsing import Or
+
 try:
     import wandb
     has_wandb = True
@@ -56,6 +58,7 @@ def _log_list_meter(list,key,logger):
 
 def log_meter(metrics,log_list,logger):
         log_str = ''
+        wandb_dic = OrderedDict([])
         for key, value in metrics.items():
             if key in log_list:
                 key = key[:-6] if '_meter' in key else key
@@ -63,10 +66,18 @@ def log_meter(metrics,log_list,logger):
                     _log_list_meter(value,key,logger)
                 elif isinstance(value,AverageMeter):
                     log_str += f'{key} {value.val:.4f} ({value.avg:.4f})\t'
+                    wandb_dic.update(OrderedDict([
+                        (key,value.avg)
+                    ]))
                 else:
                     log_str += f'{key} {value:.4f}\t'
+                    wandb_dic.update(OrderedDict([
+                        (key,value)
+                    ]))
         if len(log_str) != 0:
             logger.info(log_str)
+
+        return wandb_dic
 
 def reset_meter(metrics):
     for _key in metrics.keys():
@@ -186,10 +197,11 @@ class BaseTrainer():
                     f'loss_scale {scaler_meter.val:.4f} ({scaler_meter.avg:.4f})\t'
                     f'mem {memory_used:.0f}MB')
                 # log per iter
-                log_meter(self.engine.train_metrics,self.engine.train_metrics_iter_log,logger)
+                wandb_dic_iter = log_meter(self.engine.train_metrics,self.engine.train_metrics_iter_log,logger)
                 # wandb log per iter
                 if config.LOG_WANDB and has_wandb and config.LOCAL_RANK == 0:
                     rowd = OrderedDict([('iter/loss',loss_meter.val),('iter/grad_norm',norm_meter.val),('iter/lr',lr)])
+                    rowd.update(wandb_dic_iter)
                     wandb.log(rowd,step=epoch * num_steps + idx)
         #每一轮更新一次
         self.engine.update_per_epoch(config,epoch)
@@ -200,11 +212,11 @@ class BaseTrainer():
         epoch_time = time.time() - start
         logger.info(f"EPOCH {epoch} training takes {datetime.timedelta(seconds=int(epoch_time))}")
         # log per epoch
-        log_meter(self.engine.train_metrics,self.engine.train_metrics_epoch_log,logger)
+        wandb_dic_epoch = log_meter(self.engine.train_metrics,self.engine.train_metrics_epoch_log,logger)
 
         if config.EMPTY_CACHE:
             torch.cuda.empty_cache()
-        return loss,OrderedDict([('loss', loss_meter.avg),('grad_norm',norm_meter.avg),('loss_scale',scaler_meter.avg)])
+        return loss,OrderedDict([('loss', loss_meter.avg),('grad_norm',norm_meter.avg),('loss_scale',scaler_meter.avg)]).update(wandb_dic_epoch)
 
     def predict(config, data_loader, model,amp_autocast=suppress,logger=None):
         model.eval()

@@ -6,6 +6,7 @@
 # --------------------------------------------------------
 
 from functools import partial
+import re
 
 import torch
 import torch.nn as nn
@@ -13,6 +14,7 @@ import torch.nn.functional as F
 from timm.models.layers import trunc_normal_
 from timm.models.swin_transformer import SwinTransformer
 from timm.models.vision_transformer import VisionTransformer
+from timm.models.vision_transformer import Block as ViT_Block
 from timm.models import create_model
 from timm.models.registry import register_model
 
@@ -99,18 +101,12 @@ class VisionTransformerForSimMIM(VisionTransformer):
         return x
 
 class MIM(nn.Module):
-    def __init__(self, encoder, encoder_stride,use_mae=False,norm_pix_loss=False):
+    def __init__(self, encoder, encoder_stride,use_mae=False,norm_pix_loss=False,decoder=None):
         super().__init__()
         self.encoder = encoder
         self.encoder_stride = encoder_stride
         # we take the mask_token out of encoder and decoder since the the mask_token will not be fed into the encoder in mae 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, self.encoder.embed_dim))
-        self.decoder = nn.Sequential(
-            nn.Conv2d(
-                in_channels=self.encoder.num_features,
-                out_channels=self.encoder_stride ** 2 * 3, kernel_size=1),
-            nn.PixelShuffle(self.encoder_stride),
-        )
 
         self.in_chans = self.encoder.in_chans
         self.patch_size = self.encoder.patch_size
@@ -118,7 +114,19 @@ class MIM(nn.Module):
         self.use_mae = use_mae
         self.norm_pix_loss = norm_pix_loss
 
-    def forward(self, x):
+        if self.use_mae:
+            self.decoder = nn.ModuleList([
+                ViT_Block(decoder_embed_dim, decoder_num_heads, mlp_ratio, qkv_bias=True, qk_scale=None, norm_layer=norm_layer)
+                for i in range(decoder_depth)])
+        else:
+            self.decoder = nn.Sequential(
+                nn.Conv2d(
+                    in_channels=self.encoder.num_features,
+                    out_channels=self.encoder_stride ** 2 * 3, kernel_size=1),
+                nn.PixelShuffle(self.encoder_stride),
+            )
+
+    def forward(self, x, return_img_rec=False):
         z,logits,mask = self.encoder(x)
 
         z = z.transpose(1, 2)
@@ -145,7 +153,10 @@ class MIM(nn.Module):
             target = unpatchify(target,self.encoder_stride)
             loss_mim = F.l1_loss(target, x_rec, reduction='none')
             loss_mim = (loss_mim * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
-        return logits,loss_mim
+        if return_img_rec:
+            return logits,loss_mim,x_rec
+        else:
+            return logits,loss_mim
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -167,6 +178,14 @@ def mim_swin_base_patch4_window12_384_in22k(pretrained=False, **kwargs):
         **kwargs
     )
     return MIM(encoder,32,use_mae=kwargs['use_mae'],norm_pix_loss=kwargs['norm_pix_loss'])
+
+@register_model
+def mim_vit_base_patch16_224_in21k(pretrained=False, **kwargs):
+    encoder = create_model(
+        model_name='vit_base_patch16_224_in21k',
+        pretrained=pretrained,
+        **kwargs
+    )
 
 def build_mim(config):
     model_type = config.MODEL.TYPE

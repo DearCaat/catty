@@ -35,7 +35,7 @@ class MIMEngine:
     def cal_loss_func(self,config,models,idx,samples,targets,epoch,num_steps,criterions,**kwargs):
         predictions,loss_mim = models['main'](samples)
         loss_cls = criterions[0](predictions,targets)
-        loss = loss_cls + config.MIM.LOSS_ALPHA * loss_mim
+        loss = config.MIM.CLS_LOSS_ALPHA * loss_cls + config.MIM.LOSS_ALPHA * loss_mim
         metrics_values = OrderedDict([
             ('loss_mim',[loss_mim,targets.size(0)]),
             ('loss_cls',[loss_cls,targets.size(0)]),
