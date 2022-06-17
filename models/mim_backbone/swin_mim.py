@@ -16,7 +16,6 @@ import logging
 import math
 from copy import deepcopy
 from typing import Optional
-from matplotlib import use
 
 import torch
 from torch._C import device
