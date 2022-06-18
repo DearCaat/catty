@@ -112,7 +112,8 @@ class SimMIM(nn.Module):
         self.in_chans = self.encoder.in_chans
         self.patch_size = self.encoder.patch_size
 
-    def forward(self, x,mask):
+    def forward(self, x_all):
+        (x,mask) = x_all
         z,logits = self.encoder(x, mask)
         x_rec = self.decoder(z)
 
