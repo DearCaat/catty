@@ -303,7 +303,11 @@ class BaseTrainer():
             last_batch = idx == last_idx
             # timm dataloader prefetcher will do this
             if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
-                images = images.cuda(non_blocking=True)
+                if type(images) in (tuple,list):
+                    for _i in range(len(images)):
+                        images[_i] = images[_i].cuda(non_blocking=config.DATA.PIN_MEMORY)
+                else:
+                    images = images.cuda(non_blocking=config.DATA.PIN_MEMORY)
                 targets = targets.cuda(non_blocking=True)
 
             # compute output
