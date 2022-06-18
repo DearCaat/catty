@@ -21,7 +21,7 @@ class SwinTransformerForSimMIM(SwinTransformer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        assert self.num_classes == 0
+        # assert self.num_classes == 0
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
         trunc_normal_(self.mask_token, mean=0., std=.02)
