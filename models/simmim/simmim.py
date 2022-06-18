@@ -117,7 +117,7 @@ class SimMIM(nn.Module):
         (x,mask) = x_all
         z,logits = self.encoder(x, mask)
         x_rec = self.decoder(z)
-        if self.training and keep_mask:
+        if self.training or keep_mask:
             mask = mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()
             loss_recon = F.l1_loss(x, x_rec, reduction='none')
             loss = (loss_recon * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
