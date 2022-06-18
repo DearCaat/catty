@@ -29,5 +29,7 @@ def build_loader(config,is_train):
         dataloader = pytorch_dataloader(config=config,is_train=is_train)
     elif name == 'pim':
         dataloader = build_pim_loader(config)
+    # elif name == 'simmim':
+    #     dataloader = 
     dataloader += (mixup_fn,) if is_train else ()
     return dataloader

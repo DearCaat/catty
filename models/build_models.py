@@ -5,6 +5,7 @@ from .pvt import *
 from .pvt_v2 import *
 from .cswin import *
 from .mim import *
+from .simmim import *
 # from ._vit import *
 
 def build_model(config):
@@ -40,7 +41,7 @@ def build_model(config):
             num_classes=config.MODEL.NUM_CLASSES,
         )
         models = {'main':model}
-    elif model_name.startswith('mim'):
+    elif model_name.startswith('mim') or model_name.startswith('simmim'):
         model = create_model(
             config.MODEL.NAME,
             pretrained=config.MODEL.PRETRAINED,
@@ -49,7 +50,12 @@ def build_model(config):
             drop_path_rate=None if int(config.MODEL.DROP_PATH_RATE) == -1 else config.MODEL.DROP_PATH_RATE,
             img_size = config.DATA.IMG_SIZE[0],
             use_mae = config.MIM.USE_MAE,
-            norm_pix_loss = config.MIM.NORM_PIX_LOSS
+            norm_pix_loss = config.MIM.NORM_PIX_LOSS,
+            config = config
+        )
+        models = {'main':model}
+    elif model_name.startswith('simmim'):
+        model = create_model(config
         )
         models = {'main':model}
     else:
