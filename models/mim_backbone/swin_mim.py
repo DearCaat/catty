@@ -568,7 +568,7 @@ class SwinTransformer(nn.Module):
             self.global_pool = global_pool
         self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x):
+    def forward_features(self, x,keep_mask=False):
         x = self.patch_embed(x)
 
         # the mae first add the pos_embed and then masked the patches, simmim is the opposite
@@ -581,7 +581,7 @@ class SwinTransformer(nn.Module):
             else:
                 mask = None
         else:
-            if self.training:
+            if self.training or keep_mask:
                 x, mask = self.random_masking(x,self.mask_token)
             else:
                 mask = None
@@ -598,8 +598,8 @@ class SwinTransformer(nn.Module):
             x = x.mean(dim=1)
         return x if pre_logits else self.head(x)
 
-    def forward(self, x):
-        z,mask = self.forward_features(x)
+    def forward(self, x,keep_mask=False):
+        z,mask = self.forward_features(x,keep_mask)
         x = self.forward_head(z)
         return z,x,mask
 

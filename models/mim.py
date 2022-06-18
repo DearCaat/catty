@@ -126,8 +126,8 @@ class MIM(nn.Module):
                 nn.PixelShuffle(self.encoder_stride),
             )
 
-    def forward(self, x, return_img_rec=False):
-        z,logits,mask = self.encoder(x)
+    def forward(self, x, return_img_rec=False,keep_mask=False):
+        z,logits,mask = self.encoder(x,keep_mask)
 
         z = z.transpose(1, 2)
         B, C, L = z.shape
@@ -136,7 +136,7 @@ class MIM(nn.Module):
         x_rec = self.decoder(z)
         # print(x_rec.size())
         #x_rec = self.decoder(unpatchify(z,self.encoder.patch_size))
-        if self.training:
+        if self.training or keep_mask:
             target = patchify(x,self.encoder_stride)
             if self.norm_pix_loss:
                 mean = target.mean(dim=-1, keepdim=True)

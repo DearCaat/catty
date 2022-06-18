@@ -68,6 +68,7 @@ class MaskGenerator:
         else:
             mask_token = mask_token.expand(N, L, -1)
             w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
+
             x_masked = x * (1 - w) + mask_token * w
         return x_masked,mask
 
