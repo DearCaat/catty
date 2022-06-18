@@ -128,7 +128,6 @@ class MIM(nn.Module):
 
     def forward(self, x, return_img_rec=False,keep_mask=False):
         z,logits,mask = self.encoder(x,keep_mask)
-        print(z.size())
         z = z.transpose(1, 2)
         B, C, L = z.shape
         H = W = int(L ** 0.5)

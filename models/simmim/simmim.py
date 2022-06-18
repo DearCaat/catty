@@ -32,9 +32,10 @@ class SwinTransformerForSimMIM(SwinTransformer):
         assert mask is not None
         B, L, _ = x.shape
 
-        mask_tokens = self.mask_token.expand(B, L, -1)
-        w = mask.flatten(1).unsqueeze(-1).type_as(mask_tokens)
-        x = x * (1. - w) + mask_tokens * w
+        if self.training:
+            mask_tokens = self.mask_token.expand(B, L, -1)
+            w = mask.flatten(1).unsqueeze(-1).type_as(mask_tokens)
+            x = x * (1. - w) + mask_tokens * w
 
         if self.ape:
             x = x + self.absolute_pos_embed
@@ -72,10 +73,10 @@ class VisionTransformerForSimMIM(VisionTransformer):
 
         assert mask is not None
         B, L, _ = x.shape
-
-        mask_token = self.mask_token.expand(B, L, -1)
-        w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
-        x = x * (1 - w) + mask_token * w
+        if self.training:
+            mask_token = self.mask_token.expand(B, L, -1)
+            w = mask.flatten(1).unsqueeze(-1).type_as(mask_token)
+            x = x * (1 - w) + mask_token * w
 
         cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_tokens, x), dim=1)
@@ -112,15 +113,16 @@ class SimMIM(nn.Module):
         self.in_chans = self.encoder.in_chans
         self.patch_size = self.encoder.patch_size
 
-    def forward(self, x_all):
+    def forward(self, x_all,keep_mask=False):
         (x,mask) = x_all
         z,logits = self.encoder(x, mask)
         x_rec = self.decoder(z)
-
-        mask = mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()
-        loss_recon = F.l1_loss(x, x_rec, reduction='none')
-        loss = (loss_recon * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
-
+        if self.training and keep_mask:
+            mask = mask.repeat_interleave(self.patch_size, 1).repeat_interleave(self.patch_size, 2).unsqueeze(1).contiguous()
+            loss_recon = F.l1_loss(x, x_rec, reduction='none')
+            loss = (loss_recon * mask).sum() / (mask.sum() + 1e-5) / self.in_chans
+        else:
+            loss=0.
         return logits,loss
 
     @torch.jit.ignore
@@ -144,7 +146,7 @@ def build_simmim(config):
     if model_type == 'swin':
         encoder = SwinTransformerForSimMIM(
             img_size=config.DATA.IMG_SIZE,
-            num_classes=0,
+            num_classes=config.MODEL.NUM_CLASSES,
             embed_dim=config.MODEL.SWIN.EMBED_DIM,
             depths=config.MODEL.SWIN.DEPTHS,
             num_heads=config.MODEL.SWIN.NUM_HEADS,
