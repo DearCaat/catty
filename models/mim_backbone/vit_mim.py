@@ -1,12 +1,9 @@
-from functools import partial
-import math
 import logging
-from matplotlib import use
 
-from timm.models.vision_transformer import VisionTransformer,_init_vit_weights,checkpoint_filter_fn,default_cfgs
+from timm.models.vision_transformer import VisionTransformer,checkpoint_filter_fn,default_cfgs
 from timm.models.layers import trunc_normal_
 from timm.models.registry import register_model
-from timm.models.helpers import named_apply,build_model_with_cfg
+from timm.models.helpers import build_model_with_cfg
 
 import torch
 import torch.nn as nn
