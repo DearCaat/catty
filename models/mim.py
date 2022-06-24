@@ -182,11 +182,14 @@ def mim_swin_base_patch4_window12_384_in22k(pretrained=False, **kwargs):
 
 @register_model
 def mim_vit_base_patch16_224_in21k(pretrained=False, **kwargs):
+    norm_pix_loss = kwargs.pop('norm_pix_loss')
+    config = kwargs.pop('config')
     encoder = create_model(
-        model_name='vit_base_patch16_224_in21k',
+        model_name='vit_mim_base_patch16_224_in21k',
         pretrained=pretrained,
         **kwargs
     )
+    return MIM(encoder,16,use_mae=kwargs['use_mae'],norm_pix_loss=norm_pix_loss)
 
 def build_mim(config):
     model_type = config.MODEL.TYPE
