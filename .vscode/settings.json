@@ -6,6 +6,7 @@
         "hbtml",
         "pretrained",
         "savez",
-        "swin"
+        "swin",
+        "WSPLIN"
     ]
 }

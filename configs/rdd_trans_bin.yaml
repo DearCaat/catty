@@ -7,7 +7,7 @@ MODEL:
   NUM_CLASSES: 2
   DROP_PATH_RATE: .3
 DATA:
-  NOR_CLS_INDEX: 0
+  NOR_CLS_INDEX: 0  # 在类别中，正常图片的类别索引，用于PicT算法，该值判断在DATA_NOR_INDEX之后
 AUG:
   MULTI_VIEW: strong_none
 

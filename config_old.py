@@ -29,7 +29,6 @@ _C.DATA.PRETRAINED_DIR = ''
 # Dataset name     tfds/cqu_bpdd  cfd crack500 cracktre200
 _C.DATA.DATASET = 'cqu_bpdd'
 
-# 在类别中，正常图片的类别索引，用于PicT算法，该值判断在下面那个值之后
 _C.DATA.NOR_CLS_INDEX = 6
 # 数据集中的正常图片所在的类别索引 cqu_bpdd ：6
 _C.DATA.DATA_NOR_INDEX = 6
@@ -65,6 +64,12 @@ _C.DATA.DROP_LAST = False
 # transform={torch,timm,album,custom...}. The first three totally depends on the _C.AUG configs
 _C.DATA.DATALOADER_NAME = 'timm_timm_timm'
 
+
+_C.DATA.PATCH_SIZE=300
+# for cfd 150 cracktree200 150 cqu_bpdd 300
+_C.DATA.STRIDE=300
+_C.DATA.CROP_SIZE=300
+
 # -----------------------------------------------------------------------------
 # Trainer settings, more settings please refer to /configs/**.yaml
 # -----------------------------------------------------------------------------
@@ -92,6 +97,8 @@ _C.MODEL.DROP_PATH_RATE = -1.
 _C.MODEL.LABEL_SMOOTHING = 0.
 # Start with pretrained version of specified network (if avail)
 _C.MODEL.PRETRAINED = True
+
+_C.MODEL.NUM_PATCHES=17
 
 # 在多模型训练的时候，到底哪些模型需要存放在GPU中，main始终是主模型，在最前面
 _C.MODEL.TOGPU_MODEL_NAME = ['main'] 
@@ -156,18 +163,14 @@ _C.TRAIN.AS_LR_SCALE = True
 #Loss
 _C.TRAIN.LOSS = CN()
 _C.TRAIN.LOSS.NAME = 'crossentropy'
-
-# -----------------------------------------------------------------------------
-# Target Augmentation settings
-# -----------------------------------------------------------------------------
-_C.TARGET_AUG = CN()
-# whether 
-_C.TARGET_AUG.TO_BIN_TARGET = False
+_C.TRAIN.LOSS.LAMBDA_L1 = 1e-3
 
 # -----------------------------------------------------------------------------
 # Augmentation settings
 # -----------------------------------------------------------------------------
 _C.AUG = CN()
+# 在dataloader 不使用 timm的情况下，是否使用timm的transform，主要好处是可以使用randaugment
+_C.AUG.TIMM_TRANS = False
 # Norm mean and std, default is [IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD], but old wsplin model use [(0.455,0.455,0.455),(0.225,0.225,0.225)]  effi-b3 use [(0.5,0.5,0.5),(0.5,0.5,0.5)]
 _C.AUG.NORM = [IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD]
 # Disable all training augmentation, override other train aug args
@@ -212,7 +215,6 @@ _C.AUG.SPLITS=0
 # output multi-view images, "strong_weak","strong_none","weak_none"
 # "student_teacher"
 _C.AUG.MULTI_VIEW = None
-# 不同于timm的AA，这是transfg那篇文章所用的aa
 _C.AUG.TRANSFG_AA = False
 # -----------------------------------------------------------------------------
 # Testing settings
@@ -249,7 +251,8 @@ _C.PRINT_FREQ = 50
 _C.SEED = 42
 # use the thumb data to train
 _C.THUMB_MODE = False
-
+# binary train and binary test
+_C.BINARYTRAIN_MODE = False
 # the dir of tested data
 _C.LOAD_TEST_DIR = ''
 # log training and validation metrics to wandb
@@ -333,6 +336,10 @@ def update_config(config, args):
         config.MODEL.NAME = args.model_name
     if args.thumb:
         config.THUMB_MODE = True
+    if args.binary_train:
+        config.BINARYTRAIN_MODE = True
+        config.MODEL.NUM_CLASSES = 2
+        config.TEST.BINARY_MODE = True
     if args.load_test_dir:
         config.LOAD_TEST_DIR = args.load_test_dir
     if args.epochs:
@@ -347,6 +354,10 @@ def update_config(config, args):
         config.MODEL_EMA = args.ema
     if args.pin_memory:
         config.DATA.PIN_MEMORY = args.pin_memory
+    # timm 暂时不支持multi_view
+    if config.AUG.MULTI_VIEW is not None:
+        config.DATA.TIMM_PREFETCHER = False
+        config.DATA.TIMM = False
 
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         config.DISTRIBUTED = int(os.environ['WORLD_SIZE']) > 1

@@ -8,10 +8,8 @@ class INetClsEngine:
     def __init__(self,config,**kwargs):
         # 除了主损失以外的metric，主损失会每个iter进行log
         # 每个iter更新的指标需要初始化成AverageMeter
-        self.train_metrics = OrderedDict([
-        ('acc1',AverageMeter()),
-        ('acc5',AverageMeter()),
-        ])
+        # 默认情况下，训练函数内不进行任何评价指标计算
+        self.train_metrics = OrderedDict([])
         self.train_metrics_epoch_log =[]
         self.train_metrics_iter_log =[]
 
@@ -70,13 +68,13 @@ class INetClsEngine:
         if config.TEST.BINARY_MODE:
             auc = 0
             if config.BINARYTRAIN_MODE:
-                ma_f1 = f1_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int),np.argmax(pred,axis=1),average='binary')
+                ma_f1 = f1_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int),np.argmax(pred,axis=1),average='binary')
                 mi_f1 = ma_f1
 
-                auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), pred[:,1])
+                auc = roc_auc_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int), pred[:,1])
 
             else:
-                auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), 1-pred[:,config.DATA.NOR_CLS_INDEX])
+                auc = roc_auc_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int), 1-pred[:,config.DATA.DATA_NOR_INDEX])
 
             metrics_values.update(OrderedDict([('auc',auc),]))
         

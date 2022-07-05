@@ -99,6 +99,7 @@ class BaseTrainer():
         optimizer.zero_grad()
         second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
         num_steps = len(data_loader)
+        is_timm_loader = config.DATA.DATALOADER_NAME.startswith('timm')
 
         batch_time = AverageMeter()
         loss_meter = AverageMeter()
@@ -115,7 +116,7 @@ class BaseTrainer():
             last_batch = idx == last_idx
             
             # timm dataloader prefetcher will do this
-            if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
+            if not is_timm_loader or not config.DATA.TIMM_PREFETCHER:
                 if type(samples) in (tuple,list):
                     for _i in range(len(samples)):
                         samples[_i] = samples[_i].cuda(non_blocking=config.DATA.PIN_MEMORY)
@@ -124,7 +125,7 @@ class BaseTrainer():
                         
                 targets = targets.cuda(non_blocking=config.DATA.PIN_MEMORY)
             # timm dataloader prefetcher will do this
-            if mixup_fn is not None and not config.DATA.TIMM:
+            if mixup_fn is not None and not is_timm_loader:
                 samples, targets = mixup_fn(samples, targets)
 
             with amp_autocast():
@@ -249,8 +250,8 @@ class BaseTrainer():
                 targets_bin = targets.clone()
 
                 if 'cqu_bpdd' in config.DATA.DATASET:
-                    targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-                    targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+                    targets_bin[targets==config.DATA.DATA_NOR_INDEX] = 0
+                    targets_bin[targets!=config.DATA.DATA_NOR_INDEX] = 1
                 # compute output
                 with amp_autocast():
                     output = model(images)
@@ -288,6 +289,7 @@ class BaseTrainer():
         models['main'].eval()
         if config.EMPTY_CACHE:
             torch.cuda.empty_cache()
+        is_timm_loader = config.DATA.DATALOADER_NAME.startswith('timm')
 
         batch_time = AverageMeter()
         loss_meter = AverageMeter()
@@ -302,7 +304,7 @@ class BaseTrainer():
         for idx, (images, targets) in enumerate(data_loader):
             last_batch = idx == last_idx
             # timm dataloader prefetcher will do this
-            if not config.DATA.TIMM or not config.DATA.TIMM_PREFETCHER:
+            if not is_timm_loader or not config.DATA.TIMM_PREFETCHER:
                 if type(images) in (tuple,list):
                     for _i in range(len(images)):
                         images[_i] = images[_i].cuda(non_blocking=config.DATA.PIN_MEMORY)

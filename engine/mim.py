@@ -75,13 +75,13 @@ class MIMEngine:
         if config.TEST.BINARY_MODE:
             auc = 0
             if config.BINARYTRAIN_MODE:
-                ma_f1 = f1_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int),np.argmax(pred,axis=1),average='binary')
+                ma_f1 = f1_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int),np.argmax(pred,axis=1),average='binary')
                 mi_f1 = ma_f1
 
-                auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), pred[:,1])
+                auc = roc_auc_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int), pred[:,1])
 
             else:
-                auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), 1-pred[:,config.DATA.NOR_CLS_INDEX])
+                auc = roc_auc_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int), 1-pred[:,config.DATA.DATA_NOR_INDEX])
 
             metrics_values.update(OrderedDict([('auc',auc),]))
         

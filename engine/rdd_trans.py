@@ -58,8 +58,8 @@ class RddTransTrainer:
         else:
             if targets_bin is None:
                 targets_bin = targets.clone()
-                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+                targets_bin[targets==config.DATA.DATA_NOR_INDEX] = 0
+                targets_bin[targets!=config.DATA.DATA_NOR_INDEX] = 1
             targets_pl = targets_bin
 
         if config.RDD_TRANS.PERSUDO_LEARNING: 
@@ -215,16 +215,16 @@ class RddTransTrainer:
         label = kwargs['label']
         pred = kwargs['pred']
         if config.BINARYTRAIN_MODE:
-            ma_f1 = f1_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int),np.argmax(pred,axis=1),average='binary')
+            ma_f1 = f1_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int),np.argmax(pred,axis=1),average='binary')
             mi_f1 = ma_f1
 
-            auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), pred[:,1])
+            auc = roc_auc_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int), pred[:,1])
 
         else:
             ma_f1 = f1_score(label,np.argmax(pred,axis=1),average='macro')
             mi_f1 = f1_score(label,np.argmax(pred,axis=1),average='micro')
 
-            auc = roc_auc_score(np.array(label!=config.DATA.NOR_CLS_INDEX,dtype=int), 1-pred[:,config.DATA.NOR_CLS_INDEX])
+            auc = roc_auc_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int), 1-pred[:,config.DATA.DATA_NOR_INDEX])
 
         metrics_values = OrderedDict([
         ('auc',auc),
@@ -277,8 +277,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
         # 当伪标签为二分类时或二分类训练时，需要二分类标签进行loss计算
         if config.BINARYTRAIN_MODE or config.RDD_TRANS.INST_NUM_CLASS:
             targets_bin = targets.clone()
-            targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-            targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+            targets_bin[targets==config.DATA.DATA_NOR_INDEX] = 0
+            targets_bin[targets!=config.DATA.DATA_NOR_INDEX] = 1
         
         # timm dataloader prefetcher will do this
         if mixup_fn is not None and not config.DATA.TIMM:
@@ -545,8 +545,8 @@ def predict(config, data_loader, model,amp_autocast=suppress,logger=None):
             targets_bin = targets.clone()
 
             if 'cqu_bpdd' in config.DATA.DATASET:
-                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+                targets_bin[targets==config.DATA.DATA_NOR_INDEX] = 0
+                targets_bin[targets!=config.DATA.DATA_NOR_INDEX] = 1
             # compute output
             with amp_autocast():
                 output = model(images)
@@ -610,8 +610,8 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
                 topk = (1,1)
             m = 0
             if 'cqu_bpdd' in config.DATA.DATASET:
-                targets_bin[targets==config.DATA.NOR_CLS_INDEX] = 0
-                targets_bin[targets!=config.DATA.NOR_CLS_INDEX] = 1
+                targets_bin[targets==config.DATA.DATA_NOR_INDEX] = 0
+                targets_bin[targets!=config.DATA.DATA_NOR_INDEX] = 1
 
             # compute output
             with amp_autocast():
@@ -700,17 +700,17 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
         save_pred = save_pred.reshape(-1,config.MODEL.NUM_CLASSES)
         auc = 0
         if config.BINARYTRAIN_MODE:
-            ma_f1 = f1_score(np.array(save_label!=config.DATA.NOR_CLS_INDEX,dtype=int),np.argmax(save_pred,axis=1),average='binary')
+            ma_f1 = f1_score(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int),np.argmax(save_pred,axis=1),average='binary')
             mi_f1 = ma_f1
             try:
-                auc = roc_auc_score(np.array(save_label!=config.DATA.NOR_CLS_INDEX,dtype=int), save_pred[:,1])
+                auc = roc_auc_score(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int), save_pred[:,1])
             except:
                 print(save_pred)
         else:
             ma_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='macro')
             mi_f1 = f1_score(save_label,np.argmax(save_pred,axis=1),average='micro')
             try:
-                auc = roc_auc_score(np.array(save_label!=config.DATA.NOR_CLS_INDEX,dtype=int), 1-save_pred[:,config.DATA.NOR_CLS_INDEX])
+                auc = roc_auc_score(np.array(save_label!=config.DATA.DATA_NOR_INDEX,dtype=int), 1-save_pred[:,config.DATA.DATA_NOR_INDEX])
             except:
                 print(save_pred)
         
