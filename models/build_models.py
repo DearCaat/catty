@@ -6,6 +6,7 @@ from .pvt_v2 import *
 from .cswin import *
 from .mim import *
 from .simmim import *
+from .rdd_trans import *
 # from ._vit import *
 
 def build_model(config):
@@ -17,8 +18,8 @@ def build_model(config):
             pretrained=config.MODEL.PRETRAINED,
             num_classes=config.MODEL.NUM_CLASSES,
             ins_num_classes=config.RDD_TRANS.INST_NUM_CLASS,
-            drop_rate=config.MODEL.DROP_RATE,
-            drop_path_rate=config.MODEL.DROP_PATH_RATE,
+            drop_rate=None if int(config.MODEL.DROP_RATE) == -1 else config.MODEL.DROP_RATE,
+            drop_path_rate=None if int(config.MODEL.DROP_PATH_RATE) == -1 else config.MODEL.DROP_PATH_RATE,
             cluster_name = config.RDD_TRANS.CLUSTER.NAME,
             num_cluster = config.RDD_TRANS.CLUSTER.NUM_CLUSTER,
             ips_active_connection = config.RDD_TRANS.CLUSTER.IPS_ACTIVE_CONNECTION,
@@ -33,7 +34,8 @@ def build_model(config):
             persistent_center = config.RDD_TRANS.CLUSTER.PERSISTENT_CENTER,
             cluster_flip_sel = config.RDD_TRANS.TEST_CLU_FLIP_SEL
         )
-        models = {'main':model}
+        #models = {'main':model}
+        models = model
     elif model_name.startswith('vgg'):
         model = create_model(
             config.MODEL.NAME,

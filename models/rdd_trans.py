@@ -5,8 +5,8 @@ import torch.nn as nn
 from timm.models.registry import register_model
 from .gcn_cluster import *
 from .spectral_clustering import *
-from timm.models.swin_transformer import _create_swin_transformer
-# from kmeans_pytorch import kmeans,kmeans_predict
+from .pict_backbone import create_swin_transformer
+from .kmeans import kmeans,kmeans_predict
 
 class Attention(nn.Module):
     def __init__(self,classes,in_dim=1536,out_dim=384):
@@ -323,7 +323,7 @@ def rdd_trans_swin_small_patch4_window7_224(pretrained=False, **kwargs):
     """
     model_kwargs = dict(
         patch_size=4, window_size=7, embed_dim=96, depths=(2, 2, 18, 2), num_heads=(3, 6, 12, 24), **kwargs)
-    backbone = _create_swin_transformer('swin_small_patch4_window7_224', pretrained=pretrained, **model_kwargs)
+    backbone = create_swin_transformer('swin_small_patch4_window7_224', pretrained=pretrained, **model_kwargs)
     if 'cluster_name' in kwargs:
         if kwargs['cluster_name'].lower() == 'kmeans':
             return RddTransformer(backbone=backbone,cluster=kmeans,**kwargs)
@@ -344,7 +344,7 @@ def rdd_trans_swin_base_patch4_window12_384_in22k(pretrained=False, **kwargs):
     """
     model_kwargs = dict(
         patch_size=4, window_size=12, embed_dim=128, depths=(2, 2, 18, 2), num_heads=(4, 8, 16, 32),**kwargs)
-    backbone = _create_swin_transformer('swin_base_patch4_window12_384_in22k', pretrained=pretrained, **model_kwargs)
+    backbone = create_swin_transformer('swin_base_patch4_window12_384_in22k', pretrained=pretrained, **model_kwargs)
     if 'cluster_name' in kwargs:
         if kwargs['cluster_name'].lower() == 'kmeans':
             return RddTransformer(backbone=backbone,cluster=kmeans,dim=1024,**kwargs)
