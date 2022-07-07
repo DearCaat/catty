@@ -7,12 +7,13 @@ import torch
 import numpy as np
 from .tranfg_autoda import AutoAugImageNetPolicy
 from .transforms import *
+from .utils import TransformCompatWrapper
 
-def _build_transform(config,is_train,type=None):
+def _build_transform(config,is_train,_type=None):
     _name = config.DATA.DATALOADER_NAME.lower().split('_')[2]
-    if type is None:
+    if _type is None:
         if _name == 'timm':
-            return create_transform(
+            _t = create_transform(
                             input_size=config.DATA.IMG_SIZE,
                             is_training=is_train,
                             use_prefetcher=config.DATA.TIMM_PREFETCHER,
@@ -66,10 +67,9 @@ def _build_transform(config,is_train,type=None):
                 if config.AUG.TRANSFG_AA:
                     tf1 += [AutoAugImageNetPolicy()]
                 tf1 = tf1 + tf2.transforms + tf3.transforms
-                return transforms.Compose(tf1)
+                _t = transforms.Compose(tf1)
             else:
-                return tf_timm
-            
+                _t = tf_timm        
         elif _name == 'pim':
             # 448:600
             # 384:510
@@ -77,7 +77,7 @@ def _build_transform(config,is_train,type=None):
             if is_train:
                 # transforms.RandomApply([RandAugment(n=2, m=3, img_size=data_size)], p=0.1)
                 # RandAugment(n=2, m=3, img_size=sub_data_size)
-                return transforms.Compose([
+                _t = transforms.Compose([
                             transforms.Resize(list((np.array(config.DATA.IMG_SIZE) / config.TEST.CROP).astype(int)), str_to_interp_mode(config.DATA.INTERPOLATION)),
                             transforms.RandomCrop(config.DATA.IMG_SIZE),
                             transforms.RandomHorizontalFlip(),
@@ -90,7 +90,7 @@ def _build_transform(config,is_train,type=None):
                             ),
                     ])
             else:
-                return transforms.Compose([
+                _t = transforms.Compose([
                             transforms.Resize(list((np.array(config.DATA.IMG_SIZE) / config.TEST.CROP).astype(int)), str_to_interp_mode(config.DATA.INTERPOLATION)),
                             transforms.CenterCrop(config.DATA.IMG_SIZE),
                             transforms.ToTensor(),
@@ -116,13 +116,28 @@ def _build_transform(config,is_train,type=None):
                     ]
             else:
                 t2=[]
-            t3 = [A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+            t3 = [A.Normalize(mean=config.AUG.NORM[0], std=config.AUG.NORM[1]),
                 ToTensorV2()]
-            return A.Compose(t1+t2+t3)
+
+            _t = [A.Compose(t1),A.Compose(t2),A.Compose(t3)] if config.AUG.SEPARATE else A.Compose(t1+t2+t3)
 
         elif _name == 'simmim':
-            return SimMIMTransform(config)
+            _t = SimMIMTransform(config)
 
+        else:
+            raise NotImplementedError
+        
+        if type(_t) in (list,tuple):
+            for i in range(len(_t)):
+                _t[i] = TransformCompatWrapper(_t[i])
+        else:
+            _t = TransformCompatWrapper(_t)
+        return _t
+def _build_target_transform(config,is_train):
+    if config.TARGET_AUG.TO_BIN_TARGET:
+        t1 = [ToBinTarget(config.DATA.DATA_NOR_INDEX)]
+    
+    return transforms.Compose(t1)
 
 def build_transform(config,is_train):
     if config.AUG.MULTI_VIEW is not None:
@@ -134,5 +149,8 @@ def build_transform(config,is_train):
             _transforms += (_build_transform(config,is_train,_t),)
     else:
         _transforms = _build_transform(config,is_train)
-    
-    return _transforms
+    if config.TARGET_AUG.NO_AUG:
+        _transforms_target = None
+    else:
+        _transforms_target = _build_target_transform(config,is_train)
+    return _transforms,_transforms_target

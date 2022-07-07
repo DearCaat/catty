@@ -7,8 +7,6 @@ from numpy import ndarray
 import datetime
 from collections import OrderedDict
 
-from pyparsing import Or
-
 try:
     import wandb
     has_wandb = True
@@ -285,7 +283,7 @@ class BaseTrainer():
         return save_pred,save_label
    
     @torch.no_grad()
-    def validate(self, config, data_loader, models,save_pre=False,amp_autocast=suppress,criterion=None,logger=None,**kwargs):
+    def validate(self, config, data_loader, models,save_pre=False,amp_autocast=suppress,criterions=None,logger=None,**kwargs):
         models['main'].eval()
         if config.EMPTY_CACHE:
             torch.cuda.empty_cache()
@@ -301,34 +299,23 @@ class BaseTrainer():
         end = time.time()
         last_idx = len(data_loader) - 1
         
-        for idx, (images, targets) in enumerate(data_loader):
+        for idx, (samples, targets) in enumerate(data_loader):
             last_batch = idx == last_idx
             # timm dataloader prefetcher will do this
             if not is_timm_loader or not config.DATA.TIMM_PREFETCHER:
-                if type(images) in (tuple,list):
-                    for _i in range(len(images)):
-                        images[_i] = images[_i].cuda(non_blocking=config.DATA.PIN_MEMORY)
+                if type(samples) in (tuple,list):
+                    for _i in range(len(samples)):
+                        samples[_i] = samples[_i].cuda(non_blocking=config.DATA.PIN_MEMORY)
                 else:
-                    images = images.cuda(non_blocking=config.DATA.PIN_MEMORY)
+                    samples = samples.cuda(non_blocking=config.DATA.PIN_MEMORY)
                 targets = targets.cuda(non_blocking=True)
 
-            # compute output
             with amp_autocast():
-                output = models['main'](images)
-            if isinstance(output, (tuple, list)):
-                predition = output[0]
-            else:
-                predition = output
+                loss,pred,label,metrics_values,others = self.engine.measure_per_iter(config,models,samples,targets,criterions)
 
-            output_soft = torch.nn.functional.softmax(predition,dim=-1)
-
-            loss = criterion[0](predition, targets)
-                
-            save_pred = np.append(save_pred,output_soft.cpu().numpy())
-            save_label = np.append(save_label,targets.cpu().numpy())
+            save_pred = np.append(save_pred,pred.numpy())
+            save_label = np.append(save_label,label.numpy())
             
-            metrics_values,others = self.engine.measure_per_iter(config,output,targets)
-
             if config.DISTRIBUTED:
                 loss = reduce_tensor(loss,config.WORLD_SIZE)
             loss_meter.update(loss.item(), targets.size(0))

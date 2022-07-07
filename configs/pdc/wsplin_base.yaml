@@ -1,0 +1,41 @@
+AUG:
+  NORM: [[0.5,0.5,0.5],[0.5,0.5,0.5]]
+  SEPARATE: true
+  NO_AUG: false
+DATA:
+  DATALOADER_NAME: torch_patch_pict
+  IMG_SIZE: [900,1200]
+  BATCH_SIZE: 4
+  CLS_NOR_INDEX: 6
+TRAIN:
+  LR_BS_SCALE: 4.
+  LR_SCHEDULER.DECAY_STEPS_RATIO: 0.75
+  WEIGHT_DECAT: 1e-5
+  BASE_LR: 8e-4
+  EPOCHS: 30
+  OPTIMIZER:
+    NAME: rangerlars
+  LR_SCHEDULER:
+    NAME: flat_cosine
+TESE:
+  BEST_MODEL_METRIC: ['main','macro_f1']
+MODEL:
+  NUM_CLASSES: 8
+  NAME: wsplin_effi_b3
+
+WSPLIN:
+  LAST_TRANSFORM: false
+  IS_IP: true
+  PATCH_SIZE: [300,300]
+  STRIDE: 300
+  CLS_HEAD_DP_RATE: 0.5
+  NUM_PATCHES: 17
+  ATTENTION: false
+  BACKBONE_INIT: null
+
+  SPARSE_LOSS_ALPHA: 1e-3
+  SPARSE_LOSS_RANGE: all   # all, normal, disease
+
+  RANDSM: false
+  SPARSE_RATIO: 1.
+  RANDSM_TEST_NUM: 5

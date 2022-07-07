@@ -15,10 +15,13 @@ import torchvision.transforms as transforms
 from PIL import Image
 import logging
 
+from .ip_patch_extractor import PatchExtractor
+
 _logger = logging.getLogger(__name__)
 _ERROR_RETRY = 50
 
 # 适用于常见的多数据增强的方法，暂时考虑两个视角
+# todo:完全没有迁移，需要重构此函数
 class MulitiViewImageDataset(data.Dataset):
 
     def __init__(
@@ -120,10 +123,11 @@ class PatchImageDataset(data.Dataset):
             class_map='',
             load_bytes=False,
             transform=None,
+            target_transform=None,
+            last_transform=True,
+            is_ip=True,
             patch_size=0,
             stride=0,
-            eval = False,
-            thumb = False,
             **kwargs
     ):
         if parser is None or isinstance(parser, str):
@@ -131,11 +135,15 @@ class PatchImageDataset(data.Dataset):
         self.parser = parser
         self.load_bytes = load_bytes
         self.transform = transform
+        self.target_transform = target_transform
         self._consecutive_errors = 0
-        self.eval = eval
+        if type(patch_size) in (list,tuple):
+            assert patch_size[0] == patch_size[1]
+            patch_size = patch_size[0]
         self.patch_size = patch_size
         self.stride = stride
-        self.thumb = thumb
+        self.last_transform = last_transform
+        self.is_ip = is_ip
 
     def __getitem__(self, index):
         img, target = self.parser[index]
@@ -150,34 +158,29 @@ class PatchImageDataset(data.Dataset):
             else:
                 raise e
         self._consecutive_errors = 0
-        # for test
-        if self.eval:
+        
+        #last transform
+        if self.last_transform:
+            extractor = PatchExtractor(img=img, patch_size=self.patch_size, stride=self.stride,noIP=not self.is_ip)
+            patches = extractor.extract_patches()
+            imgs = torch.zeros((len(patches)), 3, self.patch_size, self.patch_size)
+            if self.transform is not None:
+                for i in range(len(patches)):
+                    imgs[i] = self.transform(patches[i])
+        else:
+        # first transform
             if self.transform is not None:
                 for i in range(len(self.transform)-1) :
                     img = self.transform[i](img)
-                if not self.thumb:
-                    extractor = PatchExtractor(img=img, patch_size=self.patch_size, stride=self.stride)
-                    patches = extractor.extract_patches()
-                    imgs = torch.zeros((len(patches)), 3, self.patch_size, self.patch_size)
-                    for i in range(len(patches)):
-                        imgs[i] = self.transform[-1](patches[i])
-                else:
-                    imgs = self.transform[-1](img)
-        # for train
-        else:
-            #last transform
-            if not self.thumb:
-                extractor = PatchExtractor(img=img, patch_size=self.patch_size, stride=self.stride)
+                extractor = PatchExtractor(img=img, patch_size=self.patch_size, stride=self.stride,noIP=not self.is_ip)
                 patches = extractor.extract_patches()
                 imgs = torch.zeros((len(patches)), 3, self.patch_size, self.patch_size)
-                if self.transform is not None:
-                    for i in range(len(patches)):
-                        imgs[i] = self.transform(patches[i])
-            # for thumb data
-            else:
-                imgs = self.transform(img)
+                for i in range(len(patches)):
+                    imgs[i] = self.transform[-1](patches[i])
         if target is None:
             target = torch.tensor(-1, dtype=torch.long)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
         return imgs, torch.tensor(target,dtype=torch.long)
 
     def __len__(self):
@@ -190,6 +193,7 @@ class PatchImageDataset(data.Dataset):
         return self.parser.filenames(basename, absolute)
 
 #采用timm库，作了小小改动，支持多gpu，支持多线程，支持shuffle，不支持cache
+# todo: 完全没有迁移
 class IterableImageDataset(data.IterableDataset):
 
     def __init__(
@@ -265,6 +269,7 @@ class IterableImageDataset(data.IterableDataset):
     def filenames(self, basename=False, absolute=False):
         return self.parser.filenames(basename, absolute)
 
+# todo: 删除？因为已经在transform层面进行了兼容
 class ALImageDataset(data.Dataset):
     
     def __init__(
@@ -303,6 +308,55 @@ class ALImageDataset(data.Dataset):
         if target is None:
             target = -1
         elif self.target_transform is not None:
+            target = self.target_transform(target)
+        return img, target
+
+    def __len__(self):
+        return len(self.parser)
+
+    def filename(self, index, basename=False, absolute=False):
+        return self.parser.filename(index, basename, absolute)
+
+    def filenames(self, basename=False, absolute=False):
+        return self.parser.filenames(basename, absolute)
+
+# 与timm库类似，只是添加了target_transform
+class ImageDataset(data.Dataset):
+    
+    def __init__(
+            self,
+            root,
+            parser=None,
+            class_map='',
+            load_bytes=False,
+            transform=None,
+            target_transform=None,
+    ):
+        if parser is None or isinstance(parser, str):
+            parser = create_parser(parser or '', root=root, class_map=class_map)
+        self.parser = parser
+        self.load_bytes = load_bytes
+        self.transform = transform
+        self.target_transform = target_transform
+        self._consecutive_errors = 0
+
+    def __getitem__(self, index):
+        img, target = self.parser[index]
+        try:
+            img = img.read() if self.load_bytes else Image.open(img).convert('RGB')
+        except Exception as e:
+            _logger.warning(f'Skipped sample (index {index}, file {self.parser.filename(index)}). {str(e)}')
+            self._consecutive_errors += 1
+            if self._consecutive_errors < _ERROR_RETRY:
+                return self.__getitem__((index + 1) % len(self.parser))
+            else:
+                raise e
+        self._consecutive_errors = 0
+        if self.transform is not None:
+            img = self.transform(img)
+        if target is None:
+            target = torch.tensor(-1, dtype=torch.long)
+        if self.target_transform is not None:
             target = self.target_transform(target)
         return img, target
 

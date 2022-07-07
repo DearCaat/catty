@@ -1,5 +1,6 @@
 import torchvision.transforms as transforms
 import numpy as np
+import torch
 
 class MaskGenerator:
     def __init__(self, input_size=192, mask_patch_size=32, model_patch_size=4, mask_ratio=0.6):
@@ -59,6 +60,11 @@ class SimMIMTransform:
         
         return (img, mask)
 
+# Target Transform, to binary target
+# Default: 0 is the negative, and 1 is the positive
 class ToBinTarget:
-    def __init__(self, config):
-        
+    def __init__(self, nor_index):
+        self.nor_index = nor_index
+
+    def __call__(self,target):
+        return 0 if target == self.nor_index else 1

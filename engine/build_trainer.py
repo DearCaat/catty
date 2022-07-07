@@ -18,5 +18,7 @@ def build_trainer(config):
         engine = INetClsEngine(config)
     elif config.TRAINER.NAME.lower() == 'mim':
         engine = MIMEngine(config)
+    else:
+        raise NotImplementedError
     base = BaseTrainer(engine=engine)
     return base.train_one_epoch,base.predict,base.validate,base.best_metrics

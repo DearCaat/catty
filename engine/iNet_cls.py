@@ -1,8 +1,10 @@
 import numpy as np
 from collections import OrderedDict
 from sklearn.metrics import roc_auc_score,precision_recall_curve,f1_score
-
+import torch
 from timm.utils import *
+
+from engine.rdd_trans import predict
 
 class INetClsEngine:
     def __init__(self,config,**kwargs):
@@ -13,6 +15,8 @@ class INetClsEngine:
         self.train_metrics_epoch_log =[]
         self.train_metrics_iter_log =[]
 
+        self.topk = (1,1) if config.MODEL.NUM_CLASSES < 5 else (1,5)
+
         self.test_metrics = OrderedDict([
         ('acc1',AverageMeter()),
         ('acc5',AverageMeter()),
@@ -22,7 +26,7 @@ class INetClsEngine:
         self.test_metrics_epoch_log =['macro_f1','micro_f1']
         self.test_metrics_iter_log =['acc1','acc5']
 
-        if config.TEST.BINARY_MODE:
+        if config.TEST.BINARY_MODE or config.MODEL.NUM_CLASSES == 2:
             self.test_metrics.update(OrderedDict([
                 ('auc',.0),
             ]))
@@ -43,11 +47,24 @@ class INetClsEngine:
     def update_per_epoch(self,config,epoch,**kwargs):
         return
 
-    def measure_per_iter(self,config,output,targets,**kwargs):
-        topk = (1,1) if config.MODEL.NUM_CLASSES < 5 else (1,5)
+    def measure_per_iter(self,config,models,samples,targets,criterions,**kwargs):
+        # compute output
+        output = models['main'](samples)
+
+        if isinstance(output, (tuple, list)):
+            predition = output[0]
+        else:
+            predition = output
+
+        output_soft = torch.nn.functional.softmax(predition,dim=-1)
+
+        loss = criterions[0](predition, targets)
+            
+        pred = output_soft.cpu().numpy()
+        label = targets.cpu().numpy()
 
         # topk acc cls
-        acc1,acc5 = accuracy(output, targets, topk=topk)
+        acc1,acc5 = accuracy(output, targets, topk=self.topk)
 
         metrics_values = OrderedDict([
         ('acc1',[acc1,targets.size(0)]),
@@ -56,28 +73,31 @@ class INetClsEngine:
 
         others = OrderedDict([])
 
-        return metrics_values,others
+        return loss,pred,label,metrics_values,others
     def measure_per_epoch(self,config,**kwargs):
+        assert config.MODEL.NUM_CLASSES == 2 and config.TEST.BINARY_MODE
+
         metrics_values = OrderedDict([])
+        
+        _binary_test = config.MODEL.NUM_CLASSES == 2 or config.TEST.BINARY_MODE
         label = kwargs['label']
         pred = kwargs['pred']
 
         ma_f1 = f1_score(label,np.argmax(pred,axis=1),average='macro')
         mi_f1 = f1_score(label,np.argmax(pred,axis=1),average='micro')
-        
-        if config.TEST.BINARY_MODE:
-            auc = 0
-            if config.BINARYTRAIN_MODE:
-                ma_f1 = f1_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int),np.argmax(pred,axis=1),average='binary')
+
+        if _binary_test:
+            if config.TEST.BINARY_MODE:
+                label = label!=config.DATA.DATA_NOR_INDEX
+                pred = 1-pred[:,config.DATA.DATA_NOR_INDEX]
+            elif config.MODEL.NUM_CLASSES == 2:
+                ma_f1 = f1_score(label,np.argmax(pred,axis=1),average='binary')
                 mi_f1 = ma_f1
-
-                auc = roc_auc_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int), pred[:,1])
-
-            else:
-                auc = roc_auc_score(np.array(label!=config.DATA.DATA_NOR_INDEX,dtype=int), 1-pred[:,config.DATA.DATA_NOR_INDEX])
-
+                pred = 1-pred[:,config.DATA.CLS_NOR_INDEX]
+            
+            auc = roc_auc_score(label,pred)
             metrics_values.update(OrderedDict([('auc',auc),]))
-        
+
         metrics_values.update(OrderedDict([
         ('macro_f1',ma_f1),
         ('micro_f1',mi_f1)

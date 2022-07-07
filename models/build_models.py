@@ -7,6 +7,8 @@ from .cswin import *
 from .mim import *
 from .simmim import *
 from .rdd_trans import *
+from .wsplin import *
+
 # from ._vit import *
 
 def build_model(config):
@@ -27,7 +29,7 @@ def build_model(config):
             cluster_distance = config.RDD_TRANS.CLUSTER.CLUSTER_DISTANCE.lower(),
             cluster_thr = config.RDD_TRANS.CLUSTER.THR,
             select_cluster_thr = config.RDD_TRANS.CLUSTER.SELECT_THR,
-            nor_index = config.RDD_TRANS.CLUSTER.NOR_INDEX if hasattr(config.RDD_TRANS.CLUSTER, 'NOR_INDEX') else config.DATA.NOR_CLS_INDEX,
+            nor_index = config.RDD_TRANS.CLUSTER.NOR_INDEX if hasattr(config.RDD_TRANS.CLUSTER, 'NOR_INDEX') else config.DATA.CLS_NOR_INDEX,
             cluster_rbf_distance = config.RDD_TRANS.CLUSTER.RBF_DISTANCE,
             cluster_rbf_gamma = config.RDD_TRANS.CLUSTER.RBF_GAMMA,
             cluster_n_compoents = config.RDD_TRANS.CLUSTER.N_COMPOENTS,
@@ -56,8 +58,15 @@ def build_model(config):
             config = config
         )
         models = {'main':model}
-    elif model_name.startswith('simmim'):
-        model = create_model(config
+
+    elif model_name.startswith('wsplin'):
+        model = create_model(
+            config.MODEL.NAME,
+            config=config,
+            num_classes=config.MODEL.NUM_CLASSES,
+            drop_rate=None if int(config.MODEL.DROP_RATE) == -1 else config.MODEL.DROP_RATE,
+            drop_path_rate=None if int(config.MODEL.DROP_PATH_RATE) == -1 else config.MODEL.DROP_PATH_RATE,
+            img_size = config.DATA.IMG_SIZE[0],
         )
         models = {'main':model}
     else:

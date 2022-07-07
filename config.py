@@ -29,8 +29,9 @@ _C.DATA.PRETRAINED_DIR = ''
 # Dataset name     tfds/cqu_bpdd  cfd crack500 cracktre200
 _C.DATA.DATASET = 'cqu_bpdd'
 
-# 在类别中，正常图片的类别索引，用于PicT算法，该值判断在下面那个值之后
-_C.DATA.NOR_CLS_INDEX = 6
+# 在类别中，正常图片的类别索引，该值判断在下面那个值之后
+# 当二分类训练时，该值会决定类别中哪一个类为negative
+_C.DATA.CLS_NOR_INDEX = 6
 # 数据集中的正常图片所在的类别索引 cqu_bpdd ：6
 _C.DATA.DATA_NOR_INDEX = 6
 _C.DATA.GRAY = True
@@ -63,6 +64,7 @@ _C.DATA.TIMM_PREFETCHER = False
 _C.DATA.DROP_LAST = False
 # "dataloader_dataset_transform"  
 # transform={torch,timm,album,custom...}. The first three totally depends on the _C.AUG configs
+# dataset = {img,timm,tfds,multiview,album}. The first one is almost same with timm ImageDataset, but add the target transform.
 _C.DATA.DATALOADER_NAME = 'timm_timm_timm'
 
 # -----------------------------------------------------------------------------
@@ -161,6 +163,8 @@ _C.TRAIN.LOSS.NAME = 'crossentropy'
 # Target Augmentation settings
 # -----------------------------------------------------------------------------
 _C.TARGET_AUG = CN()
+# same with AUG.NO_AUG
+_C.TARGET_AUG.NO_AUG = True
 # whether 
 _C.TARGET_AUG.TO_BIN_TARGET = False
 
@@ -172,6 +176,8 @@ _C.AUG = CN()
 _C.AUG.NORM = [IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD]
 # Disable all training augmentation, override other train aug args
 _C.AUG.NO_AUG = True
+# 
+_C.AUG.SEPARATE = False
 # Random resize scale (default: 0.08 1.0)
 _C.AUG.SCALE = [0.08, 1.0]
 # Random resize aspect ratio (default: 0.75 1.33)
@@ -220,9 +226,9 @@ _C.AUG.TRANSFG_AA = False
 _C.TEST = CN()
 # Whether to use center crop when testing
 _C.TEST.CROP = 1.
-# top1 f1 auc，['model_best_save_idx','metric']
+# acc1 macro_f1 auc，['model_best_save_idx','metric']
 _C.TEST.BEST_MODEL_METRIC = ['main','acc1']
-# 二分类测试
+# 二分类测试，该值会决定在多分类训练或者标签本身是多类别时，是否还进行二分类测试
 _C.TEST.BINARY_MODE = False
 
 # -----------------------------------------------------------------------------

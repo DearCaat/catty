@@ -49,7 +49,7 @@ class RddTransTrainer:
 
         output,o_inst,_,cluster_num = model(samples)
         # 设定正常图片在类别中的索引
-        pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
+        pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.CLS_NOR_INDEX
         
             #_,pl_inst = teacher_ema.module(samples)
         #output_pl = torch.nn.functional.softmax(pl_inst,dim=2)
@@ -100,7 +100,7 @@ class RddTransTrainer:
                 #将病害包里判断为不是正常的实例都置为包标签 & (output_bag_label > thr_min_conf)
                 mask_ins =   ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf)) & (output_bag_label > thr_min_dis_conf) )  | (output_bag_label - min_nor_thr >  0))
                 label_pl[mask_ins] = ins_t[mask_ins]
-                #选取部分置信度比较高的实例参与loss计算   label_tmp - config.DATA.NOR_CLS_INDEX  == 0
+                #选取部分置信度比较高的实例参与loss计算   label_tmp - config.DATA.CLS_NOR_INDEX  == 0
                 mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
             else:
                 #全部都用
@@ -291,7 +291,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
             output,o_inst,_,cluster_num = model(samples)
             torch.cuda.empty_cache()
             # 设定正常图片在类别中的索引
-            pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.NOR_CLS_INDEX
+            pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.CLS_NOR_INDEX
             
                 #_,pl_inst = teacher_ema.module(samples)
             #output_pl = torch.nn.functional.softmax(pl_inst,dim=2)
@@ -338,7 +338,7 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                     #将病害包里判断为不是正常的实例都置为包标签 & (output_bag_label > thr_min_conf)
                     mask_ins =   ps_mask_dis & (((output_pl[:,:,pl_nor_cls_index] < (1-thr_min_conf)) & (output_bag_label > thr_min_dis_conf) )  | (output_bag_label - min_nor_thr >  0))
                     label_pl[mask_ins] = ins_t[mask_ins]
-                    #选取部分置信度比较高的实例参与loss计算   label_tmp - config.DATA.NOR_CLS_INDEX  == 0
+                    #选取部分置信度比较高的实例参与loss计算   label_tmp - config.DATA.CLS_NOR_INDEX  == 0
                     mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] - thr_min_dis_conf > 0))) | ((output_pl[:,:,pl_nor_cls_index] > thr_min_dis_conf) & ps_mask_nor)
                 else:
                     #全部都用
@@ -628,7 +628,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             #     b,p,cls = output.shape
             #     max_score,max_index_cls = torch.max(output_soft,dim=-1)
 
-            #     mask = (max_score - config.RDD_TRANS.TEST_THR > 0) & (max_index_cls - config.DATA.NOR_CLS_INDEX != 0)
+            #     mask = (max_score - config.RDD_TRANS.TEST_THR > 0) & (max_index_cls - config.DATA.CLS_NOR_INDEX != 0)
             #     if mask.any() == True:
             #         max_index = []
             #         for i in range(b):
@@ -662,7 +662,7 @@ def validate(config, data_loader, model,save_pre=False,amp_autocast=suppress, lo
             # else:
             #     acc1, acc5 = accuracy(output, target, topk=topk)
             #     output = torch.nn.functional.softmax(output,dim=1)
-            #     preds = 1-output[:,config.DATA.NOR_CLS_INDEX]
+            #     preds = 1-output[:,config.DATA.CLS_NOR_INDEX]
             
             # phase_label = np.append(phase_label, target_bin.data.cpu().numpy())
             # phase_pred = np.append(phase_pred, preds.cpu().numpy())

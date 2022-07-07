@@ -176,3 +176,4 @@ def checkpoint_seq(
     if skip_last:
         return run_function(end + 1, len(functions) - 1, functions)(x)
     return x
+

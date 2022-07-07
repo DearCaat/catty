@@ -3,6 +3,7 @@ DATA:
   IMG_SIZE: (300,300) #(384,384)
   BATCH_SIZE: 32
   VAL_BATCH_SIZE: 96
+  DATASET: cqu_bpdd
 MODEL: 
   NUM_CLASSES: 8      
   # swin_base_patch4_window12_384_in22k  pvt_medium pvt_v2_b3

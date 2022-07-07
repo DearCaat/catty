@@ -523,8 +523,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     loss_teacher = None
 
     if not config.THUMB_MODE and teacher_ema is not None:
-        loss_teacher = SoftTargetCrossEntropy_v2()
-        # loss_teacher = torch.nn.CrossEntropyLoss()
+        #loss_teacher = SoftTargetCrossEntropy_v2()
+        loss_teacher = torch.nn.CrossEntropyLoss()
         #if not config.RDD_TRANS.EMA_FORCE_CPU:
         loss_teacher.cuda()
 
@@ -547,8 +547,8 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     start = time.time()
     end = time.time()
     last_idx = len(data_loader) - 1
-    persudo_inst = False
-    gcn = False
+    persudo_inst = config.RDD_TRANS.PERSUDO_LEARNING and not config.THUMB_MODE and config.RDD_TRANS.PERSUDO_LABEL
+    gcn = config.RDD_TRANS.PERSUDO_LEARNING and config.RDD_TRANS.CLUSTER.NAME == 'gcn' and not config.THUMB_MODE
     center_inst = torch.zeros(size=(config.RDD_TRANS.INST_NUM_CLASS,config.RDD_TRANS.INST_NUM_CLASS))
 
     for idx, (samples, targets) in enumerate(data_loader):
@@ -600,7 +600,171 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 if config.RDD_TRANS.SHARPEN_STUDENT:
                     o_inst /= config.RDD_TRANS.SHARPEN_STUDENT
 
-                torch.cuda.empty_cache()    
+                torch.cuda.empty_cache()
+                # 设定正常图片在类别中的索引
+                pl_nor_cls_index = 0 if config.RDD_TRANS.INST_NUM_CLASS == 2 else config.DATA.CLS_NOR_INDEX
+                
+                   #_,pl_inst = teacher_ema.module(samples)
+                #output_pl = torch.nn.functional.softmax(pl_inst,dim=2)
+                if config.RDD_TRANS.INST_NUM_CLASS != 2:
+                    targets_pl = targets
+                else:
+                    targets_pl = targets_bin
+                if persudo_inst: 
+                    with torch.no_grad():
+                        _,pl_inst,cluster_num_ema = teacher_ema.module(samples_teacher)
+                        # 参见DINO论文中解决坍塌问题采用的center和sharpen策略
+                        # center原文直接将一个batch中所有样本做了一个C，这里该怎么需要探讨，起码应该为每个类别做一个。原文是一篇自监督文章，所以是没办法获得类别信息的，这里可能要根据伪标签来做center，不然与整个方法思路相违背
+                        if config.RDD_TRANS.CENTER is not None:
+                            pl_inst_tmp = pl_inst.clone()
+                            pl_inst += center_inst
+                            center_inst = config.RDD_TRANS.CENTER * center_inst + (1-config.RDD_TRANS.CENTER_DECAY)*pl_inst_tmp.view(-1,config.RDD_TRANS.INST_NUM_CLASS).mean_(dim=0)
+                        # 原文这里是对student和teacher都做了，用了两个不同tmp参数
+                        if config.RDD_TRANS.SHARPEN_TEACHER is not None:
+                            pl_inst /= config.RDD_TRANS.SHARPEN_TEACHER
+
+                        output_pl = torch.nn.functional.softmax(pl_inst,dim=-1)
+                        torch.cuda.empty_cache()
+                    b,p,cls = pl_inst.shape
+                    t_cpu = targets_pl.cpu()
+                    ins_t = targets_pl.unsqueeze(-1).repeat((1,p))
+
+                    dis_ins = 0
+                    #包所属标签下的置信度
+                    if config.RDD_TRANS.INST_NUM_CLASS != config.MODEL.NUM_CLASSES:
+                        output_bag_label =  output_pl[:,:,:config.MODEL.NUM_CLASSES].clone()
+                    else:
+                        output_bag_label =  output_pl.clone()
+                    output_bag_label = output_bag_label[torch.functional.F.one_hot(ins_t,num_classes=config.MODEL.NUM_CLASSES) == 1].view(b,p)
+
+                    #该包中局部相对病害阈值        
+                    if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                        out_tmp_sort,_ = torch.sort(output_bag_label,dim=-1,descending=True)         # [b p]
+                        min_nor_thr = out_tmp_sort[[i for i in range(b)],np.floor(p*thr_list[t_cpu])] # [b 1]
+                        min_nor_thr = min_nor_thr.unsqueeze(-1).repeat((1,p))        # [b p]
+                    else:
+                        min_nor_thr = torch.zeros(size=(b,p))
+                    min_nor_thr = min_nor_thr.cuda(non_blocking=True)
+
+                    _,label_pl = torch.max(output_pl,dim=2)
+                    #label_pl = torch.argmax(output_pl,dim=2)
+                    #label_tmp = label_pl.clone()
+                    #获得正常包索引和病害包索引
+                    #bs_index_nor = targets_pl==pl_nor_cls_index
+                    #bs_index_dis = bs_index_nor==False
+                    ps_mask_nor = ins_t == pl_nor_cls_index
+                    ps_mask_dis = ps_mask_nor==False
+
+                    #将所有实例设为正常
+                    if config.DATA.CLS_NOR_INDEX >=0:
+                        label_pl[:,:] = pl_nor_cls_index 
+
+                    # 包中的绝对阈值
+                    if config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'fix':
+                        thr_min_conf = config.RDD_TRANS.THR_ABS_NOR
+                        thr_min_dis_conf = config.RDD_TRANS.THR_ABS_DIS
+                    elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'linear':
+                        thr_min_conf = 0.9 + (epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) / (config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) *0.099
+                        thr_min_dis_conf = 0.5 + (epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) / (config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) *0.499
+                    # sigmod函数来保证前期增加速率远远高于后期，优于线性增长
+                    elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_iter':
+                        thr_min_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_NOR_LOW,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps,end=config.RDD_TRANS.THR_ABS_NOR_HIGH)
+                        thr_min_dis_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_DIS_LOW,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps,end=config.RDD_TRANS.THR_ABS_DIS_HIGH)
+                        thr_min_nor_conf = get_sigmod_num(config.RDD_TRANS.THR_FIL_NOR_LOW,(epoch-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps + idx,(config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH) * num_steps,end=config.RDD_TRANS.THR_FIL_NOR_HIGH,alph=5)
+                    elif config.RDD_TRANS.THR_ABS_UPDATE_NAME == 'sigmod_epoch':
+                        thr_min_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_NOR_LOW,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=config.RDD_TRANS.THR_ABS_NOR_HIGH)
+
+                        thr_min_dis_conf = get_sigmod_num(config.RDD_TRANS.THR_ABS_DIS_LOW,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=config.RDD_TRANS.THR_ABS_DIS_HIGH,alph=10)
+
+                        thr_min_nor_conf = get_sigmod_num(config.RDD_TRANS.THR_FIL_NOR_LOW,epoch-config.RDD_TRANS.INIT_STAGE_EPOCH,config.TRAIN.EPOCHS-config.RDD_TRANS.INIT_STAGE_EPOCH,end=config.RDD_TRANS.THR_FIL_NOR_HIGH,alph=5)
+                    #把网络判断为不是正常的部分实例置为包病害标签
+                    if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                        #判断为相应病害的实例置为包标签
+                        #mask_ins =  (label_tmp - ins_t  == 0)
+                        # 将病害包里判断为不是正常的实例都置为包标签，thr_list的值，保证了该类中至少有百分之n个病害实例
+                        # 对于病害包里的实例，采用两种阈值，相对阈值和绝对阈值，并且这两个阈值都是自适应的。一个病害包中的实例，如果它的正常概率小于绝对正常阈值并且病害概率大于绝对病害阈值，或者它的病害概率大于相对病害阈值，就认为它为病害 & (output_bag_label > thr_min_dis_conf)
+                        mask_ins_abs = None
+                        if config.RDD_TRANS.THR_ABS_NOR_:
+                            mask_ins_abs = output_pl[:,:,pl_nor_cls_index] <= (1-thr_min_conf)
+                        if config.RDD_TRANS.THR_ABS_DIS_:
+                            if mask_ins_abs is not None:
+                                mask_ins_abs = mask_ins_abs & (output_bag_label >= thr_min_dis_conf)
+                            else:
+                                mask_ins_abs = (output_bag_label >= thr_min_dis_conf)
+                        if config.RDD_TRANS.THR_REL_:
+                            if mask_ins_abs is not None:
+                                mask_ins = ps_mask_dis & (mask_ins_abs | (output_bag_label >= min_nor_thr))
+                            else:
+                                mask_ins = ps_mask_dis &  (output_bag_label >= min_nor_thr)
+                        else:
+                            mask_ins = ps_mask_dis & mask_ins_abs
+                        # 只要相对阈值
+                        #mask_ins = ps_mask_dis & ( output_bag_label - min_nor_thr >  0)
+
+                        # 只要绝对阈值 只要其正常置信度小于阈值即可
+                        #mask_ins = ps_mask_dis & (output_pl[:,:,pl_nor_cls_index] < (1-0.9))
+
+                        label_pl[mask_ins] = ins_t[mask_ins]
+
+                        if config.RDD_TRANS.FILTER_SAMPLES:
+                        # 选取部分置信度比较高的实例参与loss计算
+                        # 对于病害包来说，所有病害实例都用，只有teacher判定为正常的实例，并且其正常概率大于绝对病害阈值才纳用。对于正常包来说，其正常概率大于绝对病害阈值才纳用   & (output_pl[:,:,pl_nor_cls_index] >= 0.5)
+                            mask_ins = (mask_ins | (ps_mask_dis & (label_pl==pl_nor_cls_index) & (output_pl[:,:,pl_nor_cls_index] >= config.RDD_TRANS.THR_FIL_DIS)  )) | ((output_pl[:,:,pl_nor_cls_index] >= thr_min_nor_conf) & ps_mask_nor)
+                        else:
+                        #全部都用
+                            mask_ins = label_pl == label_pl
+                    else:
+                        mask_ins = ps_mask_dis & (output_bag_label > min_nor_thr)
+                        label_pl[mask_ins] = ins_t[mask_ins]
+                        #全部都用
+                        mask_ins = label_pl == label_pl
+                        #只要正常图片 (output_bag_label - 0.9 > 0)
+                        #mask_ins = ps_mask_nor 
+                        
+
+                    #统计病害实例
+                    dis_count = torch.count_nonzero(label_pl - pl_nor_cls_index,dim=1) 
+                    dis_ins += torch.sum(dis_count)
+
+                    for i in range(len(thr_list)):
+                        i_index = targets_pl==i
+                        dis_tmp = dis_count[i_index]
+                        selec_tmp = mask_ins[i_index]
+
+                        if len(selec_tmp)>0:
+                            selec_rec[i].update( len(selec_tmp[selec_tmp==True]) / (len(selec_tmp)*p),b)
+
+                        if len(dis_tmp) > 0 and epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                            thr_tmp = torch.sum(dis_tmp) / (p * len(dis_tmp))
+                            dis_ratio_list[i].append(thr_tmp.cpu())
+
+                            #thr_list[i] = 0.9999 * thr_list[i] + (1-0.9999)* thr_tmp
+                            #thr_list[i] = 0.1 if thr_list[i] < 0.1 else thr_list[i]
+                            #thr_list[i] = thr_tmp
+                            dis_rec[i].update(thr_tmp,b)
+
+                    #选择部分patch来计算loss
+                    #if epoch >= config.RDD_TRANS.INIT_STAGE_EPOCH:
+                    label_pl = label_pl[mask_ins]
+                    o_inst = o_inst[mask_ins]
+                    #     label_pl = label_pl[bs_index_nor]
+                    #     label_pl = label_pl.view(-1)
+                    #     o_inst = o_inst[bs_index_nor]
+                    #     o_inst = o_inst.view(-1,cls)
+                #else:
+
+                #计算loss
+                    
+                    label_pl = label_pl.view(-1)
+                    o_inst = o_inst.view(-1,cls)
+                    patch_num_meter.update(len(label_pl) / (p*b),b)
+                    if o_inst.size(0)>0:
+                        loss_pl = loss_teacher(o_inst,label_pl)
+                    else:
+                        loss_pl = 0
+                else:
+                    loss_pl = 0
+                
                 if gcn:
                     with torch.no_grad():
                         tea_edge,h1_mask_tea = teacher_ema.module(samples_teacher,is_teacher=True)
@@ -625,14 +789,6 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
                 else:
                     loss_gcn = 0
                     #loss_pl = 0
-                # fish
-                with torch.no_grad():
-                    tea_output,tea_o_inst,tea_cluster_num = teacher_ema.module(samples_teacher,is_teacher=True)
-                    loss_pl = loss_teacher(o_inst,tea_o_inst)
-
-                # 忽略
-                loss_gcn = 0
-                loss_pl = 0
                 
                 cluster_num_meter.update(sum(cluster_num) / b,b)
 
@@ -792,7 +948,6 @@ def train_one_epoch(config,model, criterion, data_loader, optimizer, epoch, mixu
     torch.cuda.empty_cache()
     return loss,OrderedDict([('loss', loss_meter.avg),('tea_loss',loss_teacher_meter.avg)])
 
-# 忽略
 def predict(config, data_loader, model,amp_autocast=suppress, log_suffix=''):
     model.eval()
     torch.cuda.empty_cache()

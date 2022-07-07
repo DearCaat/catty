@@ -17,9 +17,11 @@ def _build_dataset(config,_type='train'):
         split = config.DATA.TEST_SPLIT
         is_train = False
 
-    transform = build_transform(config,is_train)
+    transform,target_transform = build_transform(config,is_train)
 
-    if name == 'timm':
+    if name == 'img':
+        return ImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform,target_transform=target_transform)
+    elif name == 'timm':
         if config.DATA.DATALOADER_NAME.lower().split('_')[0] == 'timm':
             transform = None
 
@@ -27,15 +29,20 @@ def _build_dataset(config,_type='train'):
         config.DATA.DATASET,
         root=config.DATA.DATA_PATH, split=split, is_training=is_train,
         batch_size=config.DATA.BATCH_SIZE,repeats=config.DATA.EPOCH_REPEATS,transform=transform)
+
     elif name == 'tfds':
         return IterableImageDataset(parser=config.DATA.DATASET.lower(),root=config.DATA.DATA_PATH,split=split,gray=config.DATA.GRAY,shuffle=True,transform=transform,patch_size=config.DATA.PATCH_SIZE,stride=config.DATA.STRIDE,thumb=config.THUMB_MODE)
     elif name == 'multiview':
-        return MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform,is_multi_view=config.AUG.MULTI_VIEW,size=config.DATA.IMG_SIZE,timm_trans=config.AUG.TIMM_TRANS)
+        return MulitiViewImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform,is_multi_view=config.AUG.MULTI_VIEW,size=config.DATA.IMG_SIZE,timm_trans=config.AUG.TIMM_TRANS,target_transform=target_transform)
     elif name == 'album':
         if os.path.isdir(config.DATA.DATA_PATH):
             # look for split specific sub-folder in root
             root = _search_split(config.DATA.DATA_PATH, split)
-        return ALImageDataset(root, parser=config.DATA.DATASET.lower(), class_map=None, transform=transform)
+        return ALImageDataset(root, parser=config.DATA.DATASET.lower(), class_map=None, transform=transform,target_transform=target_transform)
+    elif name == 'patch':
+        return PatchImageDataset(root=_search_split(config.DATA.DATA_PATH, config.DATA.TRAIN_SPLIT),transform=transform,target_transform=target_transform,last_transform=config.WSPLIN.LAST_TRANSFORM,is_ip=config.WSPLIN.IS_IP,patch_size=config.WSPLIN.PATCH_SIZE,stride=config.WSPLIN.STRIDE)
+    else:
+        raise NotImplementedError
 
 def build_dataset(config,_type='train_val'):
     

@@ -1,12 +1,15 @@
 {
     "cSpell.words": [
+        "argmax",
         "astype",
         "btml",
         "cuda",
+        "dtype",
         "hbtml",
         "pretrained",
         "savez",
         "swin",
+        "topk",
         "WSPLIN"
     ]
 }

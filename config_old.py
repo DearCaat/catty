@@ -29,7 +29,7 @@ _C.DATA.PRETRAINED_DIR = ''
 # Dataset name     tfds/cqu_bpdd  cfd crack500 cracktre200
 _C.DATA.DATASET = 'cqu_bpdd'
 
-_C.DATA.NOR_CLS_INDEX = 6
+_C.DATA.CLS_NOR_INDEX = 6
 # 数据集中的正常图片所在的类别索引 cqu_bpdd ：6
 _C.DATA.DATA_NOR_INDEX = 6
 _C.DATA.GRAY = True
