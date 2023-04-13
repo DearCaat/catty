@@ -490,7 +490,6 @@ class SoftTargetCrossEntropy_v2(nn.Module):
         loss = torch.sum(-F.softmax(target,dim=-1) * F.log_softmax(x, dim=-1), dim=-1)
         return loss.mean()
 
-
 # ref: https://github.com/microsoft/Swin-Transformer/blob/3b0685bf2b99b4cf5770e47260c0f0118e6ff1bb/utils.py#L195
 def ampscaler_get_grad_norm(parameters, norm_type: float = 2.0) -> torch.Tensor:
     if isinstance(parameters, torch.Tensor):
@@ -539,7 +538,7 @@ class NativeScaler_V2:
     def load_state_dict(self, state_dict):
         self._scaler.load_state_dict(state_dict)
 
-# 与timm的主要区别在于，timm没用对两个metrics做None值判断
+# 与timm的主要区别在于，timm没有对两个metrics做None值判断
 def update_summaryV2(epoch, train_metrics, eval_metrics, filename, write_header=False, log_wandb=False,eval_metrics_ema=None):
     rowd = OrderedDict(epoch=epoch)
     if train_metrics is not None:
