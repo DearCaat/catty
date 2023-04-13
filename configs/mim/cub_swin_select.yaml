@@ -1,0 +1,5 @@
+MODEL:
+  NAME: swin_base_patch4_window7_224_in22k  #swin_mim_base_patch4_window12_384_in22k swin_mim_base_patch4_window7_224_in22k
+
+TEST:
+  TOPK: (1,5,8,10,20)

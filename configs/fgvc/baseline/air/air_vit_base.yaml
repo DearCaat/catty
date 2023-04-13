@@ -1,0 +1,18 @@
+MODEL: 
+  NUM_CLASSES: 100
+  LABEL_SMOOTHING: 0.
+DATA:
+  VAL_SPLIT: test
+  DATALOADER_NAME: torch_timm_custom
+# AUG:
+#   TRANSFG_AA: true
+TRAIN:
+  EPOCHS: 100
+  OPTIMIZER:
+    NAME: sgd
+  LR_BS_SCALE: 16
+
+TRAIN_MODE: train
+
+EMPTY_CACHE: true
+

@@ -1,0 +1,41 @@
+DATA:
+  VAL_SPLIT: test
+  DATALOADER_NAME: torch_timm_pim
+  IMG_SIZE: (384,384) #(384,384)
+  BATCH_SIZE: 16
+  VAL_BATCH_SIZE: 38
+  INTERPOLATION: bilinear
+  PIN_MEMORY: true
+MODEL: 
+  NUM_CLASSES: 200
+  # swin_base_patch4_window12_384_in22k
+  NAME: swin_large_patch4_window12_384_in22k
+  DROP_PATH_RATE: 0.2
+TRAIN:
+  EPOCHS: 50
+  WARMUP_STEPS: 800
+  WEIGHT_DECAY: 0.0005
+  BASE_LR: 0.0005
+  WARMUP_LR: 1.0e-9
+  MIN_LR: 1.0e-12
+  OPTIMIZER:
+    NAME: sgd
+  ACCUMULATION_STEPS: 2  # this value will scale lr
+  LR_BS_SCALE: 16
+AUG:
+  NO_AUG: false
+  SCALE: (0.7529411764705,0.7529411764705)  # 384 / 510
+  RATIO: (1,1)
+
+TEST:
+  CROP: 0.7529411764705
+  BEST_MODEL_METRIC: ['main','acc1']
+ 
+MODEL_EMA: false
+LOG_WANDB: false
+# TRAIN_MODE: train
+EMA_DECAY: 0.9993
+SEED: -1
+PRINT_FREQ: 100   
+
+

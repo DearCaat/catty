@@ -1,0 +1,28 @@
+TRAINER:
+  NAME: mim
+DATA:
+  DATALOADER_NAME: torch_timm_simmim
+MODEL:
+  NAME: simmim_swin_base_patch4_window12_384_in22k
+  DROP_PATH_RATE: 0.0
+  TYPE: swin
+  SWIN:
+    EMBED_DIM: 128
+    DEPTHS: [ 2, 2, 18, 2 ]
+    NUM_HEADS: [ 4, 8, 16, 32 ]
+    WINDOW_SIZE: 12
+MIM:
+  LOSS_ALPHA: 1.
+  CLS_LOSS_ALPHA: 0.
+  MASK_RATIO: 0.6
+  MASK_PATCH_SIZE: 32
+  USE_MAE: false
+  NORM_PIX_LOSS: false # mae use it by default
+
+TRAIN:
+  EPOCHS: 100
+  WARMUP_EPOCHS: 10
+  BASE_LR: 2.0e-4
+  WARMUP_LR: 1.0e-6
+  MIN_LR: 1.0e-5
+  WEIGHT_DECAY: 0.05

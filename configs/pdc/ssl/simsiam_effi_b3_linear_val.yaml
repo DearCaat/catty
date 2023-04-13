@@ -1,0 +1,30 @@
+TRAIN:
+  EPOCHS: 100 # ori: 100
+  BASE_LR: 1.0e-3
+
+  OPTIMIZER:
+    NAME: sgd
+
+  LR_SCHEDULER:
+      NAME: flat_cosine
+      DECAY_STEPS_RATIO: 0.
+TEST:
+  LINEAR_PROB:
+    ENABLE: true
+    DIM: 1536
+
+TRAINER:
+  NAME: ssl
+
+MODEL:
+  NAME: simsiam
+  BACKBONE: tf_efficientnet_b3
+  TOGPU_MODEL_NAME: ['main']
+
+DATA:
+  # 没办法使用DINO原生的数据增强方式，因为effi_b3没办法适应不同的输入大小?
+  DATALOADER_NAME: torch_timm_pict
+  BATCH_SIZE: 128
+SSL:
+  RESUME: simsiam_simsiam_effi_b3_main_ltml.pth
+

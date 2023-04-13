@@ -1,0 +1,83 @@
+## 20220319 好像阈值策略跟初始化模型强相关，没有标准的best参数
+TEST:
+  BEST_MODEL_METRIC: ['main','macro_f1']
+  CROP: 0.
+  BINARY_MODE: true
+  #PR: true
+
+TRAIN:
+  MIN_LR: 5.0e-7
+
+DATA:
+  DATALOADER_NAME: torch_img_multiviewpict
+  IMG_SIZE: [224,224]
+
+TRAINER:
+  NAME: pict
+
+MODEL:
+  NAME: pict
+  BACKBONE: swin_small_patch4_window7_224
+  DROP_PATH_RATE: .3
+  DROP_RATE: 0.
+  TOGPU_MODEL_NAME: ['main','teacher']
+
+PICT:
+  CLUSTER:
+    CLUSTER_DISTANCE: cosine
+    PERSISTENT_CENTER: true
+    INIT: k-means++
+    IPS_ACTIVE_CONNECTION: 2
+    IPS_K_AT_HOP: [ 2, 0 ]
+    NAME: kmeans
+    NUM_CLUSTER: 3
+    NUM_INIT: 10
+    N_COMPOENTS: null
+    RBF_DISTANCE: euclidean
+    RBF_GAMMA: 0.05
+    SELECT_THR: 0.99 # 0.99要更好点 
+    SPECTRAL_AFFINITY: rbf
+    THR: 0.75
+  MULTI_VIEW: strong_none
+  EMA_DECAY: 0.9998
+  EMA_DIFF: null
+  EMA_DECAY_DIFF: 0.9998
+  EMA_DECAY_SCHEDULER: null
+  EMA_DECAY_SCHEDULER_FLAT_RATIO: 0.01
+  EMA_FORCE_CPU: false
+  INST_NUM_CLASS: 8
+  NOR_THR: 0.35
+  INST_TEST: false
+  BAG_TEST: true
+  PERSUDO_LEARNING: true
+  PERSUDO_LABEL: true
+  TEACHER_LOSS : null
+  # use baseline model to init the teacher
+  TEACHER_INIT : null
+  INIT_STAGE_EPOCH: 0
+  TEST_THR: 0.9
+  FILTER_SAMPLES: true
+  CLASSIFY_LOSS: 1.
+  # update it per iter
+  THR_REL_EMA_DECAY: 0.75
+  # 取最小的百分之几比例来更新，相对阈值是一种保证前提，保证一个包里面最少都要有这么多病害实例
+  THR_REL_UPDATE_RATIO: 0.01
+  # fix linear sigmod_iter sigmod_epoch
+  THR_ABS_UPDATE_NAME: sigmod_epoch
+  THR_ABS_DIS_LOW: 0.3
+  THR_ABS_DIS_HIGH: 0.8
+  THR_ABS_NOR_LOW: 0.9
+  THR_ABS_NOR_HIGH: 0.95
+  TEST_MAX_POOL: false
+  TEST_CLU_FLIP_SEL: true
+
+  THR_FIL_DIS: 0.3
+  THR_FIL_NOR_LOW: 0.5
+  THR_FIL_NOR_HIGH: 0.9
+  THR_ABS_DIS_: false        #这俩都存在的情况有待讨论，MM这文章，目前不考虑这个情况
+  THR_ABS_NOR_: false    # 论文发表版本这里应该只用了相对阈值，但好像之前都是这个阈值一起加上的
+  THR_REL_: true
+
+  CENTER: null
+  SHARPEN_TEACHER: null
+  SHARPEN_STUDENT: null

@@ -1,0 +1,30 @@
+TRAIN:
+  NO_VAL: true
+  BASE_LR: 0.05
+  WEIGHT_DECAY: 0.0001
+  OPTIMIZER:
+    NAME: sgd
+    PARAM_GROUPS_FUNC: simsiam
+  LR_SCHEDULER:
+    NAME: cosine
+    CONSTANT_LR_FIELD: predictor
+  LR_BS_SCALE: 256
+  EPOCHS: 100
+  WARMUP_EPOCHS: 10
+TEST:
+  BEST_MODEL_METRIC: ['main','loss']  # 保存最小loss的模型
+  MIN_BEST_METRIC: ['loss']
+  SAVE_LAST_MODEL: true                   # 保存最后一个epoch的模型
+TRAINER:
+  NAME: ssl
+MODEL:
+  NAME: simsiam
+  BACKBONE: tf_efficientnet_b3
+  TOGPU_MODEL_NAME: ['main']
+  NUM_CLASSES: 0
+  PRETRAINED: false
+DATA:
+  DATALOADER_NAME: torch_timm_simsiam
+  BATCH_SIZE: 64
+
+TRAIN_MODE: train

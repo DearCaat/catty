@@ -1,0 +1,57 @@
+CL:
+  ONLY_CL: true
+TRAIN:
+  LOSS:
+    NAME: dino
+  CLIP_GRAD: 3.0 # ori: 3.0
+  NO_VAL: true
+  BASE_LR: 8.0e-4
+  WEIGHT_DECAY: 0.04
+  OPTIMIZER:
+    NAME: adamw
+  LR_SCHEDULER:
+    NAME: cosine
+  LR_BS_SCALE: 256
+  EPOCHS: 100
+  WARMUP_EPOCHS: 10
+TEST:
+  BEST_MODEL_METRIC: ['main','loss']  # 保存最小loss的模型
+  MIN_BEST_METRIC: [loss]
+  SAVE_LAST_MODEL: true                   # 保存最后一个epoch的模型
+TRAINER:
+  NAME: dino
+MODEL:
+  NAME: dino
+  BACKBONE: tf_efficientnet_b3
+  TOGPU_MODEL_NAME: ['main','teacher']
+  PRETRAINED: false
+DATA:
+  DATALOADER_NAME: torch_timm_dino
+  BATCH_SIZE: 32
+
+TRAIN_MODE: train
+
+DINO:
+  # DINO HEAD
+  OUT_DIM: 16384 # Dimensionality of the DINO head output.For complex and large datasets large values (like 65k) work well.
+  NORM_LAST_LAYER: true
+  USE_BN_IN_HEAD: false
+
+  # DINO data augment
+  GLOBAL_CROPS_SCALE: [0.4,1.]
+  LOCAL_CROPS_NUMBER: 8
+  LOCAL_CROPS_SCALE: [0.05,0.4]
+
+  # DINO teacher temperature
+  #Initial value for the teacher temperature: 0.04 works well in most cases. Try decreasing it if the training loss does not decrease.
+  WARMUP_TEACHER_TEMP: 0.04 
+  #Final value (after linear warmup)of the teacher temperature. For most experiments, anything above 0.07 is unstable. We recommend starting with the default value of 0.04 and increase this slightly if needed.
+  TEACHER_TEMP: 0.04 
+  WARMUP_TEACHER_TEMP_EPOCHS: 8 # ori:30
+
+  # DINO train
+  FREEZE_LAST_LAYER: 1
+  
+ # Base EMA parameter for teacher update. The value is increased to 1 during training with cosine schedule.
+ # We recommend setting a higher value with small batches: for example use 0.9995 with batch size of 256.
+  MOMENTUM_TEACHER: 0.996  

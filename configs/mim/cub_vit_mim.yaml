@@ -1,0 +1,15 @@
+DATA:
+  IMG_SIZE: (224,224)
+  DATALOADER_NAME: torch_timm_custom
+  
+TRAINER:
+  NAME: mim
+MODEL:
+  NAME: mim_vit_base_patch16_224_in21k
+MIM:
+  LOSS_ALPHA: 0.1
+  CLS_LOSS_ALPHA: 1.
+  MASK_RATIO: 0.75
+  MASK_PATCH_SIZE: 32
+  USE_MAE: false
+  NORM_PIX_LOSS: false # mae use it by default

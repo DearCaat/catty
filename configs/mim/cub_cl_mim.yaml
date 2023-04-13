@@ -1,0 +1,59 @@
+DATA:
+  DATALOADER_NAME: torch_timm_custom
+AUG:
+  DINO:
+    # DINO data augment
+    LOCAL_CROPS_NUMBER: 0
+    LOCAL_CROPS_SCALE: [0.05,0.4]
+TRAIN:
+  LOSS:
+    NAME: crossentropy_kl
+    # CL_TEACHER_TEMP: 0.04
+    # CL_STUDENT_TEMP: 0.1
+    FEATURE_NUM: 768 # same with MIM.HEAD_OUT_DIM if SELECT_ENABLE is True
+    CL_TEACHER_TEMP: 1.0
+    CL_STUDENT_TEMP: 1.0
+    CENTER_MOMENTUM: null  # 0.9
+
+TRAINER:
+  NAME: mim
+
+EMA_SCHEDULER: null
+EMA_DECAY: 0.9996
+
+MODEL:
+  NAME: clmim
+  BACKBONE: mim_vit_base_patch16_224_in21k
+  TOGPU_MODEL_NAME: ['main','teacher']
+
+MIM:
+  CL_ENABLE: true
+  MIM_ENABLE: true
+  MIM_PIXEL_ENABLE: false
+  SELECT_ENABLE: false
+
+  DECODER_CL: false
+  DECODER_CL_NLAYERS: 3
+  MASK_STUDENT: false
+  MASK_TEACHER: true
+  MASK_SELECTED_TOKEN: true
+  
+  HEAD_OUT_DIM: 4096
+  MULTI_INPUT: false
+  DROP_MASK: false
+  MOMENTUM_TEACHER: 0.9996
+  SCHEDULER_TEACHER: null
+  # Select
+  TOPK: 2
+  SELECT_FN: psm
+  # CL vit_b_i21k_e50_88.8.pth
+  TEACHER_INIT: vit_b_i21k_e50_88.8.pth
+  # MIM
+  CLS_LOSS_ALPHA: 1.
+  MIM_LOSS_ALPHA: 0.1
+  MIM_PIX_LOSS_ALPHA: 0.
+  CL_LOSS_ALPHA: 0.1
+  MASK_RATIO: 0.75
+  MASK_PATCH_SIZE: 32
+  USE_MAE: false
+  NORM_PIX_LOSS: false # mae use it by default

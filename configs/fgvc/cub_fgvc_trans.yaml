@@ -1,0 +1,33 @@
+DATA:
+  TIMM: false
+  #IMG_SIZE: (384,384)
+  #BATCH_SIZE: 8
+  #VAL_BATCH_SIZE: 24
+  NOR_CLS_INDEX: -1
+MODEL: 
+
+  NAME: rdd_trans_swin_small_patch4_window7_224
+
+TRAIN:
+  EPOCHS: 50
+  
+AUG:
+  TIMM_TRANS: true
+  MULTI_VIEW: strong_none
+TEST:
+  CROP: 0.752
+  BEST_MODEL_METRIC: ['main','acc1']
+THUMB_MODE: false
+
+PICT:
+  CLUSTER:
+    NAME: gcn
+    NUM_CLUSTER: 2
+    IPS_ACTIVE_CONNECTION: 4
+    IPS_K_AT_HOP: [ 3, 2 ]   # 224 , 49 , [3,2]
+                             # 384, 144, []
+    THR: 0.5
+  PERSUDO_LEARNING: true
+  PERSUDO_LABEL: false
+  EMA_FORCE_CPU: false
+  EMA_DECAY: 0.9995

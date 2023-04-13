@@ -1,0 +1,60 @@
+AMP: True
+APEX_AMP: False
+NATIVE_AMP: True
+AUG:
+  NO_AUG: True
+
+DATA:
+  BATCH_SIZE: 32
+  DALI: False
+  DATASET: cqu_bpdd
+  EPOCH_REPEATS: 0
+  GRAY: True
+  IMG_SIZE: [ 224, 224 ]
+  INTERPOLATION: bicubic
+  NOR_CLS_INDEX: 6
+  PIN_MEMORY: False
+  TIMM: true
+  TIMM_PREFETCHER: true
+
+MODEL:
+  DROP_PATH_RATE: 0.3
+  DROP_RATE: 0
+  LABEL_SMOOTHING: 0
+  NAME: cluster_swin_small_patch4_window7_224
+  NUM_CLASSES: 8
+  PRETRAINED: true
+
+PICT:
+  CLUSTER:
+    CLUSTER_DISTANCE: cosine
+    NAME: spectral
+    NUM_CLUSTER: 3
+    N_COMPOENTS: null
+    RBF_DISTANCE: euclidean
+    SELECT_THR: 0.9
+    SPECTRAL_AFFINITY: cosine
+    THR: 0.75
+
+  INST_NUM_CLASS: 2
+  NOT_INST_TEST: True
+  PERSUDO_LEARNING: False
+  TEST_THR: 0.995
+
+SEED: 42
+TEST:
+  CROP: False
+
+TRAIN:
+  BASE_LR: 1.0e-4
+  EPOCHS: 30
+
+  LR_SCHEDULER:
+    NAME: cosine
+  MIN_LR: 5.0e-07
+  OPTIMIZER:
+    NAME: lookahead_adamw
+  USE_CHECKPOINT: False
+  WARMUP_EPOCHS: 3
+  WARMUP_LR: 5.0e-07
+  WEIGHT_DECAY: 0

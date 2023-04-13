@@ -1,0 +1,62 @@
+TEST:
+  BEST_MODEL_METRIC: ['main','auc']
+  CROP: 0.
+
+TARGET_AUG:
+  NO_AUG: false
+  TO_BIN_TARGET: true
+
+MODEL:
+  NAME: pict
+  BACKBONE: swin_pict_small_patch4_window7_224
+  NUM_CLASSES: 2
+  DROP_PATH_RATE: .3
+  TOGPU_MODEL_NAME: ['main','teacher']
+
+TRAINER:
+  NAME: pict
+
+DATA:
+  DATA_NOR_INDEX: 6
+  CLS_NOR_INDEX: 0
+  DATALOADER_NAME: torch_img_multiviewpict
+  IMG_SIZE: [224,224]
+ 
+PICT:
+  CLUSTER:
+    CLUSTER_DISTANCE: cosine
+    PERSISTENT_CENTER: true
+    NAME: kmeans
+    NUM_CLUSTER: 2
+    SELECT_THR: 0.99  #0.99 在绝对阈值0.99时表现最好
+
+  MULTI_VIEW: strong_none
+
+  EMA_DECAY: 0.9998
+  INST_NUM_CLASS: 2
+  INST_TEST: false
+  BAG_TEST: true
+  TEST_THR: 0.9       # 0.9比0.95,0.99在绝对阈值0.99时表现都好
+
+  FILTER_SAMPLES: true
+  # update it per iter
+  THR_REL_EMA_DECAY: 0.99
+  # 取最小的百分之几比例来更新，相对阈值是一种保证前提，保证一个包里面最少都要有这么多病害实例
+  THR_REL_UPDATE_RATIO: 0.001
+  # for update
+  THR_ABS_DIS_LOW: 0.5
+  THR_ABS_DIS_HIGH: 0.9
+
+  THR_ABS_NOR_LOW: 0.9
+  THR_ABS_NOR_HIGH: 0.95  # 0.99没有0.95好
+
+  THR_FIL_NOR_LOW: 0.6
+  THR_FIL_NOR_HIGH: 0.95
+
+  THR_FIL_DIS: 0.5
+
+  THR_ABS_DIS_: false
+  THR_ABS_NOR_: false
+  THR_REL_: true
+
+  TEST_FIRST_MEAN: false  # for 消融实验

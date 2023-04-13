@@ -1,0 +1,18 @@
+DATA:
+  DATALOADER_NAME: torch_timm_pim
+  
+MODEL: 
+  NUM_CLASSES: 120
+  
+  LABEL_SMOOTHING: 0.1
+  NAME: swin_base_patch4_window12_384_in22k
+TRAIN:
+  EPOCHS: 100
+  WARMUP_STEPS: 1600
+  BASE_LR: 0.003
+  LR_BS_SCALE: 16
+  AS_LR_SCALE: false
+  ACCUMULATION_STEPS: 1
+
+AUG:
+  TRANSFG_AA: false

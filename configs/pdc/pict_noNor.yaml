@@ -1,0 +1,63 @@
+TEST:
+  BEST_MODEL_METRIC: ['main','macro_f1']
+  CROP: 0.
+
+MODEL:
+  NAME: pict
+  BACKBONE: swin_pict_small_patch4_window7_224
+  NUM_CLASSES: 7
+  TOGPU_MODEL_NAME: ['main','teacher']
+  
+TRAINER:
+  NAME: pict
+  
+DATA:
+  NOR_CLS_INDEX: 7
+  DATALOADER_NAME: torch_img_multiviewpict
+  IMG_SIZE: [224,224]
+  
+THUMB_MODE: false
+  
+PICT:
+  CLUSTER:
+    CLUSTER_DISTANCE: cosine
+    PERSISTENT_CENTER: true
+ 
+    NAME: kmeans
+    NUM_CLUSTER: 3
+    THR: 0.75
+    # 分簇head的正常类别index，这里置为-1表示没有正常类别
+    NOR_INDEX: -1
+  EMA_DECAY: 0.9998
+  EMA_DIFF: head_instance
+  EMA_DECAY_DIFF: 0.9993
+  MULTI_VIEW: strong_none
+  INST_NUM_CLASS: 8
+  NOR_THR: 0.05
+  INST_TEST: true
+  BAG_TEST: true
+
+  TEST_THR: 0.9
+  FILTER_SAMPLES: true
+  CLASSIFY_LOSS: 1.
+  # update it per iter
+  THR_REL_EMA_DECAY: 0.75
+  # 取最小的百分之几比例来更新，相对阈值是一种保证前提，保证一个包里面最少都要有这么多病害实例
+  THR_REL_UPDATE_RATIO: 0.01
+  # fix linear sigmod_iter sigmod_epoch
+  THR_ABS_UPDATE_NAME: sigmod_epoch
+  THR_ABS_DIS_LOW: 0.3
+  THR_ABS_DIS_HIGH: 0.8
+  THR_ABS_NOR_LOW: 0.5
+  THR_ABS_NOR_HIGH: 0.5
+
+  THR_FIL_DIS: 0.8
+
+  TEST_MAX_POOL: false
+  THR_ABS_DIS: 0.9
+  THR_ABS_NOR: 0.9
+
+
+  THR_ABS_DIS_: true
+  THR_ABS_NOR_: true
+  THR_REL_: true

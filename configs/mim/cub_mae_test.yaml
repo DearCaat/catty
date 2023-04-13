@@ -1,0 +1,43 @@
+DATA:
+  IMG_SIZE: (224,224)
+  DATALOADER_NAME: torch_timm_custom
+  
+TRAINER:
+  NAME: mim
+
+MODEL:
+  NAME: mim_vit_base_patch16_224_in21k
+
+TRAIN:
+  EPOCHS: 800
+  WARMUP_EPOCHS: 10
+  WARMUP_STEPS: -1
+  BASE_LR: 1.0e-4
+  WARMUP_LR: 5.0e-7
+  WEIGHT_DECAY: 0.05
+  LR_BS_SCALE: 256
+  LR_SCHEDULER:
+    NAME: cosine
+  CLIP_GRAD: 5.0
+  OPTIMIZER:
+    NAME: adamw
+MIM:
+  LOSS_ALPHA: 1.
+  CLS_LOSS_ALPHA: 0.
+  MASK_RATIO: 0.6
+  MASK_PATCH_SIZE: 32
+  USE_MAE: false
+  NORM_PIX_LOSS: false # mae use it by default
+
+AUG:
+  NO_AUG: false
+  COLOR_JITER: 0.4
+  AUTO_AUGMENT: rand-m9-mstd0.5-inc1
+  REPROB: 0.25
+  REMOCE: 'pixel'
+  RECOUNT: 1
+
+TEST:
+  BEST_MODEL_METRIC: ['main','loss_mim']  # 保存最小loss的模型
+  MIN_BEST_METRIC: [loss_mim]
+  SAVE_LAST_MODEL: true                   # 保存最后一个epoch的模型

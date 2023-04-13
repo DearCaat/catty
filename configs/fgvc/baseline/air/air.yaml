@@ -1,0 +1,7 @@
+MODEL: 
+  NUM_CLASSES: 100
+
+DATA:
+  VAL_SPLIT: val
+
+TRAIN_MODE: t_e

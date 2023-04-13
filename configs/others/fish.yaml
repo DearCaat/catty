@@ -1,0 +1,95 @@
+TEST:
+  BEST_MODEL_METRIC: ['main','macro_f1']
+  CROP: 0.
+
+MODEL:
+  NAME: rdd_trans_swin_small_patch4_window7_224
+  DROP_PATH_RATE: .3
+AUG:
+  MULTI_VIEW: strong_none
+
+THUMB_MODE: false
+
+PICT:
+  # 现在聚类选簇，是选得分最高的那个
+  CLUSTER:
+    ###
+    ###不要管
+    ###
+    IPS_ACTIVE_CONNECTION: 2
+    IPS_K_AT_HOP: [ 2, 0 ]
+    #谱聚类
+    RBF_DISTANCE: euclidean
+    RBF_GAMMA: 0.05
+    SPECTRAL_AFFINITY: rbf
+    N_COMPOENTS: null
+    #测试时选择簇时用，簇得分小于这个值，我认为它是正常簇
+    SELECT_THR: 0.99 
+    #gcn
+    THR: 0.75
+
+    #默认
+    PERSISTENT_CENTER: true
+    #聚类距离
+    CLUSTER_DISTANCE: cosine
+    #kmeans的参数
+    INIT: k-means++
+    NAME: kmeans
+    NUM_CLUSTER: 5
+    NUM_INIT: 10
+
+  #老师模型的更新幅度
+  EMA_DECAY: 0.9998
+  #是否将老师模型放在cpu里
+  EMA_FORCE_CPU: false
+  INST_NUM_CLASS: 8
+  #默认
+  INST_TEST: false
+  BAG_TEST: true
+  # use baseline model to init the teacher
+  TEACHER_INIT : null
+  INIT_STAGE_EPOCH: 0
+  
+  #分类损失的占比
+  CLASSIFY_LOSS: 1.
+  THR_FIL_DIS: 0.5
+  THR_FIL_NOR_LOW: 0.5
+  THR_FIL_NOR_HIGH: 0.95
+  
+  # 对比损失的优化
+  CENTER: null
+  SHARPEN_TEACHER: null
+  SHARPEN_STUDENT: null
+  #最好默认，测试阶段选择哪一个簇
+  TEST_CLU_FLIP_SEL: false 
+
+  ###
+  ###不要管
+  ###
+  NOR_THR: 0.05
+  TEST_THR: 0.9
+  FILTER_SAMPLES: true
+  EMA_DIFF: null
+  EMA_DECAY_DIFF: 0.9998
+  EMA_DECAY_SCHEDULER: null
+  EMA_DECAY_SCHEDULER_FLAT_RATIO: 0.01
+  # update it per iter
+  THR_REL_EMA_DECAY: 0.75
+  # 取最小的百分之几比例来更新，相对阈值是一种保证前提，保证一个包里面最少都要有这么多病害实例
+  THR_REL_UPDATE_RATIO: 0.01
+  # fix linear sigmod_iter sigmod_epoch
+  THR_ABS_UPDATE_NAME: sigmod_epoch
+  THR_ABS_DIS_LOW: 0.3
+  THR_ABS_DIS_HIGH: 0.8
+  THR_ABS_NOR_LOW: 0.9
+  THR_ABS_NOR_HIGH: 0.95
+  THR_ABS_DIS_: true
+  THR_ABS_NOR_: true
+  THR_REL_: true
+  TEST_MAX_POOL: false
+  TEST_FIRST_MEAN: false   # 之前的模型都是false,20220316 12:54
+  PERSUDO_LEARNING: true
+  PERSUDO_LABEL: true
+  TEACHER_LOSS : null
+
+  

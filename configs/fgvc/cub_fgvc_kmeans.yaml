@@ -1,0 +1,28 @@
+DATA:
+  TIMM: true
+  #IMG_SIZE: (384,384)
+  #BATCH_SIZE: 8
+  #VAL_BATCH_SIZE: 6
+  NOR_CLS_INDEX: -1
+MODEL:
+  NAME: rdd_trans_swin_small_patch4_window7_224
+TRAIN:
+  EPOCHS: 50
+  WARMUP_EPOCHS: 2
+
+TEST:
+  CROP: 0.752
+  
+THUMB_MODE: false
+
+PICT:
+  CLUSTER:
+    NAME: kmeans
+    NUM_CLUSTER: 2
+    IPS_ACTIVE_CONNECTION: 4
+    IPS_K_AT_HOP: [ 20, 5 ]
+    THR: 0.5
+    PERSISTENT_CENTER: false # for kmeans
+  PERSUDO_LEARNING: false
+  PERSUDO_LABEL: false
+  EMA_FORCE_CPU: false

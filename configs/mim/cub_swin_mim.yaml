@@ -1,0 +1,11 @@
+TRAINER:
+  NAME: mim
+MODEL:
+  NAME: mim_swin_base_patch4_window12_384_in22k
+MIM:
+  LOSS_ALPHA: 1.
+  CLS_LOSS_ALPHA: 1.
+  MASK_RATIO: 0.6
+  MASK_PATCH_SIZE: 32
+  USE_MAE: false
+  NORM_PIX_LOSS: false # mae use it by default
