@@ -111,6 +111,9 @@ _C.MODEL.SAVE_OTHER_MODEL_NAME = []
 # 在多模型训练的时候，到底哪些模型需要保留下最佳模型中，main始终是主模型，在最前面,每一个都会单独存一个文件，训练过程中也会有单独的ckpt文件
 _C.MODEL.SAVE_BEST_MODEL_NAME = ['main'] 
 
+# Torch 2.0 Model Compile  default, reduce-overhead (extra memo) or max-autotune (more compile time)
+_C.MODEL.COMPILER_MODE = 'default'
+
 
 # -----------------------------------------------------------------------------
 # Training settings

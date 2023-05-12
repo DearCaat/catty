@@ -142,6 +142,11 @@ def main(config,eval_best_kfold=None,test_best_kfold=None):
         assert num_aug_splits > 1 or args.resplit
         model = convert_splitbn_model(model, max(num_aug_splits, 2))'''
 
+    # torch 2.0 compile
+    if torch.__version__ >= '2.0':
+        for model_name in models.keys():
+            models[model_name] = torch.compile(models[model_name],mode=config.MODEL.COMPILER_MODE)
+
     # 考虑多模型情况下的，GPU存储
     for model_name in config.MODEL.TOGPU_MODEL_NAME:
         models[model_name].cuda()
@@ -505,7 +510,8 @@ if __name__ == '__main__':
 
     if config.LOG_WANDB and config.LOCAL_RANK == 0:
         if has_wandb:
-            wandb.init(project=config.PROJECT_NAME, config=config,entity="dearcat",name=config.EXP_NAME)
+            # TODO: group可以用来实现cross-validation
+            wandb.init(project=config.PROJECT_NAME, config=config,entity="dearcat",name=config.EXP_NAME,dir=config.OUTPUT,save_code=True)
         else: 
             logger.warning("You've requested to log metrics to wandb but package not found. "
                             "Metrics not being logged to wandb, try `pip install wandb`")

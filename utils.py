@@ -11,7 +11,10 @@ import math
 import torch.nn.functional as F
 import torch.nn as nn
 from timm.utils.clip_grad import dispatch_clip_grad
-from torch._six import inf
+if torch.__version__ >= '2.0':
+    from torch import inf
+else:
+    from torch._six import inf
 import numpy as np
 import wandb
 

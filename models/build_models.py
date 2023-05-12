@@ -82,6 +82,7 @@ def build_model(config,is_backbone=False,num_classes=None,logger=None):
             config = config,
             logger=logger
         )
+        models = {'main':model}
     # The base framework which includes the one backbone
     elif model_name.startswith(ONE_BACKBONE_GROUP):
         backbone = build_model(config,is_backbone=True)['main']
@@ -91,6 +92,7 @@ def build_model(config,is_backbone=False,num_classes=None,logger=None):
             config = config,
             logger=logger
         )
+        models = {'main':model}
     else:
         # drop_rate=config.MODEL.DROP_RATE,
         # drop_path_rate=config.MODEL.DROP_PATH_RATE
